@@ -41,16 +41,17 @@ public:
 
     void read_chunk_fastq();
 
-    bool inline read_finish() const {
+    inline bool read_finish() const {
         return m_finish;
     };
 
     std::optional<shared_vec_reads> get_reads();
-    void find_reads(const std::string& input_reads, std::ostream& out);
+    void find_reads(const std::string &input_reads, std::ostream &out, bool use_index);
     void index();
 
 private:
     static std::unordered_set<std::string> get_searching_read_names(const std::string& input_reads) ;
+    void index(std::string_view output_file_path);
 };
 
 

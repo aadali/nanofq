@@ -17,18 +17,6 @@ static const std::array<double, 256> s_char_to_score_table = []{
     }
     return a;
 }();
-static const std::unordered_map<char, char> s_base_pairs{
-    {'A', 'T'},
-    {'C', 'G'},
-    {'G', 'C'},
-    {'T', 'A'},
-    {'N', 'N'},
-    {'a', 't'},
-    {'c', 'g'},
-    {'g', 'c'},
-    {'t', 'a'},
-    {'n', 'n'}
-};
 
 class Read
 {

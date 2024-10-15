@@ -1,9 +1,16 @@
-#include "FastqReader.h"
 #include <filesystem>
+
 #include <fmt/core.h>
+//#include <cereal/types/unordered_map.hpp>
+//#include <cereal/types/tuple.hpp>
+//#include <cereal/types/string.hpp>
+//#include <cereal/archives/binary.hpp>
+
+#include "FastqReader.h"
 
 using std::cout;
 using std::endl;
+using std::filesystem::last_write_time;
 #define FASTQ_BUFFER_SIZE (1<<23)
 std::mutex FastqReader::ms_mtx{};
 std::condition_variable FastqReader::ms_cond{};
@@ -155,8 +162,43 @@ std::unordered_set<std::string> FastqReader::get_searching_read_names(const std:
     return read_names;
 }
 
-void FastqReader::find_reads(const std::string& input_reads, std::ostream &out) {
+void FastqReader::find_reads(const std::string &input_reads, std::ostream &out, bool use_index) {
     std::unordered_set<std::string> read_names{FastqReader::get_searching_read_names(input_reads)};
+    if (use_index) {
+        index();
+        std::unordered_map<std::string, std::pair<size_t, size_t>> reads_index;
+        std::fstream input_file_index{std::filesystem::path{m_input_file.data()}.concat(".idx").c_str(), std::ios::in};
+        char index_line[1024];
+        std::string read_name;
+        size_t start{0}, stop{0};
+        while (input_file_index.getline(index_line, 1024, '\n')) {
+            if (strlen(index_line) < 4) break; // this is a simple judge
+            std::vector<unsigned int> tab_pos;
+            for (int i{0}; i < strlen(index_line); i++) {
+                if (index_line[i] == '\t') { tab_pos.push_back(i); }
+            }
+            std::string_view this_line{index_line};
+            start = atoll(this_line.substr(tab_pos[0] + 1, tab_pos[1] - tab_pos[0] - 1).data());
+            stop = atoll(this_line.substr(tab_pos[1] + 1, this_line.size() - tab_pos[1] - 1).data());
+            reads_index.try_emplace(std::string(this_line.substr(0, tab_pos[0])), start, stop);
+        }
+//        for (auto &[key, value] : reads_index){
+//            cout << key << ": " << value.first <<": " <<value.second << endl;
+//        }
+        input_file_index.close();
+        for (const std::string &id: read_names) {
+            if (!reads_index.contains(id)) {
+                std::cerr << fmt::format("There is no read named {} in fastq", id) << endl;
+                continue;
+            }
+            auto [begin, end] = reads_index.at(id);
+            m_infile.seekg(begin, std::ios::beg);
+            for (size_t idx{0}; idx < end - begin; idx++) {
+                out << static_cast<char>(m_infile.get());
+            }
+        }
+        return;
+    }
     m_infile.seekg(std::ios::beg);
     int line_number{1};
     bool find_read{false};
@@ -203,7 +245,64 @@ void FastqReader::find_reads(const std::string& input_reads, std::ostream &out) 
 }
 
 void FastqReader::index() {
+    std::filesystem::path input_file{m_input_file};
+    std::filesystem::path input_file_idx{input_file.concat(".idx")};
+    if (exists(input_file_idx)) {
+        if (last_write_time(input_file) > last_write_time(input_file_idx)) { // input_file is newer than index
+            index(input_file_idx.c_str());
+        }
+    } else {
+        index(input_file_idx.c_str());
+    }
+}
 
+void FastqReader::index(std::string_view output_file_path) {
+    std::fstream output_index_stream{output_file_path.data(), std::ios::out};
+    if (!output_index_stream) {
+        throw std::runtime_error(fmt::format("Failed when opened file: {}", output_file_path.data()));
+    }
+//    cereal::BinaryOutputArchive bin_index{output_index};
+//    std::unordered_map<std::string, std::tuple<size_t, size_t>> reads_index{};
+    m_infile.seekg(std::ios::beg);
+    std::string id;
+    int line_number{1};
+    size_t start{0};
+    size_t stop{0};
+    while (m_infile.getline(m_buffer, FASTQ_BUFFER_SIZE, '\n')) {
+        switch (line_number) {
+            case 1: {
+                for (int idx{0}; idx < strlen(m_buffer); idx++) {
+                    if (m_buffer[idx] == ' ') {
+                        id.assign(m_buffer, 1, idx - 1);
+                        break;
+                    }
+                }
+                if (id.empty()) id = m_buffer;
+                stop += strlen(m_buffer) + 1;
+                line_number++;
+                break;
+            }
+            case 2:
+            case 3: {
+                stop += strlen(m_buffer) + 1;
+                line_number++;
+                break;
+            }
+            case 4: {
+                stop += strlen(m_buffer) + 1;
+                line_number = 1;
+//                reads_index.try_emplace(id, start, stop);
+                output_index_stream << fmt::format("{}\t{}\t{}\n", id, start, stop);
+                start = stop;
+                break;
+            }
+            default: {
+                break;
+            }
+        }
+    }
+//    bin_index(reads_index);
+    output_index_stream.close();
 }
 
 

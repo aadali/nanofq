@@ -87,8 +87,12 @@ void Work::run_filter(const size_t min_len,
     }
 }
 
-void Work::run_find(const std::string& input_reads) {
-    m_fq.find_reads(input_reads, m_outfile_stream);
+void Work::run_find(const std::string& input_reads, bool use_index) {
+    m_fq.find_reads(input_reads, m_outfile_stream, use_index);
+}
+
+void Work::run_index() {
+    m_fq.index();
 }
 
 void Work::stats(const size_t start,

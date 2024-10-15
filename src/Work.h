@@ -30,7 +30,8 @@ public:
     [[nodiscard]] std::vector<std::pair<size_t, size_t>> get_bins(size_t length) const;
     void run_stats();
     void run_filter(const size_t min_len, const size_t max_len, const double min_quality, const double min_gc, const double max_gc);
-    void run_find(const std::string& input_reads);
+    void run_find(const std::string& input_reads, bool use_index);
+    void run_index();
     ~Work();
 private:
     void stats(const size_t,
