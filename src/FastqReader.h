@@ -19,7 +19,7 @@ private:
     std::fstream m_infile;
     shared_vec_reads m_reads{};
     std::string_view m_input_file;
-    size_t m_chunk;
+    unsigned m_chunk;
     char *m_buffer;
     static std::mutex ms_mtx;
     static std::condition_variable ms_cond;
@@ -27,7 +27,7 @@ private:
 public:
     FastqReader() = delete;
 
-    FastqReader(std::string_view input_file, size_t chunk);
+    FastqReader(std::string_view input_file, unsigned chunk);
 
     FastqReader(const FastqReader &) = delete;
 

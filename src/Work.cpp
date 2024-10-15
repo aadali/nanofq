@@ -6,21 +6,21 @@
 using std::cout;
 using std::endl;
 
-Work::Work(FastqReader &fq, const size_t thread, const bool gc, std::string_view outfile_path) :
+Work::Work(FastqReader &fq, const unsigned thread, const bool gc, std::string_view outfile_path) :
         m_fq(fq), m_thread{thread}, m_gc(gc), m_outfile_path(outfile_path),
         m_bar(static_cast<int>(m_thread)) {
     m_sub_stats_result.reserve(m_thread);
     for (int i{0}; i < m_thread; i++) {
         m_sub_stats_result.emplace_back();
     }
-    m_outfile_stream = std::ofstream(outfile_path.data(), std::ios::out);
+    m_outfile_stream = std::ofstream(m_outfile_path.data(), std::ios::out);
 }
 
-std::vector<std::pair<size_t, size_t>> Work::get_bins(const size_t length) const {
-    std::vector<std::pair<size_t, size_t>> idx_ranges;
-    const size_t step{length / m_thread};
-    size_t start{0}, stop{0};
-    for (size_t i{0}; i < length; i += step) {
+std::vector<std::pair<unsigned , unsigned >> Work::get_bins(const unsigned length) const {
+    std::vector<std::pair<unsigned , unsigned >> idx_ranges;
+    const unsigned step{length / m_thread};
+    unsigned start{0}, stop{0};
+    for (unsigned i{0}; i < length; i += step) {
         start = i;
         stop = step + start;
         if (stop + step > length) {
@@ -60,11 +60,11 @@ void Work::run_stats() {
 }
 
 
-void Work::run_filter(const size_t min_len,
-                      const size_t max_len,
-                      const double min_quality,
-                      const double min_gc,
-                      const double max_gc) {
+void Work::run_filter(const unsigned min_len,
+                      const unsigned max_len,
+                      const float min_quality,
+                      const float min_gc,
+                      const float max_gc) {
     while (true) {
         if (std::optional<shared_vec_reads> reads = m_fq.get_reads(); reads.has_value()) {
             std::vector<std::jthread> threads;
@@ -95,33 +95,33 @@ void Work::run_index() {
     m_fq.index();
 }
 
-void Work::stats(const size_t start,
-                 const size_t end,
+void Work::stats(const unsigned start,
+                 const unsigned end,
                  const shared_vec_reads &reads,
                  std::vector<read_stats_result> &sub_stats_result) {
-    for (size_t idx{start}; idx < end; idx++) {
-        size_t len{(*reads)[idx]->get_length()};
-        double quality{(*reads)[idx]->calculate_read_quality()};
-        double gc_content{m_gc ? (*reads)[idx]->get_gc_content() : 0.0};
+    for (unsigned idx{start}; idx < end; idx++) {
+        unsigned len{(*reads)[idx]->get_length()};
+        float quality{(*reads)[idx]->calculate_read_quality()};
+        float gc_content{m_gc ? (*reads)[idx]->get_gc_content() : 0.0f};
         sub_stats_result.emplace_back((*reads)[idx]->get_id(), len, quality, gc_content);
     }
     m_bar.arrive_and_wait();
 }
 
 
-void Work::filter(const size_t start,
-                  const size_t end,
-                  const size_t min_len,
-                  const size_t max_len,
-                  const double min_quality,
-                  const double min_gc,
-                  const double max_gc,
+void Work::filter(const unsigned start,
+                  const unsigned end,
+                  const unsigned min_len,
+                  const unsigned max_len,
+                  const float min_quality,
+                  const float min_gc,
+                  const float max_gc,
                   const shared_vec_reads &reads) {
-    for (size_t idx{start}; idx < end; idx++) {
-        const size_t len{(*reads)[idx]->get_length()};
-        double quality{(*reads)[idx]->calculate_read_quality()};
+    for (unsigned idx{start}; idx < end; idx++) {
+        unsigned len{(*reads)[idx]->get_length()};
+        float quality{(*reads)[idx]->calculate_read_quality()};
         if (m_gc) {
-            if (double gc_content{(*reads)[idx]->get_gc_content()};
+            if (float gc_content{(*reads)[idx]->get_gc_content()};
                     len >= min_len && len <= max_len && quality > min_quality &&
                     gc_content > min_gc && gc_content < max_gc) {
                 std::osyncstream{m_outfile_stream} << (*reads)[idx]->get_record();

@@ -6,13 +6,13 @@
 #include <syncstream>
 #include <FastqReader.h>
 
-using read_stats_result = std::tuple<std::string, size_t, double, double>;
+using read_stats_result = std::tuple<std::string, unsigned , double, double>;
 
 class Work
 {
 private:
     FastqReader& m_fq;
-    size_t m_thread{1};
+    unsigned m_thread{1};
     bool m_gc;
     std::string_view m_outfile_path;
     std::ofstream m_outfile_stream;
@@ -22,29 +22,29 @@ private:
 
 public:
     Work() = delete;
-    explicit Work(FastqReader& fq, size_t thread, bool gc, std::string_view outfile_path);
+    explicit Work(FastqReader& fq, unsigned thread, bool gc, std::string_view outfile_path);
     Work(const Work& w) = delete;
     Work(Work&& w) = delete;
     Work& operator=(const Work& w) = delete;
     Work& operator=(Work&& w) = delete;
-    [[nodiscard]] std::vector<std::pair<size_t, size_t>> get_bins(size_t length) const;
+    [[nodiscard]] std::vector<std::pair<unsigned , unsigned >> get_bins(unsigned length) const;
     void run_stats();
-    void run_filter(const size_t min_len, const size_t max_len, const double min_quality, const double min_gc, const double max_gc);
+    void run_filter(const unsigned min_len, const unsigned max_len, const float min_quality, const float min_gc, const float max_gc);
     void run_find(const std::string& input_reads, bool use_index);
     void run_index();
     ~Work();
 private:
-    void stats(const size_t,
-               const size_t,
+    void stats(const unsigned ,
+               const unsigned ,
                const shared_vec_reads&,
                std::vector<read_stats_result>& sub_stats_result);
-    void filter(const size_t start,
-                const size_t end,
-                const size_t min_len,
-                const size_t max_len,
-                const double min_quality,
-                const double min_gc,
-                const double max_gc,
+    void filter(const unsigned start,
+                const unsigned end,
+                const unsigned min_len,
+                const unsigned max_len,
+                const float min_quality,
+                const float min_gc,
+                const float max_gc,
                 const shared_vec_reads& reads);
 };
 

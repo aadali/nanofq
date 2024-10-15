@@ -42,15 +42,15 @@ public:
 
 public:
     [[nodiscard]] const std::string& get_id() const { return this->m_id; }
-    [[nodiscard]] size_t get_length() const { return m_sequence.size(); }
+    [[nodiscard]] unsigned get_length() const { return m_sequence.size(); }
 
-    [[nodiscard]] double get_gc_content() const
+    [[nodiscard]] float get_gc_content() const
     {
         auto gc_number{
             std::ranges::count_if(m_sequence,
                                   [](const char& c){ return c == 'G' || c == 'C' || c == 'g' || c == 'c'; })
         };
-        return static_cast<double>(gc_number) / static_cast<double>(m_sequence.size());
+        return static_cast<float >(gc_number) / static_cast<float >(m_sequence.size());
     }
 
     void rev_com()
@@ -82,26 +82,26 @@ public:
         std::ranges::reverse(m_quality);
     }
 
-    [[nodiscard]] double calculate_read_quality() const
+    [[nodiscard]] float calculate_read_quality() const
     {
         auto error_p{m_quality | std::views::transform([](const char& c){ return s_char_to_score_table[c]; })};
         double total_error_p{
-            std::accumulate(std::cbegin(error_p), std::cend(error_p), 0.0) / static_cast<double>(m_quality.size())
+            std::accumulate(std::cbegin(error_p), std::cend(error_p), 0.0) / static_cast<float >(m_quality.size())
         };
         return std::log10(total_error_p) * -10.0;
     }
 
-    [[nodiscard]] bool is_passed(const size_t min_length, size_t max_length, const double quality) const
+    [[nodiscard]] bool is_passed(const unsigned min_length, const unsigned max_length, const float quality) const
     {
         return m_sequence.size() >= min_length
             && m_sequence.size() <= max_length
             && calculate_read_quality() > quality;
     }
 
-    [[nodiscard]] bool is_passed(size_t min_length, size_t max_length, double quality, double min_gc,
-                                 double max_gc) const
+    [[nodiscard]] bool is_passed(const unsigned min_length, const unsigned max_length, float quality, float min_gc,
+                                 float max_gc) const
     {
-        double gc{get_gc_content()};
+        float gc{get_gc_content()};
         return m_sequence.size() >= min_length
             && m_sequence.size() <= max_length
             && calculate_read_quality() > quality

@@ -15,7 +15,7 @@ using std::filesystem::last_write_time;
 std::mutex FastqReader::ms_mtx{};
 std::condition_variable FastqReader::ms_cond{};
 
-FastqReader::FastqReader(std::string_view input_file, size_t chunk)
+FastqReader::FastqReader(std::string_view input_file, unsigned chunk)
         : m_input_file(input_file), m_chunk(chunk) {
     std::vector<std::shared_ptr<Read>> tmp;
     tmp.reserve(m_chunk);
@@ -39,7 +39,7 @@ void FastqReader::read_chunk_fastq() {
     std::string id, desc, sequence, quality;
     int line_number{1};
     while (m_infile.getline(m_buffer, FASTQ_BUFFER_SIZE, '\n')) {
-        size_t buf_len = strlen(m_buffer);
+        unsigned buf_len = strlen(m_buffer);
         if (m_buffer[buf_len - 1] == '\r') m_buffer[buf_len - 1] = '\0';
         switch (line_number) {
             case 1: {
@@ -54,7 +54,7 @@ void FastqReader::read_chunk_fastq() {
                         break;
                     }
                 }
-                if (id.empty()) { id = m_buffer; }
+                if (id.empty()) { id.assign(m_buffer, 1, strlen(m_buffer) - 1); }
                 line_number++;
                 break;
             }
@@ -114,7 +114,7 @@ std::optional<shared_vec_reads> FastqReader::get_reads() {
 
 std::unordered_set<std::string> FastqReader::get_searching_read_names(const std::string &input_reads) {
     std::unordered_set<std::string> read_names;
-    const size_t read_name_buf{256};
+    const unsigned read_name_buf{256};
     if (exists(std::filesystem::path{input_reads.data()})) {
         // input_reads is a file
         // one read name per line in this file
@@ -177,14 +177,13 @@ void FastqReader::find_reads(const std::string &input_reads, std::ostream &out, 
             for (int i{0}; i < strlen(index_line); i++) {
                 if (index_line[i] == '\t') { tab_pos.push_back(i); }
             }
-            std::string_view this_line{index_line};
-            start = atoll(this_line.substr(tab_pos[0] + 1, tab_pos[1] - tab_pos[0] - 1).data());
-            stop = atoll(this_line.substr(tab_pos[1] + 1, this_line.size() - tab_pos[1] - 1).data());
+            std::string this_line{index_line};
+            start = std::stoull(this_line.substr(tab_pos[0] + 1, tab_pos[1] - tab_pos[0] - 1));
+            stop = std::stoull(this_line.substr(tab_pos[1] + 1, this_line.size() - tab_pos[1] - 1));
+//            start = atoll(this_line.substr(tab_pos[0] + 1, tab_pos[1] - tab_pos[0] - 1).data());
+//            stop = atoll(this_line.substr(tab_pos[1] + 1, this_line.size() - tab_pos[1] - 1).data());
             reads_index.try_emplace(std::string(this_line.substr(0, tab_pos[0])), start, stop);
         }
-//        for (auto &[key, value] : reads_index){
-//            cout << key << ": " << value.first <<": " <<value.second << endl;
-//        }
         input_file_index.close();
         for (const std::string &id: read_names) {
             if (!reads_index.contains(id)) {
@@ -261,7 +260,7 @@ void FastqReader::index(std::string_view output_file_path) {
     if (!output_index_stream) {
         throw std::runtime_error(fmt::format("Failed when opened file: {}", output_file_path.data()));
     }
-//    cereal::BinaryOutputArchive bin_index{output_index};
+//    cereal::BinaryOutputArchive bin_index{output_index_stream};
 //    std::unordered_map<std::string, std::tuple<size_t, size_t>> reads_index{};
     m_infile.seekg(std::ios::beg);
     std::string id;
@@ -277,7 +276,7 @@ void FastqReader::index(std::string_view output_file_path) {
                         break;
                     }
                 }
-                if (id.empty()) id = m_buffer;
+                if (id.empty()) id.assign(m_buffer, 1, strlen(m_buffer) - 1);
                 stop += strlen(m_buffer) + 1;
                 line_number++;
                 break;
@@ -294,6 +293,7 @@ void FastqReader::index(std::string_view output_file_path) {
 //                reads_index.try_emplace(id, start, stop);
                 output_index_stream << fmt::format("{}\t{}\t{}\n", id, start, stop);
                 start = stop;
+                id.clear();
                 break;
             }
             default: {
