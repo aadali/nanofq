@@ -10,7 +10,10 @@ add_executable(nanofq
         src/FastqReader.cpp
         src/Work.h
         src/Work.cpp
+        src/utility.h
+        src/kseq.h
 )
 
 target_link_libraries(nanofq fmt)
+target_link_libraries(nanofq z)
 include_directories(./src)

@@ -14,6 +14,9 @@ Work::Work(FastqReader &fq, const unsigned thread, const bool gc, std::string_vi
         m_sub_stats_result.emplace_back();
     }
     m_outfile_stream = std::ofstream(m_outfile_path.data(), std::ios::out);
+    if (!m_outfile_stream) {
+        throw std::runtime_error(fmt::format("Cannot open file: {}", m_outfile_path));
+    }
 }
 
 std::vector<std::pair<unsigned , unsigned >> Work::get_bins(const unsigned length) const {

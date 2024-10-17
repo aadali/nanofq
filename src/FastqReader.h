@@ -8,6 +8,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <optional>
+#include <zlib.h>
 #include "Read.hpp"
 
 using shared_vec_reads = std::shared_ptr<std::vector<std::shared_ptr<Read>>>;
@@ -16,7 +17,8 @@ using shared_read = std::shared_ptr<Read>;
 class FastqReader {
 private:
     bool m_finish{false};
-    std::fstream m_infile;
+//    std::fstream m_infile_text{};
+    gzFile m_infile_gz{nullptr};
     shared_vec_reads m_reads{};
     std::string_view m_input_file;
     unsigned m_chunk;
@@ -39,7 +41,7 @@ public:
 
     ~FastqReader();
 
-    void read_chunk_fastq();
+    int read_chunk_fastq();
 
     inline bool read_finish() const {
         return m_finish;

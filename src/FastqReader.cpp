@@ -1,4 +1,5 @@
 #include <filesystem>
+#include <stdio.h>
 
 #include <fmt/core.h>
 //#include <cereal/types/unordered_map.hpp>
@@ -7,11 +8,15 @@
 //#include <cereal/archives/binary.hpp>
 
 #include "FastqReader.h"
+#include "utility.h"
+#include "kseq.h"
+
+KSEQ_INIT(gzFile, gzread)
+#define FASTQ_BUFFER_SIZE (1<<23)
 
 using std::cout;
 using std::endl;
 using std::filesystem::last_write_time;
-#define FASTQ_BUFFER_SIZE (1<<23)
 std::mutex FastqReader::ms_mtx{};
 std::condition_variable FastqReader::ms_cond{};
 
@@ -21,82 +26,47 @@ FastqReader::FastqReader(std::string_view input_file, unsigned chunk)
     tmp.reserve(m_chunk);
     m_reads = std::make_shared<std::vector<std::shared_ptr<Read>>>(tmp);
     m_buffer = new char[FASTQ_BUFFER_SIZE];
-    m_infile = std::fstream{input_file.data(), std::ios::in};
-    if (!m_infile) {
+    m_infile_gz = gzopen(input_file.data(), "rb");
+    if (!m_infile_gz){
         throw std::runtime_error(fmt::format("Failed when opened file: {}", input_file));
     }
 }
 
 FastqReader::~FastqReader() {
-    if (m_infile.is_open()) m_infile.close();
+    if (m_infile_gz) gzclose(m_infile_gz);
     if (m_buffer) {
-        delete m_buffer;
+        delete[] m_buffer;
         m_buffer = nullptr;
     }
 }
 
-void FastqReader::read_chunk_fastq() {
+int FastqReader::read_chunk_fastq() {
     std::string id, desc, sequence, quality;
-    int line_number{1};
-    while (m_infile.getline(m_buffer, FASTQ_BUFFER_SIZE, '\n')) {
-        unsigned buf_len = strlen(m_buffer);
-        if (m_buffer[buf_len - 1] == '\r') m_buffer[buf_len - 1] = '\0';
-        switch (line_number) {
-            case 1: {
-                if (strlen(m_buffer) == 0) { break; }
-                if (m_buffer[0] != '@') {
-                    throw std::runtime_error(fmt::format("id must starts with @, which is {}", m_buffer));
-                }
-                for (int idx{0}; idx < buf_len; idx++) {
-                    if (m_buffer[idx] == ' ') {
-                        id.assign(m_buffer, 1, idx - 1);
-                        desc.assign(m_buffer, idx + 1, buf_len - idx - 1);
-                        break;
-                    }
-                }
-                if (id.empty()) { id.assign(m_buffer, 1, strlen(m_buffer) - 1); }
-                line_number++;
-                break;
-            }
-            case 2: {
-                if (buf_len == 0) {
-                    throw std::runtime_error(fmt::format("empty sequence for {}", id));
-                }
-                sequence = m_buffer;
-                line_number++;
-                break;
-            }
-            case 3: {
-                line_number++;
-                break;
-            }
-            case 4: {
-                line_number++;
-                if (buf_len == 0) {
-                    throw std::runtime_error(fmt::format("empty quality for {}", id));
-                }
-                quality = m_buffer;
-                break;
-            }
-            default: {
-                break;
-            }
+    kseq_t *seq = kseq_init(m_infile_gz);
+    int l;
+    while (true) {
+        l = kseq_read(seq);
+        if (l == -1) break; // end of file
+        if (l == -2) {
+            throw std::runtime_error(fmt::format("Error: bad FASTQ format for read {}", seq->name.s));
         }
-        if (line_number == 5) {
-            line_number = 1;
-            if (sequence.size() != quality.size()) {
-                throw std::runtime_error(fmt::format("different length between sequence({}) and quality({}) for {}",
-                                                     sequence.size(), quality.size(), id));
-            }
-            std::unique_lock<std::mutex> lock{ms_mtx};
-            m_reads->emplace_back(std::make_shared<Read>(id, desc, sequence, quality));
-            if (m_reads->size() == m_chunk) {
-                std::cout << "first finished" << std::endl;
-                ms_cond.wait(lock, [this]() { return m_reads->empty(); });
-            }
+        if (l == -3) {
+            throw std::runtime_error(fmt::format("Error reading {}", m_input_file));
+        }
+        bool fastq_format{seq->qual.l > 0 && seq->seq.l > 0 && seq->seq.l == seq->qual.l};
+        if (!fastq_format) {
+            throw std::runtime_error(fmt::format("\n\nError: could not parse input read \nproblem occurred at read {}", seq->name.s));
+        }
+        std::unique_lock<std::mutex> lock{ms_mtx};
+        m_reads->emplace_back(std::make_shared<Read>(seq->name.s, seq->comment.s, seq->seq.s, seq->qual.s));
+        if (m_reads->size() == m_chunk) {
+            std::cout << "first finished" << std::endl;
+            ms_cond.wait(lock, [this]() { return m_reads->empty(); });
         }
     }
+    kseq_destroy(seq);
     m_finish = true;
+    return 0;
 }
 
 std::optional<shared_vec_reads> FastqReader::get_reads() {
@@ -140,20 +110,9 @@ std::unordered_set<std::string> FastqReader::get_searching_read_names(const std:
             read_names.emplace(read_name);
         }
     } else {
-        std::string input_reads2;
-        if (!input_reads.ends_with(',')) {
-            input_reads2 = input_reads + ',';
-        }
-        std::string read_name;
-        auto start{input_reads2.begin()};
-        for (auto it{std::begin(input_reads2)}; it != std::end(input_reads2); it++) {
-            if (*it == ',') {
-                read_name.assign(start, it);
-                start = it + 1;
-                if (!read_names.contains(read_name)) {
-                    read_names.emplace(read_name);
-                }
-            }
+        std::vector<std::string_view> read_names_view{utility::split(input_reads, ",")};
+        for (auto read_name: read_names_view) {
+            read_names.emplace(read_name);
         }
     }
     for (auto &r: read_names) {
@@ -163,6 +122,7 @@ std::unordered_set<std::string> FastqReader::get_searching_read_names(const std:
 }
 
 void FastqReader::find_reads(const std::string &input_reads, std::ostream &out, bool use_index) {
+    std::ifstream infile_text {m_input_file.data(), std::ios::in};
     std::unordered_set<std::string> read_names{FastqReader::get_searching_read_names(input_reads)};
     if (use_index) {
         index();
@@ -191,18 +151,19 @@ void FastqReader::find_reads(const std::string &input_reads, std::ostream &out, 
                 continue;
             }
             auto [begin, end] = reads_index.at(id);
-            m_infile.seekg(begin, std::ios::beg);
+            infile_text.seekg(begin, std::ios::beg);
             for (size_t idx{0}; idx < end - begin; idx++) {
-                out << static_cast<char>(m_infile.get());
+                out << static_cast<char>(infile_text.get());
             }
         }
         return;
     }
-    m_infile.seekg(std::ios::beg);
+    infile_text.seekg(std::ios::beg);
     int line_number{1};
     bool find_read{false};
     std::string id;
-    while (m_infile.getline(m_buffer, FASTQ_BUFFER_SIZE, '\n')) {
+   infile_text.getline(m_buffer, FASTQ_BUFFER_SIZE, '\n');
+    while (infile_text.getline(m_buffer, FASTQ_BUFFER_SIZE, '\n')) {
         if (!find_read && read_names.empty())break;
         if (m_buffer[strlen(m_buffer) - 1] == '\r') m_buffer[strlen(m_buffer) - 1] = '\0';
         switch (line_number) {
@@ -241,6 +202,7 @@ void FastqReader::find_reads(const std::string &input_reads, std::ostream &out, 
             }
         }
     }
+    infile_text.close();
 }
 
 void FastqReader::index() {
@@ -256,18 +218,19 @@ void FastqReader::index() {
 }
 
 void FastqReader::index(std::string_view output_file_path) {
+    std::ifstream infile_text{m_input_file.data(), std::ios::in};
     std::fstream output_index_stream{output_file_path.data(), std::ios::out};
     if (!output_index_stream) {
         throw std::runtime_error(fmt::format("Failed when opened file: {}", output_file_path.data()));
     }
 //    cereal::BinaryOutputArchive bin_index{output_index_stream};
 //    std::unordered_map<std::string, std::tuple<size_t, size_t>> reads_index{};
-    m_infile.seekg(std::ios::beg);
+    infile_text.seekg(std::ios::beg);
     std::string id;
     int line_number{1};
     size_t start{0};
     size_t stop{0};
-    while (m_infile.getline(m_buffer, FASTQ_BUFFER_SIZE, '\n')) {
+    while (infile_text.getline(m_buffer, FASTQ_BUFFER_SIZE, '\n')) {
         switch (line_number) {
             case 1: {
                 for (int idx{0}; idx < strlen(m_buffer); idx++) {
@@ -303,6 +266,7 @@ void FastqReader::index(std::string_view output_file_path) {
     }
 //    bin_index(reads_index);
     output_index_stream.close();
+    infile_text.close();
 }
 
 
