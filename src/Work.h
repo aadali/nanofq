@@ -30,8 +30,8 @@ public:
     [[nodiscard]] std::vector<std::pair<unsigned , unsigned >> get_bins(unsigned length) const;
     void run_stats();
     void run_filter(const unsigned min_len, const unsigned max_len, const float min_quality, const float min_gc, const float max_gc);
-    void run_find(const std::string& input_reads, bool use_index);
-    void run_index();
+    void run_find(const std::string& input_reads, bool use_index, unsigned key_length=5);
+    void run_index(unsigned key_length);
     ~Work();
 private:
     void stats(const unsigned ,

@@ -21,4 +21,13 @@ namespace utility {
         result.push_back(str);
         return result;
     }
+
+    string_view get_read_name_prefix(string_view header, unsigned key_length) {
+        size_t space_idx{header.find(' ')};
+        if (space_idx == std::string::npos) {
+            return header.size() < key_length + 1 ? header.substr(1) : header.substr(1, key_length);
+        } else {
+            return space_idx <= key_length ? header.substr(1, space_idx - 1) : header.substr(1, key_length);
+        }
+    }
 }

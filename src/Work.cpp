@@ -90,12 +90,12 @@ void Work::run_filter(const unsigned min_len,
     }
 }
 
-void Work::run_find(const std::string& input_reads, bool use_index) {
-    m_fq.find_reads(input_reads, m_outfile_stream, use_index);
+void Work::run_find(const std::string& input_reads, bool use_index, unsigned key_length) {
+    m_fq.find_reads(input_reads, m_outfile_stream, use_index, key_length);
 }
 
-void Work::run_index() {
-    m_fq.index();
+void Work::run_index(unsigned key_length) {
+    m_fq.index(key_length);
 }
 
 void Work::stats(const unsigned start,

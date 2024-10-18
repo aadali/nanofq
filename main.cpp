@@ -38,12 +38,14 @@ int main() {
 //    for (auto i: a) {
 //        cout << i << ";" << endl;
 //    }
-//    work.run_index();
+    work.run_index(5);
 //    work.run_find("a3f6101d-ba31-4654-accb-40ec9ff451b6,72f8efeb-a61c-4714-bd3c-24ff18301ffa,ff4c91d6-0490-497c-9150-3fbbe3e6b958",
 //                  true);
-    thread t1{&FastqReader::read_chunk_fastq, &fq};
-    thread t2{&Work::run_stats, &work};
+//    thread t1{&FastqReader::read_chunk_fastq, &fq};
+//    thread t2{&Work::run_stats, &work};
 //    thread t2{&Work::run_filter, &work, 9000, 10000, 12, 0.0, 1.0};
-    t1.join();
-    t2.join();
+//    t1.join();
+//    t2.join();
+//    string hello{"hello world"};
+
 }

@@ -48,12 +48,13 @@ public:
     };
 
     std::optional<shared_vec_reads> get_reads();
-    void find_reads(const std::string &input_reads, std::ostream &out, bool use_index);
-    void index();
+    void find_reads(const std::string &input_reads, std::ostream &out, bool use_index, unsigned key_length=5);
+    void index(unsigned key_len);
 
 private:
     static std::unordered_set<std::string> get_searching_read_names(const std::string& input_reads) ;
-    void index(std::string_view output_file_path);
+    void index_fastq(std::string_view output_file_path, unsigned key_len);
+    void index_fastq_gz(std::string_view output_file_path, unsigned key_len);
 };
 
 
