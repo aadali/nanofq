@@ -1,22 +1,18 @@
-#include <cstring>
-#include <fstream>
 #include <fmt/core.h>
-#include <execution>
 #include "Read.hpp"
 #include "Timer.hpp"
 #include "FastqReader.h"
-#include <thread>
 #include <syncstream>
 #include "Work.h"
-//#include "utility.h"
-#include <atomic>
+#include "utility.h"
+#include "AlignmentConfig.h"
+#include "AlignmentResult.h"
 
 
 #include <cereal/types/unordered_map.hpp>
 #include <cereal/types/tuple.hpp>
 #include <cereal/types/string.hpp>
 #include <cereal/archives/binary.hpp>
-#include "Alignment.h"
 
 using namespace std;
 //using namespace utility::utility;
@@ -51,13 +47,18 @@ int main() {
 //    t1.join();
 //    t2.join();
 //    string hello{"hello world"};
-    string target {"ATGTGTATATTTATAGCTTCCATTTATTCAAAAACCGGGTATTTTTCCAACCAAGAAAGTTGTCGGTGTCTTTGTGGTTTTCACATTATCGTGAAACGCTTTCAGCATTTTCAGCTACACACTTTCACATTTCCCATCTTCTGGCTTGTTTAAAAGCTCTAGACACAGCCAAGCACAGTGTGTATAAGTGCCTCCTCAGTGCTGGTACTCAGCCTATCCCAATATTGG"};
-    string query {"AAGAAAGTTGTCGGTGTCTTTGTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA"};
-    Alignment sw {target};
-    Alignment::init_query(query, query);
-    Alignment::init_matrix();
-    Alignment::init_penalty(3, -3, -10, -1);
-    sw.align();
-    auto res = sw.alignment2string();
-    cout << res << endl;
+    string target{
+            "ATGTGTATATTTATAGCTTCCATTTATTCAAAAACCGGGTATTTTTCCAACCAAGAAAGTTGTCGGTGTCTTTGTGGTTTTCACATTATCGTGAAACGCTTTCAGCATTTTCAGCTACACACTTTCACATTTCCCATCTTCTGGCTTGTTTAAAAGCTCTAGACACAGCCAAGCACAGTGTGTATAAGTGCCTCCTCAGTGCTGGTACTCAGCCTATCCCAATATTGG"};
+    string query{"AAGAAAGTTGTCGGTGTCTTTGTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA"};
+    AlignmentConfig config{3, -3, -10, -1};
+    AlignmentResult result{};
+    utility::smith_waterman(target, query, config, result);
+    cout << result.to_string() << endl;
+//    Alignment sw {target};
+//    Alignment::init_query(query, query);
+//    Alignment::init_matrix();
+//    Alignment::init_penalty(3, -3, -10, -1);
+//    sw.align();
+//    auto res = sw.alignment2string();
+//    cout << res << endl;
 }
