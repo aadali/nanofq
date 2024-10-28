@@ -12,6 +12,7 @@ add_executable(nanofq
         src/Work.cpp
         src/utility.h
         src/kseq.h
+        src/Alignment.cpp
 )
 
 target_link_libraries(nanofq fmt)
