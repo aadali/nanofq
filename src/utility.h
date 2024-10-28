@@ -55,13 +55,13 @@ struct utility {
 
                 /* calculate score from left
                  * 1 in direction matrix mean from left */
-                score = config.get_direction(row, col - 1) == 1 ? config.m_gap_extend : config.m_gap_open;
+                score = config.get_direction(row, col - 1) == AlignmentConfig::Direction::Left ? config.m_gap_extend : config.m_gap_open;
                 left_score = config.get_score(row, col - 1) + score;
 
 
                 /* calculate score from up
                  * 2 in direction matrix mean from up*/
-                score = config.get_direction(row - 1, col) == 2 ? config.m_gap_extend : config.m_gap_open;
+                score = config.get_direction(row - 1, col) == AlignmentConfig::Direction::Up ? config.m_gap_extend : config.m_gap_open;
                 up_score = config.get_score(row - 1, col) + score;
 
                 // update the value of this cell
@@ -69,11 +69,11 @@ struct utility {
 
                 // record which direction the value of this cell is from
                 if (config.get_score(row, col) == diagonal_score) {
-                    config.set_direction(row, col, 0);
+                    config.set_direction(row, col, AlignmentConfig::Direction::Diag);
                 } else if (config.get_score(row, col) == left_score) {
-                    config.set_direction(row, col, 1);
+                    config.set_direction(row, col, AlignmentConfig::Direction::Left);
                 } else {
-                    config.set_direction(row, col, 2);
+                    config.set_direction(row, col, AlignmentConfig::Direction::Up);
                 }
 
                 // update the max score and the row, column index of max score
@@ -87,14 +87,14 @@ struct utility {
         // trace back depend on the direction matrix
         auto [row, col] = result.get_stop_idx();
         while (row > 0 && col > 0 && config.get_score(row, col) > 0) {
-            if (config.get_direction(row, col) == 0) {
+            if (config.get_direction(row, col) == AlignmentConfig::Direction::Diag) {
                 // '|' mean match, ':' mean mismatch
                 result.push_back(target_seq[col - 1],
                                  query_seq[row - 1],
                                  target_seq[col - 1] == query_seq[row - 1] ? '|' : ':');
                 --row;
                 --col;
-            } else if (config.get_direction(row, col) == 1) {
+            } else if (config.get_direction(row, col) == AlignmentConfig::Direction::Left) {
                 // ' ' mean gap
                 result.push_back(target_seq[col - 1], '-', ' ');
                 --col;
