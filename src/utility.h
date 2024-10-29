@@ -4,6 +4,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <fmt/core.h>
 #include "kseq.h"
 #include "zlib.h"
 #include "AlignmentConfig.h"
