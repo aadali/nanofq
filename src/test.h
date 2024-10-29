@@ -1,4 +1,4 @@
-#include "Timer.hpp"
+#include "Timer.h"
 #include "FastqReader.h"
 #include <syncstream>
 #include "Work.h"

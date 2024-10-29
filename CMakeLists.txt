@@ -4,8 +4,8 @@ project(nanofq)
 set(CMAKE_CXX_STANDARD 20)
 add_executable(nanofq
         main.cpp
-        src/Read.hpp
-        src/Timer.hpp
+        src/Read.h
+        src/Timer.h
         src/FastqReader.h
         src/FastqReader.cpp
         src/Work.h
@@ -16,6 +16,7 @@ add_executable(nanofq
         src/AlignmentConfig.cpp
         src/AlignmentResult.h
         src/AlignmentResult.cpp
+        src/Adapter.h
 )
 
 target_link_libraries(nanofq fmt)

@@ -9,7 +9,7 @@
 #include <condition_variable>
 #include <optional>
 #include <zlib.h>
-#include "Read.hpp"
+#include "Read.h"
 
 using shared_vec_reads = std::shared_ptr<std::vector<std::shared_ptr<Read>>>;
 using shared_read = std::shared_ptr<Read>;
