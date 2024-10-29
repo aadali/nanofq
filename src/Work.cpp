@@ -51,7 +51,7 @@ void Work::run_stats() {
                                      std::ref(m_sub_stats_result[i]));
             }
         }
-        if (m_fq.read_finish()) break;
+        if (m_fq.read_finish() && m_fq.is_empty()) break;
     }
     for (std::vector<read_stats_result> &item: m_sub_stats_result) {
         for (read_stats_result &x: item) {

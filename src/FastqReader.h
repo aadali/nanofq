@@ -43,9 +43,9 @@ public:
 
     int read_chunk_fastq();
 
-    inline bool read_finish() const {
-        return m_finish;
-    };
+    inline bool read_finish() const { return m_finish; };
+
+    inline bool is_empty() const {return m_reads->empty();}
 
     std::optional<shared_vec_reads> get_reads();
     void find_reads(const std::string &input_reads, std::ostream &out, bool use_index, unsigned key_length=5);

@@ -34,7 +34,7 @@ public:
             m_quality(std::move(quality)) {}
 
     Read(char *id, char *desc, char *sequence, char *quality) :
-            m_id(id), m_desc(desc), m_sequence(sequence), m_quality(quality) {}
+            m_id(id), m_desc(desc ? desc : ""), m_sequence(sequence), m_quality(quality) {}
 
     Read(const Read &read) = delete;
 

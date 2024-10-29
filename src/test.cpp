@@ -35,8 +35,9 @@ void test_find(bool use_index) {
 
 void test_stats() {
     // TODO stats bug, output number is different from input
-    Timer timer{"test find"};
-    FastqReader fq{big_big_fastq, 50000};
+    Timer timer{"test stats"};
+//    FastqReader fq{big_big_fastq, 100000};
+    FastqReader fq{big_fastq, 50000};
     Work work{fq, 4, false, "../test_data/test_output/test_stats.txt"};
     thread t1{&FastqReader::read_chunk_fastq, &fq};
     thread t2{&Work::run_stats, &work};
