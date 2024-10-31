@@ -17,6 +17,8 @@ add_executable(nanofq
         src/AlignmentResult.h
         src/AlignmentResult.cpp
         src/Adapter.h
+        src/SequenceInfo.h
+        src/SequenceInfo.cpp
 )
 
 target_link_libraries(nanofq fmt)

@@ -2,8 +2,40 @@
 #define NANOFQ_ADAPTER_H
 
 #include <string>
+#include <unordered_map>
+#include <fmt/core.h>
+#include "utility.h"
+#include "SequenceInfo.h"
+
+// LSK114
+constexpr trim_end LSK_TOP5END{100, 0.75, 0.75};
+constexpr trim_end LSK_TOP3END{50, 0.75, 0.75};
+
+// NBD114
+constexpr trim_end NBD_TOP5END{150, 0.5, 0.75};
+constexpr trim_end NBD_TOP3END{100, 0.4, 0.75};
+
+// RAD114
+constexpr trim_end RAD_TOP5END{150, 0.5, 0.75};
+
+// RBK114
+constexpr trim_end RBK_TOP5END{200, 0.4, 0.75};
+
+// PCS114 TOP
+constexpr trim_end PCS_TOP5END{150, 0.6, 0.75};
+constexpr trim_end PCS_TOP3END{150, 0.4, 0.75};
+constexpr trim_end PCS_BOT5END{PCS_TOP3END};
+constexpr trim_end PCS_BOT3END{PCS_TOP5END};
+
+// PCB114 TOP
+constexpr trim_end PCB_TOP5END{180, 0.5, 0.75};
+constexpr trim_end PCB_TOP3END{180, 0.4, 0.75};
+constexpr trim_end PCB_BOT5END{PCB_TOP3END};
+constexpr trim_end PCB_BOT3END{PCB_TOP5END};
+
 // https://nanoporetech.com/document/chemistry-technical-document#adapter-sequences
-namespace barcode_info {
+namespace barcode_info
+{
     /*
     * SQK-LSK114
     * LSK114 library reads structure
@@ -13,14 +45,15 @@ namespace barcode_info {
     * 3' end always is truncated
     */
     const std::string LA_ADAPTER_5 = "CCTGTACTTCGTTCAGTTACGTATTGCT";
-    const std::string LA_ADAPTER_3 = "AGCAATACGTAACTGAACGAAGTACAGG"; // the first 15 or even less bases is enough, because 3'end always is truncated
+    const std::string LA_ADAPTER_3 = "AGCAATACGTAACTGAACGAAGTACAGG";
+    // the first 15 or even less bases is enough, because 3'end always is truncated
 
 
     /*
      * SQK-NBD114-24; SQK-NBD114-96
      * NBD114-24/96 library reads structure
      * Example for Native Barcode01
-     *           |NA_ADAPTER_5                |L_F_5   |Native Barcode01        |R_F_5   |insert Seq         |L_F_3   |Barcode01_rev_com       |R_F_3         |NA_ADAPTER_3
+     *           |NA_ADAPTER_5                |L_F_5   |Barcode01 rev com       |R_F_5   |insert Seq         |L_F_3   |Barcode01               |R_F_3         |NA_ADAPTER_3
      * 5-TTTTTTTTCCTGTACTTCGTTCAGTTACGTATTGCT AAGGTTAA CACAAAGACACCGACAACTTTCTT CAGCACCT ................... AGGTGCTG AAGAAAGTTGTCGGTGTCTTTGTG TTAACCTTAGCAAT ACGTAACTGAACGAAGTACAGG-3
     */
     const std::string NA_ADAPTER_5 = "CCTGTACTTCGTTCAGTTACGTATTGCT";
@@ -268,10 +301,95 @@ namespace barcode_info {
     const std::string RB94 = "GATTGTCCTCAAACTGCCACCTAC";
     const std::string RB95 = "CCTGTCTGGAAGAAGAATGGACTT";
     const std::string RB96 = "CTGAACGGTCATAGAGTCCACCAT";
+    const std::vector<std::string> NB_VEC{
+        NB01, NB02, NB03, NB04, NB05, NB06, NB07, NB08, NB09, NB10, NB11, NB12,
+        NB13, NB14, NB15, NB16, NB17, NB18, NB19, NB20, NB21, NB22, NB23, NB24,
+        NB25, NB26, NB27, NB28, NB29, NB30, NB31, NB32, NB33, NB34, NB35, NB36,
+        NB37, NB38, NB39, NB40, NB41, NB42, NB43, NB44, NB45, NB46, NB47, NB48,
+        NB49, NB50, NB51, NB52, NB53, NB54, NB55, NB56, NB57, NB58, NB59, NB60,
+        NB61, NB62, NB63, NB64, NB65, NB66, NB67, NB68, NB69, NB70, NB71, NB72,
+        NB73, NB74, NB75, NB76, NB77, NB78, NB79, NB80, NB81, NB82, NB83, NB84,
+        NB85, NB86, NB87, NB88, NB89, NB90, NB91, NB92, NB93, NB94, NB95, NB96
+    };
+
+    const std::vector<std::string> RB_VEC{
+        RB01, RB02, RB03, RB04, RB05, RB06, RB07, RB08, RB09, RB10, RB11, RB12,
+        RB13, RB14, RB15, RB16, RB17, RB18, RB19, RB20, RB21, RB22, RB23, RB24,
+        RB25, RB26, RB27, RB28, RB29, RB30, RB31, RB32, RB33, RB34, RB35, RB36,
+        RB37, RB38, RB39, RB40, RB41, RB42, RB43, RB44, RB45, RB46, RB47, RB48,
+        RB49, RB50, RB51, RB52, RB53, RB54, RB55, RB56, RB57, RB58, RB59, RB60,
+        RB61, RB62, RB63, RB64, RB65, RB66, RB67, RB68, RB69, RB70, RB71, RB72,
+        RB73, RB74, RB75, RB76, RB77, RB78, RB79, RB80, RB81, RB82, RB83, RB84,
+        RB85, RB86, RB87, RB88, RB89, RB90, RB91, RB92, RB93, RB94, RB95, RB96
+    };
 
     /*PCR BARCODE*
      * All BC = All RB
      */
+    inline std::unordered_map<std::string, SequenceInfo> get_trim_info()
+    {
+        std::unordered_map<std::string, SequenceInfo> trim_info;
+        trim_info.try_emplace("SQK-LSK114",
+                              "SQK-LSK114", LA_ADAPTER_5, LSK_TOP5END, LA_ADAPTER_3, LSK_TOP3END
+        );
+        trim_info.try_emplace("SQK-RAD114", "SQK-RAD114", RA_ADAPTER, RAD_TOP5END);
+        trim_info.try_emplace("SQK-ULK114", "SQK-ULK114", RA_ADAPTER, RAD_TOP5END);
+        trim_info.try_emplace("SQK-PCS114",
+                              "SQK-PCS114",
+                              SSPII,
+                              PCS_TOP5END,
+                              CRTA,
+                              PCS_TOP3END,
+                              CRTA_REV_COM,
+                              PCS_BOT5END,
+                              SSPII_REV_COM,
+                              PCS_BOT3END
+        );
+        for (int i{0}; i < 96; i++) {
+            if (i < 24) {
+                std::string nbd24_name{fmt::format("SQK-NBD114.24-{}", i + 1)};
+                std::string rbk24_name{fmt::format("SQK-RBK114.24-{}", i + 1)};
+                std::string pcb24_name{fmt::format("SQK-PCB114.24-{}", i + 1)};
+                trim_info.try_emplace(nbd24_name,
+                                      nbd24_name,
+                                      NA_ADAPTER_5 + NB_LEFT_FLANKING_5 + utility::rev_com(NB_VEC[i]) +
+                                      NB_RIGHT_FLANKING_5,
+                                      NBD_TOP5END,
+                                      NB_LEFT_FLANKING_3 + NB_VEC[i] + NB_RIGHT_FLANKING_3 + NA_ADAPTER_3,
+                                      NBD_TOP3END
+                );
+                trim_info.try_emplace(rbk24_name,
+                                      rbk24_name,
+                                      RB_LEFT_FLANKING + RB_VEC[i] + RB_RIGTH_FLANKING,
+                                      RBK_TOP5END
+                );
+                trim_info.try_emplace(pcb24_name,
+                                      pcb24_name,
+                                      RB_VEC[i] + SSPII, PCB_TOP5END, CRTA + utility::rev_com(RB_VEC[i]),
+                                      PCB_TOP3END,
+                                      RB_VEC[i] + CRTA_REV_COM, PCB_BOT5END,
+                                      SSPII_REV_COM + utility::rev_com(RB_VEC[i]),
+                                      PCB_BOT3END
+                );
+            }
+            std::string nbd96_name{fmt::format("SQK-NBD114.96-{}", i + 1)};
+            std::string rbk96_name{fmt::format("SQK-RBK114.96-{}", i + 1)};
+            trim_info.try_emplace(nbd96_name,
+                                  nbd96_name,
+                                  NA_ADAPTER_5 + NB_LEFT_FLANKING_5 + utility::rev_com(NB_VEC[i]) +
+                                  NB_RIGHT_FLANKING_5,
+                                  NBD_TOP5END,
+                                  NB_LEFT_FLANKING_3 + NB_VEC[i] + NB_RIGHT_FLANKING_3 +
+                                  NA_ADAPTER_3,
+                                  NBD_TOP3END
+            );
+            trim_info.try_emplace(rbk96_name,
+                                  rbk96_name,
+                                  RB_LEFT_FLANKING + RB_VEC[i] + RB_RIGTH_FLANKING, RBK_TOP5END
+            );
+        }
+        return trim_info;
+    }
 }
 
 #endif //NANOFQ_ADAPTER_H

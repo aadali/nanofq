@@ -13,13 +13,40 @@
 
 using namespace std;
 
-struct utility {
-    [[nodiscard]] static vector<string_view> split(string_view str, string_view delim) {
+struct utility
+{
+    static std::string rev_com(const std::string& seq)
+    {
+        std::string sequence{seq};
+        std::ranges::transform(sequence,
+                               std::begin(sequence),
+                               [](const char& c){
+                                   switch (c) {
+                                   case 'A':
+                                       return 'T';
+                                   case 'T':
+                                       return 'A';
+                                   case 'G':
+                                       return 'C';
+                                   case 'C':
+                                       return 'G';
+                                   case 'V':
+                                       return 'B';
+                                   default:
+                                       return 'N';
+                                   }
+                               });
+
+        std::ranges::reverse(sequence);
+        return sequence;
+    }
+
+    [[nodiscard]] static vector<string_view> split(string_view str, string_view delim)
+    {
         vector<string_view> result;
         size_t pos = 0;
-        string_view token;
         while ((pos = str.find(delim)) != string::npos) {
-            token = str.substr(0, pos);
+            string_view token{str.substr(0, pos)};
             result.push_back(token);
             str.remove_prefix(pos + delim.size());
         }
@@ -27,7 +54,8 @@ struct utility {
         return result;
     }
 
-    static string_view get_read_name_prefix(string_view header, unsigned key_length) {
+    static string_view get_read_name_prefix(string_view header, unsigned key_length)
+    {
         size_t space_idx{header.find(' ')};
         if (space_idx == std::string::npos) {
             return header.size() < key_length + 1 ? header.substr(1) : header.substr(1, key_length);
@@ -36,8 +64,9 @@ struct utility {
         }
     }
 
-    static void smith_waterman(const string &target_seq, const string &query_seq, AlignmentConfig &config,
-                               AlignmentResult &result) {
+    static void smith_waterman(const string& target_seq, const string& query_seq, AlignmentConfig& config,
+                               AlignmentResult& result)
+    {
         if (!result.is_empty()) {
             throw std::runtime_error("AlignmentResult should be empty");
         }
@@ -56,13 +85,17 @@ struct utility {
 
                 /* calculate score from left
                  * 1 in direction matrix mean from left */
-                score = config.get_direction(row, col - 1) == AlignmentConfig::Direction::Left ? config.m_gap_extend : config.m_gap_open;
+                score = config.get_direction(row, col - 1) == AlignmentConfig::Direction::Left
+                            ? config.m_gap_extend
+                            : config.m_gap_open;
                 left_score = config.get_score(row, col - 1) + score;
 
 
                 /* calculate score from up
                  * 2 in direction matrix mean from up*/
-                score = config.get_direction(row - 1, col) == AlignmentConfig::Direction::Up ? config.m_gap_extend : config.m_gap_open;
+                score = config.get_direction(row - 1, col) == AlignmentConfig::Direction::Up
+                            ? config.m_gap_extend
+                            : config.m_gap_open;
                 up_score = config.get_score(row - 1, col) + score;
 
                 // update the value of this cell
