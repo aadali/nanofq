@@ -48,6 +48,9 @@ public:
 
 public:
     [[nodiscard]] const std::string &get_id() const { return this->m_id; }
+    [[nodiscard]] const std::string &get_sequence() const {return this->m_sequence;}
+    [[nodiscard]] const std::string &get_quality() const {return this->m_quality;}
+
 
     [[nodiscard]] unsigned get_length() const { return m_sequence.size(); }
 

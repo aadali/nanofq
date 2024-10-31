@@ -2,11 +2,16 @@
 #define WORK_H
 #include <tuple>
 #include <string>
+#include <numeric>
 #include <barrier>
 #include <syncstream>
-#include <FastqReader.h>
+#include "utility.h"
+#include "FastqReader.h"
+#include "SequenceInfo.h"
 
-using read_stats_result = std::tuple<std::string, unsigned , double, double>;
+#define DEFAULT_INT std::numeric_limits<int>::max()
+#define DEFAULT_FLOAT 3.14f
+using read_stats_result = std::tuple<std::string, unsigned, double, double>;
 
 class Work
 {
@@ -17,7 +22,7 @@ private:
     std::string_view m_outfile_path;
     std::ofstream m_outfile_stream;
     std::barrier<> m_bar;
-//    std::vector<read_stats_result> m_stats_result{};
+    //    std::vector<read_stats_result> m_stats_result{};
     std::vector<std::vector<read_stats_result>> m_sub_stats_result{};
 
 public:
@@ -27,25 +32,36 @@ public:
     Work(Work&& w) = delete;
     Work& operator=(const Work& w) = delete;
     Work& operator=(Work&& w) = delete;
-    [[nodiscard]] std::vector<std::pair<unsigned , unsigned >> get_bins(unsigned length) const;
+    [[nodiscard]] std::vector<std::pair<unsigned, unsigned>> get_bins(unsigned length) const;
     void run_stats();
-    void run_filter(const unsigned min_len, const unsigned max_len, const float min_quality, const float min_gc, const float max_gc);
-    void run_find(const std::string& input_reads, bool use_index, unsigned key_length=5);
-    void run_index(unsigned key_length);
+    void run_filter(unsigned min_len, unsigned max_len, float min_quality, float min_gc,
+                    float max_gc);
+    void run_find(const std::string& input_reads, bool use_index, unsigned key_length = 5);
+    void run_index(unsigned key_length) const;
+    void run_trim(const SequenceInfo& seq_info, const trim_direction&td, AlignmentConfig& alignment_config) const;
     ~Work();
+
 private:
-    void stats(const unsigned ,
-               const unsigned ,
+    void stats(unsigned,
+               unsigned,
                const shared_vec_reads&,
                std::vector<read_stats_result>& sub_stats_result);
-    void filter(const unsigned start,
-                const unsigned end,
-                const unsigned min_len,
-                const unsigned max_len,
-                const float min_quality,
-                const float min_gc,
-                const float max_gc,
+    void filter(unsigned start,
+                unsigned end,
+                unsigned min_len,
+                unsigned max_len,
+                float min_quality,
+                float min_gc,
+                float max_gc,
                 const shared_vec_reads& reads);
+
+    void trim(unsigned start,
+              unsigned end,
+              const shared_vec_reads& reads,
+              const SequenceInfo& seq_info,
+              const trim_direction& td,
+              AlignmentConfig& alignment_config
+              );
 };
 
 

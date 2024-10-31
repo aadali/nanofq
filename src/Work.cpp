@@ -6,9 +6,9 @@
 using std::cout;
 using std::endl;
 
-Work::Work(FastqReader &fq, const unsigned thread, const bool gc, std::string_view outfile_path) :
-        m_fq(fq), m_thread{thread}, m_gc(gc), m_outfile_path(outfile_path),
-        m_bar(static_cast<int>(m_thread)) {
+Work::Work(FastqReader& fq, unsigned thread, const bool gc, std::string_view outfile_path) :
+    m_fq(fq), m_thread{thread}, m_gc(gc), m_outfile_path(outfile_path),
+    m_bar(static_cast<int>(m_thread)) {
     m_sub_stats_result.reserve(m_thread);
     for (int i{0}; i < m_thread; i++) {
         m_sub_stats_result.emplace_back();
@@ -19,8 +19,8 @@ Work::Work(FastqReader &fq, const unsigned thread, const bool gc, std::string_vi
     }
 }
 
-std::vector<std::pair<unsigned , unsigned >> Work::get_bins(const unsigned length) const {
-    std::vector<std::pair<unsigned , unsigned >> idx_ranges;
+std::vector<std::pair<unsigned, unsigned>> Work::get_bins(unsigned length) const {
+    std::vector<std::pair<unsigned, unsigned>> idx_ranges;
     const unsigned step{length / m_thread};
     unsigned start{0}, stop{0};
     for (unsigned i{0}; i < length; i += step) {
@@ -53,21 +53,21 @@ void Work::run_stats() {
         }
         if (m_fq.read_finish() && m_fq.is_empty()) break;
     }
-    for (std::vector<read_stats_result> &item: m_sub_stats_result) {
-        for (read_stats_result &x: item) {
+    for (std::vector<read_stats_result>& item : m_sub_stats_result) {
+        for (read_stats_result& x : item) {
             auto line = fmt::format("{}\t{}\t{}\t{}\n", std::get<0>(x), std::get<1>(x), std::get<2>(x), std::get<3>(x));
             m_outfile_stream << line;
         }
     }
-//    cout << m_stats_result.size() << endl;
+    //    cout << m_stats_result.size() << endl;
 }
 
 
-void Work::run_filter(const unsigned min_len,
-                      const unsigned max_len,
-                      const float min_quality,
-                      const float min_gc,
-                      const float max_gc) {
+void Work::run_filter(unsigned min_len,
+                      unsigned max_len,
+                      float min_quality,
+                      float min_gc,
+                      float max_gc) {
     while (true) {
         if (std::optional<shared_vec_reads> reads = m_fq.get_reads(); reads.has_value()) {
             std::vector<std::jthread> threads;
@@ -94,14 +94,15 @@ void Work::run_find(const std::string& input_reads, bool use_index, unsigned key
     m_fq.find_reads(input_reads, m_outfile_stream, use_index, key_length);
 }
 
-void Work::run_index(unsigned key_length) {
+void Work::run_index(unsigned key_length) const {
     m_fq.index(key_length);
 }
 
-void Work::stats(const unsigned start,
-                 const unsigned end,
-                 const shared_vec_reads &reads,
-                 std::vector<read_stats_result> &sub_stats_result) {
+
+void Work::stats(unsigned start,
+                 unsigned end,
+                 const shared_vec_reads& reads,
+                 std::vector<read_stats_result>& sub_stats_result) {
     for (unsigned idx{start}; idx < end; idx++) {
         unsigned len{(*reads)[idx]->get_length()};
         float quality{(*reads)[idx]->calculate_read_quality()};
@@ -112,21 +113,21 @@ void Work::stats(const unsigned start,
 }
 
 
-void Work::filter(const unsigned start,
-                  const unsigned end,
-                  const unsigned min_len,
-                  const unsigned max_len,
-                  const float min_quality,
-                  const float min_gc,
-                  const float max_gc,
-                  const shared_vec_reads &reads) {
+void Work::filter(unsigned start,
+                  unsigned end,
+                  unsigned min_len,
+                  unsigned max_len,
+                  float min_quality,
+                  float min_gc,
+                  float max_gc,
+                  const shared_vec_reads& reads) {
     for (unsigned idx{start}; idx < end; idx++) {
         unsigned len{(*reads)[idx]->get_length()};
         float quality{(*reads)[idx]->calculate_read_quality()};
         if (m_gc) {
             if (float gc_content{(*reads)[idx]->get_gc_content()};
-                    len >= min_len && len <= max_len && quality > min_quality &&
-                    gc_content > min_gc && gc_content < max_gc) {
+                len >= min_len && len <= max_len && quality > min_quality &&
+                gc_content > min_gc && gc_content < max_gc) {
                 std::osyncstream{m_outfile_stream} << (*reads)[idx]->get_record();
             }
         } else {
@@ -142,3 +143,18 @@ Work::~Work() {
     if (m_outfile_stream.is_open()) m_outfile_stream.close();
 }
 
+void Work::run_trim(const SequenceInfo& seq_info, const trim_direction& td, AlignmentConfig& alignment_config) const {}
+
+void Work::trim(unsigned start, unsigned end, const shared_vec_reads& reads, const SequenceInfo& seq_info,
+                const trim_direction& td, AlignmentConfig& alignment_config) {
+    for (unsigned idx{start}; idx < endl; idx++) {
+        const std::string& sequence = (*reads)[idx]->get_sequence();
+        std::string_view sequence_view{sequence};
+        if (td.trim_bot5end) {
+            std::string_view target_top5end_view = sequence_view.substr(0, get<0>(seq_info.m_top5end));
+            AlignmentResult alignment_result;
+            utility::smith_waterman(target_top5end_view, seq_info.m_top5end_query, alignment_config, alignment_result);
+            // TODO filter alignment depend on seq_info
+        }
+    }
+}

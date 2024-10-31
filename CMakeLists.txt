@@ -11,6 +11,7 @@ add_executable(nanofq
         src/Work.h
         src/Work.cpp
         src/utility.h
+        src/utility.cpp
         src/kseq.h
         src/AlignmentConfig.h
         src/AlignmentConfig.cpp
