@@ -20,7 +20,7 @@ struct trim_direction {
     bool trim_bot3end{false};
 };
 
-struct utility {
+struct myUtility {
     static std::string rev_com(const std::string& seq);
 
     [[nodiscard]] static vector<string_view> split(string_view str, string_view delim);

@@ -1,8 +1,8 @@
 #include <algorithm>
 #include <ranges>
-#include "utility.h"
+#include "myUtility.h"
 
-std::string utility::rev_com(const std::string& seq) {
+std::string myUtility::rev_com(const std::string& seq) {
     std::string sequence{seq};
     std::ranges::transform(sequence,
                            std::begin(sequence),
@@ -27,7 +27,7 @@ std::string utility::rev_com(const std::string& seq) {
     return sequence;
 }
 
-[[nodiscard]] vector<string_view> utility::split(string_view str, string_view delim) {
+[[nodiscard]] vector<string_view> myUtility::split(string_view str, string_view delim) {
     vector<string_view> result;
     size_t pos = 0;
     while ((pos = str.find(delim)) != string::npos) {
@@ -39,7 +39,7 @@ std::string utility::rev_com(const std::string& seq) {
     return result;
 }
 
-string_view utility::get_read_name_prefix(string_view header, unsigned key_length) {
+string_view myUtility::get_read_name_prefix(string_view header, unsigned key_length) {
     size_t space_idx{header.find(' ')};
     if (space_idx == std::string::npos) {
         return header.size() < key_length + 1 ? header.substr(1) : header.substr(1, key_length);
@@ -48,7 +48,7 @@ string_view utility::get_read_name_prefix(string_view header, unsigned key_lengt
     }
 }
 
-void utility::smith_waterman(string_view target_seq, string_view query_seq, AlignmentConfig& config,
+void myUtility::smith_waterman(string_view target_seq, string_view query_seq, AlignmentConfig& config,
                              AlignmentResult& result) {
     if (!result.is_empty()) {
         throw std::runtime_error("AlignmentResult should be empty");
@@ -119,12 +119,12 @@ void utility::smith_waterman(string_view target_seq, string_view query_seq, Alig
             --row;
         }
     }
-    result.reverse_align();
+    // result.reverse_align();
     result.set_start_idx(row, col);
 }
 
 
-void utility::update_sequence_info(SequenceInfo& seq_info, int top5end_len, float top5end_percent,
+void myUtility::update_sequence_info(SequenceInfo& seq_info, int top5end_len, float top5end_percent,
                                    float top5end_identity, int top3end_len, float top3end_percent,
                                    float top3end_identity, int bot5end_len, float bot5end_percent,
                                    float bot5end_identity, int bot3end_len, float bot3end_percent,
@@ -180,7 +180,7 @@ void utility::update_sequence_info(SequenceInfo& seq_info, int top5end_len, floa
     }
 }
 
-trim_direction utility::how_trim(const SequenceInfo& seq_info) {
+trim_direction myUtility::how_trim(const SequenceInfo& seq_info) {
     trim_direction td;
     if (!seq_info.m_top5end_query.empty() && get<0>(seq_info.m_top5end) > 0) {
         td.trim_top5end = true;

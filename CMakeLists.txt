@@ -5,13 +5,14 @@ set(CMAKE_CXX_STANDARD 20)
 add_executable(nanofq
         main.cpp
         src/Read.h
+        src/Read.cpp
         src/Timer.h
         src/FastqReader.h
         src/FastqReader.cpp
         src/Work.h
         src/Work.cpp
-        src/utility.h
-        src/utility.cpp
+        src/myUtility.h
+        src/myUtility.cpp
         src/kseq.h
         src/AlignmentConfig.h
         src/AlignmentConfig.cpp

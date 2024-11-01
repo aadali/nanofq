@@ -3,6 +3,7 @@
 #include <fmt/core.h>
 
 std::string AlignmentResult::to_string() {
+    reverse_align();
     std::string align_str;
     align_str.append(fmt::format("target: {:<4} {} {:>4}\n",
                                  m_align_start_idx.second,
@@ -17,9 +18,9 @@ std::string AlignmentResult::to_string() {
 }
 
 void AlignmentResult::reverse_align() {
-    std::reverse(m_target_align_seq.begin(), m_target_align_seq.end());
-    std::reverse(m_line.begin(), m_line.end());
-    std::reverse(m_query_align_seq.begin(), m_query_align_seq.end());
+    std::ranges::reverse(m_target_align_seq);
+    std::ranges::reverse(m_line );
+    std::ranges::reverse(m_query_align_seq);
 }
 
 bool AlignmentResult::is_empty() const {

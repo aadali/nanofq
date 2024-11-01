@@ -86,7 +86,19 @@ void Work::run_filter(unsigned min_len,
                                      reads.value());
             }
         }
-        if (m_fq.read_finish()) break;
+        if (m_fq.read_finish() && m_fq.is_empty()) break;
+    }
+}
+
+void Work::run_trim(const SequenceInfo& seq_info,
+                    const trim_direction& td,
+                    AlignmentConfig& align_config,
+                    std::fstream& log_fstream) {
+    while (true) {
+        if (std::optional<shared_vec_reads> reads = m_fq.get_reads(); reads.has_value()) {
+            trim(0, reads.value()->size(), reads.value(), seq_info, td, align_config, log_fstream);
+        }
+        if (m_fq.read_finish() && m_fq.is_empty()) break;
     }
 }
 
@@ -143,18 +155,12 @@ Work::~Work() {
     if (m_outfile_stream.is_open()) m_outfile_stream.close();
 }
 
-void Work::run_trim(const SequenceInfo& seq_info, const trim_direction& td, AlignmentConfig& alignment_config) const {}
 
 void Work::trim(unsigned start, unsigned end, const shared_vec_reads& reads, const SequenceInfo& seq_info,
-                const trim_direction& td, AlignmentConfig& alignment_config) {
-    for (unsigned idx{start}; idx < endl; idx++) {
-        const std::string& sequence = (*reads)[idx]->get_sequence();
-        std::string_view sequence_view{sequence};
-        if (td.trim_bot5end) {
-            std::string_view target_top5end_view = sequence_view.substr(0, get<0>(seq_info.m_top5end));
-            AlignmentResult alignment_result;
-            utility::smith_waterman(target_top5end_view, seq_info.m_top5end_query, alignment_config, alignment_result);
-            // TODO filter alignment depend on seq_info
-        }
+                const trim_direction& td, AlignmentConfig& alignment_config, std::fstream& log_fstream) {
+    for (unsigned idx{start}; idx < end; idx++) {
+        (*reads)[idx]->trim(seq_info, td, alignment_config, log_fstream);
+        std::osyncstream{m_outfile_stream} << (*reads)[idx];
     }
+    // m_bar.arrive_and_wait();
 }

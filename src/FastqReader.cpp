@@ -9,7 +9,7 @@
 //#include <cereal/archives/binary.hpp>
 
 #include "FastqReader.h"
-#include "utility.h"
+#include "myUtility.h"
 #include "kseq.h"
 
 KSEQ_INIT(gzFile, gzread)
@@ -113,7 +113,7 @@ std::unordered_set<std::string> FastqReader::get_searching_read_names(const std:
             read_names.emplace(read_name);
         }
     } else {
-        std::vector<std::string_view> read_names_view{utility::split(input_reads, ",")};
+        std::vector<std::string_view> read_names_view{myUtility::split(input_reads, ",")};
         for (auto read_name: read_names_view) {
             read_names.emplace(read_name);
         }
@@ -139,7 +139,7 @@ void FastqReader::find_reads(const std::string &input_reads, std::ostream &out, 
         while (input_file_index.getline(index_line, 1024, '\n')) {
             if (strlen(index_line) < 4) break; // this is a simple judge
             std::vector<unsigned int> tab_pos;
-            auto this_read_index{utility::split(index_line, "\t")};
+            auto this_read_index{myUtility::split(index_line, "\t")};
             std::from_chars(this_read_index[1].data(), this_read_index[1].data() + this_read_index[1].size(), start);
             std::from_chars(this_read_index[2].data(), this_read_index[2].data() + this_read_index[2].size(), stop);
             reads_index.emplace(std::string{this_read_index[0]}, std::make_pair(start, stop));
@@ -244,7 +244,7 @@ void FastqReader::index_fastq(std::string_view output_file_path, unsigned key_le
     while (infile_text.getline(m_buffer, FASTQ_BUFFER_SIZE, '\n')) {
         switch (line_number) {
             case 1: {
-                string_view read_name_prefix{utility::get_read_name_prefix(m_buffer, key_len)};
+                string_view read_name_prefix{myUtility::get_read_name_prefix(m_buffer, key_len)};
                 id = read_name_prefix;
 //                if (!reads_index.contains(id)){
 //                    reads_index.insert(std::make_pair(id, std::vector<size_t>{}));

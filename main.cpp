@@ -5,8 +5,11 @@ using namespace std;
 
 int main()
 {
-    cout << "hello world" << endl;
-    auto a = barcode_info::get_trim_info();
-    SequenceInfo& seq_info  {a.find("SQK-LSK114")->second};
-    cout << "hello world" << endl;
+    // cout << "hello world" << endl;
+    // auto a = barcode_info::get_trim_info();
+    // SequenceInfo& seq_info  {a.find("SQK-LSK114")->second};
+    // cout << "hello world" << endl;
+    // string today{"today is a good day"};
+    // cout << "hello java" << endl;
+    test_trim();
 }

@@ -4,34 +4,34 @@
 #include <string>
 #include <unordered_map>
 #include <fmt/core.h>
-#include "utility.h"
+#include "myUtility.h"
 #include "SequenceInfo.h"
 
 // LSK114
-constexpr trim_end LSK_TOP5END{100, 0.75, 0.75};
-constexpr trim_end LSK_TOP3END{50, 0.75, 0.75};
+constexpr trim_end LSK_TOP5END{100, 0.75, 0.75}; // 28
+constexpr trim_end LSK_TOP3END{50, 0.5, 0.75}; // 28
 
 // NBD114
-constexpr trim_end NBD_TOP5END{150, 0.5, 0.75};
-constexpr trim_end NBD_TOP3END{100, 0.4, 0.75};
+constexpr trim_end NBD_TOP5END{150, 0.5, 0.75}; // 68
+constexpr trim_end NBD_TOP3END{120, 0.4, 0.75}; // 68
 
 // RAD114
-constexpr trim_end RAD_TOP5END{150, 0.5, 0.75};
+constexpr trim_end RAD_TOP5END{150, 0.5, 0.75}; // 66
 
 // RBK114
-constexpr trim_end RBK_TOP5END{200, 0.4, 0.75};
+constexpr trim_end RBK_TOP5END{200, 0.4, 0.75}; // 90
 
 // PCS114 TOP
-constexpr trim_end PCS_TOP5END{150, 0.6, 0.75};
-constexpr trim_end PCS_TOP3END{150, 0.4, 0.75};
-constexpr trim_end PCS_BOT5END{PCS_TOP3END};
-constexpr trim_end PCS_BOT3END{PCS_TOP5END};
+constexpr trim_end PCS_TOP5END{150, 0.6, 0.75}; // 53
+constexpr trim_end PCS_TOP3END{150, 0.4, 0.75}; // 45
+constexpr trim_end PCS_BOT5END{150, 0.6, 0.75}; // 45
+constexpr trim_end PCS_BOT3END{150, 0.4, 0.75}; // 53
 
 // PCB114 TOP
-constexpr trim_end PCB_TOP5END{180, 0.5, 0.75};
-constexpr trim_end PCB_TOP3END{180, 0.4, 0.75};
-constexpr trim_end PCB_BOT5END{PCB_TOP3END};
-constexpr trim_end PCB_BOT3END{PCB_TOP5END};
+constexpr trim_end PCB_TOP5END{180, 0.5, 0.75}; // 77
+constexpr trim_end PCB_TOP3END{180, 0.4, 0.75}; // 70
+constexpr trim_end PCB_BOT5END{180, 0.5, 0.75}; // 70
+constexpr trim_end PCB_BOT3END{180, 0.4, 0.75}; // 77
 
 // https://nanoporetech.com/document/chemistry-technical-document#adapter-sequences
 namespace barcode_info
@@ -92,7 +92,7 @@ namespace barcode_info
      * SQK-PCS114 structure
      *      |SSPII                                                | insert Seq with polyA  | CRTA
      * 5-...TTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG .........AAAAAAAAAAAAAAA CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAG...-3
-     * 3-...CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAA .........TTTTTTTTTTTTTTT CTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG...-5
+     * 3-...CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAA .........TTTTTTTTTTTTTTT GAACGCCCGCCGCCTGAGAGGAGACTTCTATCTCGCTGTCCGTTC...-5
      *
      *
      * SQK-PCB114.24 structure
@@ -352,7 +352,7 @@ namespace barcode_info
                 std::string pcb24_name{fmt::format("SQK-PCB114.24-{}", i + 1)};
                 trim_info.try_emplace(nbd24_name,
                                       nbd24_name,
-                                      NA_ADAPTER_5 + NB_LEFT_FLANKING_5 + utility::rev_com(NB_VEC[i]) +
+                                      NA_ADAPTER_5 + NB_LEFT_FLANKING_5 + myUtility::rev_com(NB_VEC[i]) +
                                       NB_RIGHT_FLANKING_5,
                                       NBD_TOP5END,
                                       NB_LEFT_FLANKING_3 + NB_VEC[i] + NB_RIGHT_FLANKING_3 + NA_ADAPTER_3,
@@ -365,10 +365,10 @@ namespace barcode_info
                 );
                 trim_info.try_emplace(pcb24_name,
                                       pcb24_name,
-                                      RB_VEC[i] + SSPII, PCB_TOP5END, CRTA + utility::rev_com(RB_VEC[i]),
+                                      RB_VEC[i] + SSPII, PCB_TOP5END, CRTA + myUtility::rev_com(RB_VEC[i]),
                                       PCB_TOP3END,
                                       RB_VEC[i] + CRTA_REV_COM, PCB_BOT5END,
-                                      SSPII_REV_COM + utility::rev_com(RB_VEC[i]),
+                                      SSPII_REV_COM + myUtility::rev_com(RB_VEC[i]),
                                       PCB_BOT3END
                 );
             }
@@ -376,7 +376,7 @@ namespace barcode_info
             std::string rbk96_name{fmt::format("SQK-RBK114.96-{}", i + 1)};
             trim_info.try_emplace(nbd96_name,
                                   nbd96_name,
-                                  NA_ADAPTER_5 + NB_LEFT_FLANKING_5 + utility::rev_com(NB_VEC[i]) +
+                                  NA_ADAPTER_5 + NB_LEFT_FLANKING_5 + myUtility::rev_com(NB_VEC[i]) +
                                   NB_RIGHT_FLANKING_5,
                                   NBD_TOP5END,
                                   NB_LEFT_FLANKING_3 + NB_VEC[i] + NB_RIGHT_FLANKING_3 +
