@@ -49,7 +49,7 @@ string_view myUtility::get_read_name_prefix(string_view header, unsigned key_len
 }
 
 void myUtility::smith_waterman(string_view target_seq, string_view query_seq, AlignmentConfig& config,
-                             AlignmentResult& result) {
+                               AlignmentResult& result) {
     if (!result.is_empty()) {
         throw std::runtime_error("AlignmentResult should be empty");
     }
@@ -63,7 +63,16 @@ void myUtility::smith_waterman(string_view target_seq, string_view query_seq, Al
     for (int row{1}; row < query_seq.size(); row++) {
         for (int col{1}; col < target_seq.size(); col++) {
             /* calculate score from diagonal */
-            int score{target_seq[col - 1] == query_seq[row - 1] ? config.m_match : config.m_mismatch};
+            // int score{target_seq[col - 1] == query_seq[row - 1] ? config.m_match : config.m_mismatch};
+            int score{
+                target_seq[col - 1] == query_seq[row - 1] ||
+                (query_seq[row - 1] == 'V' && (target_seq[col - 1] == 'G' || target_seq[col- 1] == 'A' || target_seq[col
+                    - 1] == 'C')) ||
+                (query_seq[row - 1] == 'B' && (target_seq[col - 1] == 'G' || target_seq[col - 1] == 'T' || target_seq[col
+                    - 1] == 'C'))
+                    ? config.m_match
+                    : config.m_mismatch
+            };
             diagonal_score = config.get_score(row - 1, col - 1) + score;
 
             /* calculate score from left
@@ -119,16 +128,16 @@ void myUtility::smith_waterman(string_view target_seq, string_view query_seq, Al
             --row;
         }
     }
-    // result.reverse_align();
+    result.reverse_align();
     result.set_start_idx(row, col);
 }
 
 
 void myUtility::update_sequence_info(SequenceInfo& seq_info, int top5end_len, float top5end_percent,
-                                   float top5end_identity, int top3end_len, float top3end_percent,
-                                   float top3end_identity, int bot5end_len, float bot5end_percent,
-                                   float bot5end_identity, int bot3end_len, float bot3end_percent,
-                                   float bot3end_identity) {
+                                     float top5end_identity, int top3end_len, float top3end_percent,
+                                     float top3end_identity, int bot5end_len, float bot5end_percent,
+                                     float bot5end_identity, int bot3end_len, float bot3end_percent,
+                                     float bot3end_identity) {
     /*
      * parameter: *len, *percent, *identity should be checked at the stage of parsing argument from CLI
      * all of them couldn't be negative

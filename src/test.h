@@ -65,18 +65,23 @@ void test_smith_waterman() {
     AlignmentConfig config{3, -3, -10, -1};
     AlignmentResult result{};
     myUtility::smith_waterman(target, query, config, result);
-    cout << result.to_string() << endl;
+    // cout << result.to_string() << endl;
 }
 
 void test_trim(){
     Timer timer{"test Trim"};
     auto trim_info = barcode_info::get_trim_info();
-    FastqReader fq{"/home/a/big/ycq/projects/CppProjects/nanofq/test_data/nbd114.24/barcode01.fastq", 1000};
-    SequenceInfo& sequence_info {trim_info.find("SQK-NBD114.24-1")->second};
+    // FastqReader fq{"/home/a/big/ycq/projects/CppProjects/nanofq/test_data/nbd114.24/barcode01.fastq", 1000};
+    FastqReader fq{"/home/a/big/ycq/projects/CppProjects/nanofq/test_data/pcb114.24/SRR30594249.fastq.gz", 5000};
+    // FastqReader fq{"/home/a/big/ycq/projects/CppProjects/nanofq/test_data/pcb114.24/bug.fastq", 5000};
+    // SequenceInfo& sequence_info {trim_info.find("SQK-NBD114.24-1")->second};
+    SequenceInfo& sequence_info{trim_info.find("SQK-PCB114.24-1")->second};
+
     trim_direction td {myUtility::how_trim(sequence_info)};
     AlignmentConfig align_config{3, -3, -12, -1};
     Work work{fq, 1, false, "../test_data/test_output/test_trim.fastq"};
     std::fstream outfile {"../test_data/test_output/trim.log", std::ios::out};
+    outfile << sequence_info.seq_info() << '\n';
     thread t1{&FastqReader::read_chunk_fastq, &fq};
     thread t2{&Work::run_trim, &work, std::ref(sequence_info), std::ref(td), std::ref(align_config), std::ref(outfile)};
     t1.join();

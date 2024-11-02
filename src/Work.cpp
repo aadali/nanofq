@@ -160,7 +160,7 @@ void Work::trim(unsigned start, unsigned end, const shared_vec_reads& reads, con
                 const trim_direction& td, AlignmentConfig& alignment_config, std::fstream& log_fstream) {
     for (unsigned idx{start}; idx < end; idx++) {
         (*reads)[idx]->trim(seq_info, td, alignment_config, log_fstream);
-        std::osyncstream{m_outfile_stream} << (*reads)[idx];
+        std::osyncstream{m_outfile_stream} << *(*reads)[idx];
     }
     // m_bar.arrive_and_wait();
 }

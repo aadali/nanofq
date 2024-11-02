@@ -11,9 +11,10 @@ private:
     std::pair<size_t, size_t> m_align_stop_idx; // <query_align_stop_idx, target_align_stop_idx>
     std::pair<size_t, size_t> m_align_start_idx; // <query_align_start_idx, target_align_start_idx>;
     int m_max_score{0};
+    bool m_left{false};
 
 public:
-    AlignmentResult() {};
+    explicit AlignmentResult(bool is_left = false) { m_left = is_left; };
 
     AlignmentResult(AlignmentResult&&) = delete;
 
@@ -45,21 +46,31 @@ public:
 
     inline void set_max_score(int mMaxScore) { m_max_score = mMaxScore; }
 
+    inline void to_empty() {
+        m_target_align_seq.clear();
+        m_line.clear();
+        m_query_align_seq.clear();
+        m_align_stop_idx = {0,0};
+        m_align_start_idx = {0, 0};
+        m_max_score = 0;
+    }
+
     bool is_empty() const;
 
-    std::string to_string();
+    std::string to_string(size_t target_3end_len);
 
     inline float get_identity() const {
-        return std::count(m_line.cbegin(), m_line.cend(), '|') / m_line.size();
+        return static_cast<float>(std::count(m_line.cbegin(), m_line.cend(), '|')) / static_cast<float>(m_line.size());
     }
 
     inline float get_percent(std::string_view query) const {
-        return std::count_if(m_line.cbegin(), m_line.cend(),
-                             [](const char& c){ return c != '-'; }
-        );
+        return static_cast<float>(std::count_if(m_query_align_seq.cbegin(),
+                                                m_query_align_seq.cend(),
+                                                [](const char& c){ return c != '-'; })
+            ) /
+            static_cast<float>(query.size());
     }
 
-private:
     void reverse_align();
 };
 

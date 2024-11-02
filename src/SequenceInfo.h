@@ -82,6 +82,9 @@ public:
 
     const std::string m_bot3end_query{};
     trim_end m_bot3end;
+
+public:
+    std::string seq_info();
 };
 
 

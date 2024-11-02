@@ -9,11 +9,11 @@
 
 // LSK114
 constexpr trim_end LSK_TOP5END{100, 0.75, 0.75}; // 28
-constexpr trim_end LSK_TOP3END{50, 0.5, 0.75}; // 28
+constexpr trim_end LSK_TOP3END{60, 0.5, 0.75}; // 28
 
 // NBD114
-constexpr trim_end NBD_TOP5END{150, 0.5, 0.75}; // 68
-constexpr trim_end NBD_TOP3END{120, 0.4, 0.75}; // 68
+constexpr trim_end NBD_TOP5END{150, 0.4, 0.75}; // 68
+constexpr trim_end NBD_TOP3END{150, 0.3, 0.75}; // 68
 
 // RAD114
 constexpr trim_end RAD_TOP5END{150, 0.5, 0.75}; // 66
@@ -28,10 +28,14 @@ constexpr trim_end PCS_BOT5END{150, 0.6, 0.75}; // 45
 constexpr trim_end PCS_BOT3END{150, 0.4, 0.75}; // 53
 
 // PCB114 TOP
-constexpr trim_end PCB_TOP5END{180, 0.5, 0.75}; // 77
-constexpr trim_end PCB_TOP3END{180, 0.4, 0.75}; // 70
-constexpr trim_end PCB_BOT5END{180, 0.5, 0.75}; // 70
-constexpr trim_end PCB_BOT3END{180, 0.4, 0.75}; // 77
+// constexpr trim_end PCB_TOP5END{180, 0.5, 0.75}; // 77
+// constexpr trim_end PCB_TOP3END{180, 0.4, 0.75}; // 70
+// constexpr trim_end PCB_BOT5END{180, 0.5, 0.75}; // 70
+// constexpr trim_end PCB_BOT3END{180, 0.4, 0.75}; // 77
+constexpr trim_end PCB_TOP5END{180, 0.3, 0.75}; // 77
+constexpr trim_end PCB_TOP3END{180, 0.3, 0.75}; // 70
+constexpr trim_end PCB_BOT5END{180, 0.3, 0.75}; // 70
+constexpr trim_end PCB_BOT3END{180, 0.3, 0.75}; // 77
 
 // https://nanoporetech.com/document/chemistry-technical-document#adapter-sequences
 namespace barcode_info

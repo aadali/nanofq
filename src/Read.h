@@ -67,7 +67,18 @@ public:
                                  float max_gc) const;
 
     [[nodiscard]] std::string get_record() const;
-    Read& trim(const SequenceInfo&seq_info, const trim_direction& td, AlignmentConfig& align_config, std::ostream& log) ;
+    void trim(const SequenceInfo& seq_info, const trim_direction& td, AlignmentConfig& align_config,
+               std::ostream& log);
+
+private:
+    size_t trim_positive_strand_left(std::string_view top5end_query, const trim_end& top5end, AlignmentConfig& align_config,
+                           AlignmentResult& align_5end_result) const;
+    size_t trim_positive_strand_right(std::string_view& left_trimmed_seq_view, std::string_view top3end_query, const trim_end& top3end, AlignmentConfig& align_config,
+                            AlignmentResult& align_3end_result) const;
+    size_t trim_negative_strand_left(std::string_view bot5end_query, const trim_end& bot5end, AlignmentConfig& align_config,
+                           AlignmentResult& align_5end_result) const;
+    size_t trim_negative_strand_right(std::string_view& left_trimmed_seq_view, std::string_view bot3end_query, const trim_end& bot3end, AlignmentConfig& align_config,
+                            AlignmentResult& align_3end_result) const;
 };
 
 inline std::ostream& operator<<(std::ostream& c, const Read& read) {
