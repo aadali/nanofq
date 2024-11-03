@@ -14,10 +14,11 @@
 using shared_vec_reads = std::shared_ptr<std::vector<std::shared_ptr<Read>>>;
 using shared_read = std::shared_ptr<Read>;
 
-class FastqReader {
+class FastqReader
+{
 private:
     bool m_finish{false};
-//    std::fstream m_infile_text{};
+    //    std::fstream m_infile_text{};
     gzFile m_infile_gz{nullptr};
     shared_vec_reads m_reads{};
     std::string_view m_input_file;
@@ -45,17 +46,16 @@ public:
 
     inline bool read_finish() const { return m_finish; };
 
-    inline bool is_empty() const {return m_reads->empty();}
+    inline bool is_empty() const { return m_reads->empty(); }
 
     std::optional<shared_vec_reads> get_reads();
-    void find_reads(const std::string &input_reads, std::ostream &out, bool use_index, unsigned key_length=5);
+    void find_reads(const std::string &input_reads, std::ostream &out, bool use_index, unsigned key_length = 5);
     void index(unsigned key_len);
 
 private:
-    static std::unordered_set<std::string> get_searching_read_names(const std::string& input_reads) ;
+    static std::unordered_set<std::string> get_searching_read_names(const std::string &input_reads);
     void index_fastq(std::string_view output_file_path, unsigned key_len);
     void index_fastq_gz(std::string_view output_file_path, unsigned key_len);
 };
 
-
-#endif //FASTQREADER_H
+#endif // FASTQREADER_H

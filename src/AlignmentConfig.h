@@ -22,7 +22,7 @@ public:
 
     AlignmentConfig(AlignmentConfig &&) = delete;
 
-    AlignmentConfig(const AlignmentConfig &) = delete;
+    AlignmentConfig(const AlignmentConfig &) = default;
 
     AlignmentConfig &operator=(AlignmentConfig &&) = delete;
 

@@ -92,11 +92,24 @@ void Work::run_filter(unsigned min_len,
 
 void Work::run_trim(const SequenceInfo& seq_info,
                     const trim_direction& td,
-                    AlignmentConfig& align_config,
+                    std::vector<AlignmentConfig>& align_configs,
                     std::fstream& log_fstream) {
     while (true) {
         if (std::optional<shared_vec_reads> reads = m_fq.get_reads(); reads.has_value()) {
-            trim(0, reads.value()->size(), reads.value(), seq_info, td, align_config, log_fstream);
+            std::vector<std::jthread> threads;
+            threads.reserve(m_thread);
+            auto bins{get_bins(reads.value()->size())};
+            for (int i{0}; i< m_thread; i++){
+                threads.emplace_back(&Work::trim,
+                this,
+                bins[i].first,
+                bins[i].second,
+                reads.value() ,
+                std::ref(seq_info),
+                std::ref(td),
+                std::ref(align_configs[i]), std::ref(log_fstream));
+            }
+            // trim(0, reads.value()->size(), reads.value(), seq_info, td, align_config, log_fstream);
         }
         if (m_fq.read_finish() && m_fq.is_empty()) break;
     }
@@ -162,5 +175,5 @@ void Work::trim(unsigned start, unsigned end, const shared_vec_reads& reads, con
         (*reads)[idx]->trim(seq_info, td, alignment_config, log_fstream);
         std::osyncstream{m_outfile_stream} << *(*reads)[idx];
     }
-    // m_bar.arrive_and_wait();
+    m_bar.arrive_and_wait();
 }

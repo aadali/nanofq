@@ -1,6 +1,10 @@
 #include <algorithm>
 #include <ranges>
+#include <regex>
+#include <sstream>
+#include <filesystem>
 #include "myUtility.h"
+#include "Adapter.h"
 
 std::string myUtility::rev_com(const std::string& seq) {
     std::string sequence{seq};
@@ -39,6 +43,30 @@ std::string myUtility::rev_com(const std::string& seq) {
     return result;
 }
 
+template <typename... Args>
+std::string myUtility::join(const std::string& separator, Args... args) {
+    std::ostringstream oss;
+    ((oss << args << separator), ...);
+    std::string result = oss.str();
+    if (!result.empty()) {
+        result.erase(result.size() - separator.size());
+    }
+    return result;
+}
+
+template <typename T>
+std::string myUtility::join(const std::string& separator, const std::vector<T>& v) {
+    std::stringstream oss;
+    for (int i{0}; i < v.size(); i++) {
+        if (i == v.size() - 1) {
+            oss << v[i];
+        } else {
+            oss << v[i] << separator;
+        }
+    }
+    return oss.str();
+}
+
 string_view myUtility::get_read_name_prefix(string_view header, unsigned key_length) {
     size_t space_idx{header.find(' ')};
     if (space_idx == std::string::npos) {
@@ -66,9 +94,11 @@ void myUtility::smith_waterman(string_view target_seq, string_view query_seq, Al
             // int score{target_seq[col - 1] == query_seq[row - 1] ? config.m_match : config.m_mismatch};
             int score{
                 target_seq[col - 1] == query_seq[row - 1] ||
-                (query_seq[row - 1] == 'V' && (target_seq[col - 1] == 'G' || target_seq[col- 1] == 'A' || target_seq[col
+                (query_seq[row - 1] == 'V' && (target_seq[col - 1] == 'G' || target_seq[col - 1] == 'A' || target_seq[
+                    col
                     - 1] == 'C')) ||
-                (query_seq[row - 1] == 'B' && (target_seq[col - 1] == 'G' || target_seq[col - 1] == 'T' || target_seq[col
+                (query_seq[row - 1] == 'B' && (target_seq[col - 1] == 'G' || target_seq[col - 1] == 'T' || target_seq[
+                    col
                     - 1] == 'C'))
                     ? config.m_match
                     : config.m_mismatch
@@ -204,4 +234,66 @@ trim_direction myUtility::how_trim(const SequenceInfo& seq_info) {
         td.trim_bot3end = true;
     }
     return td;
+}
+
+std::string myUtility::get_all_seq_info() {
+    std::stringstream info;
+    std::unordered_map<std::string, SequenceInfo> all_trim_info = barcode_info::get_trim_info();
+    for (std::string kit : std::vector{"SQK-LSK114", "SQK-ULK114", "SQK-RAD114", "SQK-PCS114"}) {
+        SequenceInfo& seq_info{all_trim_info.at(kit)};
+        info << seq_info.seq_info() << '\n';
+    }
+    for (std::string kit : std::vector{"SQK-NBD114.24", "SQK-RBK114.24", "SQK-PCB114.24"}) {
+        for (int i{0}; i < 24; i++) {
+            info << all_trim_info.at(fmt::format("{}-{}", kit, i + 1)).seq_info() << '\n';
+        }
+    }
+
+    for (std::string kit : std::vector{"SQK-NBD114.96", "SQK-RBK114.96"}) {
+        for (int i{0}; i < 24; i++) {
+            info << all_trim_info.at(fmt::format("{}-{}", kit, i + 1)).seq_info() << '\n';
+        }
+    }
+    return info.str();
+}
+
+std::string myUtility::check_file(const std::string& parameter, const std::string& file, bool need_directory) {
+    std::filesystem::path fp{file};
+    if (!exists(fp)) {
+        std::cerr << fmt::format("Error parameter: {}. No such file or directory for {}", parameter, file) << std::endl;
+        exit(1);
+    }
+    if (need_directory && !is_directory(fp)) {
+        std::cerr << fmt::format("{} is file. Directory needed", file) << std::endl;
+        exit(1);
+    }
+    return file;
+}
+
+template <typename T>
+T myUtility::check_number(const std::string& parameter, const std::string& number, T min, T max) {
+    std::regex pat{R"([-+]?\d*\.?\d+)"};
+    if (bool mat{std::regex_match(number, pat)}; mat) {
+        T n{static_cast<T>(stof(number))};
+        if (n < min || n > max) {
+            std::cerr << fmt::format("Error parameter: {}. The range should be ({}, {})", parameter, min, max);
+            exit(1);
+        }
+        return n;
+    }
+    std::cerr << fmt::format("Error parameter: {}. this parameter should be number") << endl;
+    exit(1);
+}
+
+std::string myUtility::check_one_candidate(const std::string& parameter,
+                                           const std::string& candidate,
+                                           const std::vector<std::string>& right_candidate) {
+    for (const std::string& item : right_candidate) {
+        if (item == candidate) {
+            return candidate;
+        }
+    }
+    std::cerr << fmt::format("Error parameter: {}. {} is illegal, allowed options are [{}]", parameter, candidate,
+                             join<std::string>(", ", right_candidate)) << std::endl;
+    exit(1);
 }

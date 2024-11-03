@@ -38,7 +38,7 @@ public:
                     float max_gc);
     void run_find(const std::string& input_reads, bool use_index, unsigned key_length = 5);
     void run_index(unsigned key_length) const;
-    void run_trim(const SequenceInfo& seq_info, const trim_direction&td, AlignmentConfig& alignment_config, std::fstream& log_fstream) ;
+    void run_trim(const SequenceInfo& seq_info, const trim_direction&td, std::vector<AlignmentConfig>& align_configs, std::fstream& log_fstream) ;
     ~Work();
 
 private:

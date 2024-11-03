@@ -72,18 +72,27 @@ void test_trim(){
     Timer timer{"test Trim"};
     auto trim_info = barcode_info::get_trim_info();
     // FastqReader fq{"/home/a/big/ycq/projects/CppProjects/nanofq/test_data/nbd114.24/barcode01.fastq", 1000};
-    FastqReader fq{"/home/a/big/ycq/projects/CppProjects/nanofq/test_data/pcb114.24/SRR30594249.fastq.gz", 5000};
+    FastqReader fq{"/home/a/big/ycq/projects/CppProjects/nanofq/test_data/pcb114.24/SRR30594249.fastq.gz", 20000};
     // FastqReader fq{"/home/a/big/ycq/projects/CppProjects/nanofq/test_data/pcb114.24/bug.fastq", 5000};
     // SequenceInfo& sequence_info {trim_info.find("SQK-NBD114.24-1")->second};
     SequenceInfo& sequence_info{trim_info.find("SQK-PCB114.24-1")->second};
 
     trim_direction td {myUtility::how_trim(sequence_info)};
     AlignmentConfig align_config{3, -3, -12, -1};
-    Work work{fq, 1, false, "../test_data/test_output/test_trim.fastq"};
+    std::vector<AlignmentConfig> align_configs;
+    for (int i{0}; i<8; i++){
+        align_configs.push_back(align_config);
+    }
+    Work work{fq, 8, false, "../test_data/test_output/test_trim.fastq"};
     std::fstream outfile {"../test_data/test_output/trim.log", std::ios::out};
     outfile << sequence_info.seq_info() << '\n';
     thread t1{&FastqReader::read_chunk_fastq, &fq};
-    thread t2{&Work::run_trim, &work, std::ref(sequence_info), std::ref(td), std::ref(align_config), std::ref(outfile)};
+    thread t2{&Work::run_trim, &work, std::ref(sequence_info), std::ref(td), std::ref(align_configs), std::ref(outfile)};
     t1.join();
     t2.join();
+}
+
+void test_all_seq_info(){
+    cout << myUtility::get_all_seq_info() << endl;
+    myUtility::check_one_candidate("format", "pdf", std::vector<std::string>{"jpg", "mp3", "fastq", "bam"});
 }
