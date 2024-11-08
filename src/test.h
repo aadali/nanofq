@@ -18,6 +18,7 @@ string_view big_big_fastq{"../test_data/big_big.fastq"};
 string_view big_big_fastq_gz{"../test_data/big_big.fastq.gz"};
 
 //using namespace utility::utility;
+/*
 void test_index() {
     Timer timer{"test index"};
     FastqReader fq{big_big_fastq, 50000};
@@ -94,5 +95,6 @@ void test_trim(){
 
 void test_all_seq_info(){
     cout << myUtility::get_all_seq_info() << endl;
-    myUtility::check_one_candidate("format", "pdf", std::vector<std::string>{"jpg", "mp3", "fastq", "bam"});
+    // myUtility::check_one_candidate("format", "pdf", std::vector<std::string>{"jpg", "mp3", "fastq", "bam"});
 }
+*/

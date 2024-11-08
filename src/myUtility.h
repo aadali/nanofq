@@ -2,6 +2,7 @@
 #define NANOFQ_UTILITY_H
 
 #include <string>
+#include <sstream>
 #include <string_view>
 #include <vector>
 #include <iostream>
@@ -13,6 +14,10 @@
 #define DEFAULT_INT std::numeric_limits<int>::max()
 #define DEFAULT_FLOAT 3.14f
 using namespace std;
+
+const std::string REDS = "\033[1;31m";
+const std::string COLOR_END =  "\033[0m";
+const std::string WARNS = "\033[1;33m";
 
 struct trim_direction {
     bool trim_top5end{false};
@@ -26,11 +31,18 @@ struct myUtility {
 
     [[nodiscard]] static vector<string_view> split(string_view str, string_view delim);
 
-    template <typename... Args>
-    static std::string join(const std::string& separator, Args... args);
-
     template <typename T>
-    static std::string join(const std::string& separator, const std::vector<T>& v);
+    static std::string join(const std::string& separator, const std::vector<T>& list){
+        std::stringstream oos;
+        for (int i {0}; i<list.size(); i++){
+            if (i == list.size()-1){
+                oos << list[i];
+            } else {
+                oos << list[i] << separator;
+            }
+        }
+        return oos.str();
+    };
 
     static string_view get_read_name_prefix(string_view header, unsigned key_length);
 

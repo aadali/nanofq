@@ -29,14 +29,23 @@ int sub_main(int argc, char* argv[]) {
         check_number_in_range("--chunk", chunk, MINC, MAXC, stats, true);
         bool gc{stats.get<bool>("--gc")};
         std::vector<std::string> format{stats.get<std::vector<std::string>>("--format")};
-        std::vector<std::string> allowed_choices {"pdf", "jpg", "png"};
+        std::vector<std::string> allowed_choices{"pdf", "jpg", "png"};
         check_choices<std::string>("--format", format, allowed_choices, stats);
         FastqReader fq{"input", static_cast<unsigned>(chunk)};
-        Work work{fq, static_cast<unsigned>(threads), gc, output};
+        std::ofstream out;
+        if (output != "-") {
+            out.open(output.data(), std::ios::out);
+            if (!out) {
+                std::cerr << REDS + "Failed when opened " + output << COLOR_END << std::endl;
+                exit(1);
+            }
+        }
+        Work work{fq, static_cast<unsigned>(threads), gc, output == "-" ? std::cout : out};
         std::thread t1{&FastqReader::read_chunk_fastq, &fq};
         std::thread t2{&Work::run_stats, &work};
         t1.join();
         t2.join();
+        if (out.is_open()) { out.close(); }
     } else if (nanofq.is_subcommand_used("filter")) {
         argparse::ArgumentParser& filter{nanofq.at<argparse::ArgumentParser>("filter")};
         std::string input{filter.get("--input")};
@@ -57,11 +66,20 @@ int sub_main(int argc, char* argv[]) {
         int chunk{filter.get<int>("--chunk")};
         check_number_in_range("--chunk", chunk, MINC, MAXC, filter, true);
         FastqReader fq{input, static_cast<unsigned>(chunk)};
-        Work work{fq, static_cast<unsigned>(threads), gc, output};
+        std::ofstream out;
+        if (output == "-") {
+            out = std::ofstream{output.data(), std::ios::out};
+            if (!out) {
+                std::cerr << REDS + "Failed when opened " + output << COLOR_END << std::endl;
+                exit(1);
+            }
+        }
+        Work work{fq, static_cast<unsigned>(threads), gc, output == "-" ? std::cout : out};
         std::thread t1{&FastqReader::read_chunk_fastq, &fq};
         std::thread t2{&Work::run_filter, &work, min_length, max_length, min_quality, min_gc, max_gc};
         t1.join();
         t2.join();
+        if (out.is_open()) out.close();
     } else if (nanofq.is_subcommand_used("index")) {
         argparse::ArgumentParser& index{nanofq.at<argparse::ArgumentParser>("index")};
         std::string input{index.get("--input")};
@@ -79,15 +97,24 @@ int sub_main(int argc, char* argv[]) {
         int key_len;
         if (!use_index) {
             if (find.is_used("--key_len")) {
-                cerr << "if --use_index is not set, ignore --key_len" << endl;
+                cerr << WARNS + "if --use_index is not set, ignore --key_len" + COLOR_END << endl;
             }
         } else {
             key_len = find.get<int>("--key_len");
             check_number_in_range("--key_len", key_len, 8, 100, find, true);
         }
         FastqReader fq{input, 5000};
-        Work work{fq, 1, true, output};
+        std::ofstream out;
+        if (output != "-") {
+            out.open(output, std::ios::out);
+            if (!out) {
+                std::cerr << REDS + "Failed when opened " + output << COLOR_END << std::endl;
+                exit(1);
+            }
+        }
+        Work work{fq, 1, true, output == "-" ? std::cout : out};
         work.run_find(reads, use_index, key_len);
+        if (out.is_open()) out.close();
     } else if (nanofq.is_subcommand_used("trim")) {
         argparse::ArgumentParser& trim{nanofq.at<argparse::ArgumentParser>("trim")};
         std::string input{trim.get("--input")};
@@ -95,20 +122,28 @@ int sub_main(int argc, char* argv[]) {
         std::string log{trim.get("--log")};
         auto threads{trim.get<int>("--threads")};
         check_number_in_range("--threads", threads, MINT, MAXT, trim, true);
-        cout << "threads: " << threads << endl;
         auto chunk{trim.get<int>("--chunk")};
         check_number_in_range("--chunk", chunk, MINC, MAXC, trim, true);
-        cout << "chunk: " << chunk << endl;
         std::string kit;
         std::string forward;
         std::string reversed;
+        int barcode;
         if (trim.is_used("--kit")) {
             kit = trim.get("--kit");
+            if (kit.ends_with(".24") || kit.ends_with(".96")) {
+                if (!trim.is_used("--barcode")) {
+                    cerr << REDS + "If kit with barcodes used, --barcode must be set" + COLOR_END << endl;
+                    cerr << trim << endl;
+                    exit(1);
+                }
+            }
             if (trim.is_used("--barcode")) {
-                int barcode{trim.get<int>("--barcode")};
+                barcode = trim.get<int>("--barcode");
                 if (kit.ends_with(".24")) {
                     if (barcode < MINB || barcode > MAX24B) {
-                        cerr << "If kit with 24 barcodes used, --barcode should be a integer and  in range (1, 24)" <<
+                        cerr << REDS +
+                            "If kit with 24 barcodes used, --barcode should be a integer and  in range (1, 24)" +
+                            COLOR_END <<
                             endl;
                         cerr << trim << endl;
                         exit(1);
@@ -116,14 +151,16 @@ int sub_main(int argc, char* argv[]) {
                     kit = fmt::format("{}-{}", kit, barcode);
                 } else if (kit.ends_with(".96")) {
                     if (barcode < MINB || barcode > MAX96B) {
-                        cerr << "If kit with 96 barcodes used, --barcode should be a integer and  in range (1, 96)" <<
+                        cerr << REDS +
+                            "If kit with 96 barcodes used, --barcode should be a integer and  in range (1, 96)" +
+                            COLOR_END <<
                             endl;
                         cerr << trim << endl;
                         exit(1);
                     }
                     kit = fmt::format("{}-{}", kit, barcode);
                 } else {
-                    cerr << "If kit with no barcode used, ignore --barcode" << endl;
+                    cerr << WARNS + "If kit with no barcode used, ignore --barcode" + COLOR_END << endl;
                 }
             }
         } else {
@@ -136,7 +173,8 @@ int sub_main(int argc, char* argv[]) {
             } else {
                 auto primers_vec = myUtility::split(primers, ",");
                 if (primers_vec.size() != 2) {
-                    cerr << "if --primer is not file, it should be a pair of primers separated by one comma" << endl;
+                    cerr << REDS + "if --primer is not file, it should be a pair of primers separated by one comma" +
+                        COLOR_END << endl;
                     cerr << trim << endl;
                     exit(1);
                 }
@@ -227,7 +265,15 @@ int sub_main(int argc, char* argv[]) {
             end3_align_percent_rc,
             end3_align_identity_rc
         );
-        Work work{fq, static_cast<unsigned>(threads), true, output};
+        std::ofstream out;
+        if (output != "-") {
+            out.open(output, std::ios::out);
+            if (!out) {
+                std::cerr << REDS + "Failed when opened " + output << COLOR_END << std::endl;
+                exit(1);
+            }
+        }
+        Work work{fq, static_cast<unsigned>(threads), true, output == "-" ? std::cout : out};
         trim_direction td{myUtility::how_trim(sequence_info)};
         AlignmentConfig align_config{match, mismatch, gap_open, gap_extend};
         std::vector<AlignmentConfig> align_configs;
@@ -236,7 +282,7 @@ int sub_main(int argc, char* argv[]) {
         }
         std::fstream logfile{log, std::ios::out};
         if (!logfile) {
-            cerr << "Failed opening log" << endl;
+            cerr << REDS + "Failed opening log" + COLOR_END << endl;
             exit(1);
         }
         logfile << sequence_info.seq_info() << '\n';
@@ -246,6 +292,7 @@ int sub_main(int argc, char* argv[]) {
         };
         t1.join();
         t2.join();
+        if (out.is_open()) out.close();
     }
     return 0;
 }

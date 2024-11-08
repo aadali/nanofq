@@ -19,15 +19,17 @@ private:
     FastqReader& m_fq;
     unsigned m_thread{1};
     bool m_gc{false};
-    std::string_view m_outfile_path;
-    std::ofstream m_outfile_stream;
+    // std::string_view m_outfile_path;
+    std::ostream& m_out{std::cout};
     std::barrier<> m_bar;
     //    std::vector<read_stats_result> m_stats_result{};
     std::vector<std::vector<read_stats_result>> m_sub_stats_result{};
 
 public:
     Work() = delete;
-    explicit Work(FastqReader& fq, unsigned thread, bool gc, std::string_view outfile_path);
+    Work(FastqReader& fq, unsigned thread, bool gc, std::ostream& out);
+    // Work(FastqReader& fq, unsigned thread, bool gc, std::string_view outfile_path);
+
     explicit Work(FastqReader& fq);
     Work(const Work& w) = delete;
     Work(Work&& w) = delete;
@@ -39,8 +41,8 @@ public:
                     float max_gc);
     void run_find(const std::string& input_reads, bool use_index, unsigned key_length = 5);
     void run_index(unsigned key_length) const;
-    void run_trim(const SequenceInfo& seq_info, const trim_direction&td, std::vector<AlignmentConfig>& align_configs, std::fstream& log_fstream) ;
-    ~Work();
+    void run_trim(const SequenceInfo& seq_info, const trim_direction&td, std::vector<AlignmentConfig>& align_configs, std::ostream& log_fstream) ;
+    ~Work()= default;
 
 private:
     void stats(unsigned,
@@ -62,7 +64,7 @@ private:
               const SequenceInfo& seq_info,
               const trim_direction& td,
               AlignmentConfig& alignment_config,
-              std::fstream& log_fstream
+              std::ostream& log_fstream
               );
 };
 

@@ -17,5 +17,7 @@ int main(int argc, char* argv[]) {
     // std::vector<string> hello {"pdf", "jpg", "mp3", "bam"};
     // myUtility::check_one_candidate("format", "pdf", hello);
     // get_arguments(argc, argv);
+    std::ofstream a {"hello.txt", std::ios::out};
+    std::ostream& b {a};
     sub_main(argc, argv);
 }

@@ -30,7 +30,8 @@ FastqReader::FastqReader(std::string_view input_file, unsigned chunk)
     m_buffer = new char[FASTQ_BUFFER_SIZE];
     m_infile_gz = gzopen(input_file.data(), "rb");
     if (!m_infile_gz) {
-        throw std::runtime_error(fmt::format("Failed when opened file: {}", input_file));
+        std::cerr << REDS+ fmt::format("Failed opening file: {}", input_file) + COLOR_END<< std::endl;;
+        exit(1);
     }
 }
 
@@ -50,20 +51,22 @@ int FastqReader::read_chunk_fastq() {
         l = kseq_read(seq);
         if (l == -1) break; // end of file
         if (l == -2) {
-            throw std::runtime_error(fmt::format("Error: bad FASTQ format for read {}", seq->name.s));
+            std::cerr << REDS+ fmt::format("Error: bad FASTQ format for read {}", seq->name.s) + COLOR_END<< std::endl;;
+            exit(1);
         }
         if (l == -3) {
-            throw std::runtime_error(fmt::format("Error reading {}", m_input_file));
+            std::cerr << REDS+ fmt::format("Error reading {}", m_input_file) + COLOR_END << std::endl;;
+            exit(1);
         }
         bool fastq_format{seq->qual.l > 0 && seq->seq.l > 0 && seq->seq.l == seq->qual.l};
         if (!fastq_format) {
-            throw std::runtime_error(
-                    fmt::format("\n\nError: could not parse input read \nproblem occurred at read {}", seq->name.s));
+            std::cerr << REDS + fmt::format("\n\nError: could not parse input read \nproblem occurred at read {}", seq->name.s) + COLOR_END << std::endl;;
+            exit(1);
         }
         std::unique_lock<std::mutex> lock{ms_mtx};
         m_reads->emplace_back(std::make_shared<Read>(seq->name.s, seq->comment.s, seq->seq.s, seq->qual.s));
         if (m_reads->size() == m_chunk) {
-            std::cout << "first finished" << std::endl;
+            // std::cout << "first finished" << std::endl;
             ms_cond.wait(lock, [this]() { return m_reads->empty(); });
         }
     }
@@ -94,7 +97,8 @@ std::unordered_set<std::string> FastqReader::get_searching_read_names(const std:
         char read_name[read_name_buf];
         std::fstream infile{input_reads.data(), std::ios::in};
         if (!infile) {
-            throw std::runtime_error(fmt::format("Failed when opened file: {}", input_reads.data()));
+            std::cerr << REDS+fmt::format("Failed when opened file: {}", input_reads.data()) + COLOR_END << std::endl;
+            exit(1);
         }
         while (infile.getline(read_name, read_name_buf, '\n')) {
             bool empty_line{true};
@@ -163,7 +167,7 @@ void FastqReader::find_reads(const std::string &input_reads, std::ostream &out, 
                 }
             }
             if (!find_read_name) {
-                std::cerr << fmt::format("There is no read named {} in this fastq file", id) << endl;
+                std::cerr << REDS + fmt::format("There is no read named {} in this fastq file", id) + COLOR_END<< endl;
             }
         }
         return;
@@ -231,7 +235,8 @@ void FastqReader::index_fastq(std::string_view output_file_path, unsigned key_le
     std::ifstream infile_text{m_input_file.data(), std::ios::in};
     std::fstream output_index_stream{output_file_path.data(), std::ios::out};
     if (!output_index_stream) {
-        throw std::runtime_error(fmt::format("Failed when opened file: {}", output_file_path.data()));
+        std::cerr << REDS + fmt::format("Failed when opened file: {}", output_file_path.data()) + COLOR_END<< std::endl;
+        exit(1);
     }
     output_index_stream << '#' << key_len << '\n';
 //    cereal::BinaryOutputArchive bin_index{output_index_stream};

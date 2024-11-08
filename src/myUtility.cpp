@@ -43,29 +43,7 @@ std::string myUtility::rev_com(const std::string& seq) {
     return result;
 }
 
-template <typename... Args>
-std::string myUtility::join(const std::string& separator, Args... args) {
-    std::ostringstream oss;
-    ((oss << args << separator), ...);
-    std::string result = oss.str();
-    if (!result.empty()) {
-        result.erase(result.size() - separator.size());
-    }
-    return result;
-}
 
-template <typename T>
-std::string myUtility::join(const std::string& separator, const std::vector<T>& v) {
-    std::stringstream oss;
-    for (int i{0}; i < v.size(); i++) {
-        if (i == v.size() - 1) {
-            oss << v[i];
-        } else {
-            oss << v[i] << separator;
-        }
-    }
-    return oss.str();
-}
 
 string_view myUtility::get_read_name_prefix(string_view header, unsigned key_length) {
     size_t space_idx{header.find(' ')};
@@ -79,13 +57,16 @@ string_view myUtility::get_read_name_prefix(string_view header, unsigned key_len
 void myUtility::smith_waterman(string_view target_seq, string_view query_seq, AlignmentConfig& config,
                                AlignmentResult& result) {
     if (!result.is_empty()) {
-        throw std::runtime_error("AlignmentResult should be empty");
+        std::cerr << REDS + "AlignmentResult should be empty" + COLOR_END << std::endl;;
+        exit(1);
     }
     if (target_seq.size() > MAX_TARGET_LEN) {
-        throw std::runtime_error(fmt::format("max length of target seq should less than {}", MAX_TARGET_LEN));
+        std::cerr << REDS + fmt::format("max length of target seq should less than {}", MAX_TARGET_LEN) + COLOR_END << std::endl;;
+        exit(1);
     }
     if (query_seq.size() > MAX_QUERY_LEN) {
-        throw std::runtime_error(fmt::format("max length of query seq should less than {}", MAX_QUERY_LEN));
+        std::cerr << REDS + fmt::format("max length of query seq should less than {}", MAX_QUERY_LEN)+ COLOR_END << std::endl;;
+        exit(1);
     }
     int diagonal_score{0}, up_score{0}, left_score{0};
     for (int row{1}; row < query_seq.size(); row++) {
@@ -257,43 +238,3 @@ std::string myUtility::get_all_seq_info() {
     return info.str();
 }
 
-std::string myUtility::check_file(const std::string& parameter, const std::string& file, bool need_directory) {
-    std::filesystem::path fp{file};
-    if (!exists(fp)) {
-        std::cerr << fmt::format("Error parameter: {}. No such file or directory for {}", parameter, file) << std::endl;
-        exit(1);
-    }
-    if (need_directory && !is_directory(fp)) {
-        std::cerr << fmt::format("{} is file. Directory needed", file) << std::endl;
-        exit(1);
-    }
-    return file;
-}
-
-template <typename T>
-T myUtility::check_number(const std::string& parameter, const std::string& number, T min, T max) {
-    std::regex pat{R"([-+]?\d*\.?\d+)"};
-    if (bool mat{std::regex_match(number, pat)}; mat) {
-        T n{static_cast<T>(stof(number))};
-        if (n < min || n > max) {
-            std::cerr << fmt::format("Error parameter: {}. The range should be ({}, {})", parameter, min, max);
-            exit(1);
-        }
-        return n;
-    }
-    std::cerr << fmt::format("Error parameter: {}. this parameter should be number") << endl;
-    exit(1);
-}
-
-std::string myUtility::check_one_candidate(const std::string& parameter,
-                                           const std::string& candidate,
-                                           const std::vector<std::string>& right_candidate) {
-    for (const std::string& item : right_candidate) {
-        if (item == candidate) {
-            return candidate;
-        }
-    }
-    std::cerr << fmt::format("Error parameter: {}. {} is illegal, allowed options are [{}]", parameter, candidate,
-                             join<std::string>(", ", right_candidate)) << std::endl;
-    exit(1);
-}
