@@ -64,7 +64,11 @@ void Work::run_stats() {
     }
     for (std::vector<read_stats_result>& item : m_stats_result) {
         for (read_stats_result& x : item) {
-            auto line = fmt::format("{}\t{}\t{}\t{}\n", std::get<0>(x), std::get<1>(x), std::get<2>(x), std::get<3>(x));
+            auto line = fmt::format("{}\t{}\t{}\t{}\n",
+                                    std::get<0>(x),
+                                    std::get<1>(x),
+                                    fmt::format("{:.{}f}", std::get<2>(x), 2),
+                                    fmt::format("{:.{}f}", std::get<3>(x), 2));
             m_out << line;
         }
     }
@@ -109,8 +113,8 @@ void Work::run_trim(const SequenceInfo& seq_info,
                     const trim_direction& td,
                     std::vector<AlignmentConfig>& align_configs,
                     std::ostream& log_fstream) {
-    if (m_thread == 1){
-        while (true){
+    if (m_thread == 1) {
+        while (true) {
             Read read{m_fq.read_one_fastq()};
             if (read.get_id() == finished_read_name) return;
             trim_one_thread(read, seq_info, td, align_configs[0], log_fstream);
@@ -164,7 +168,11 @@ void Work::stats_one_thread(const Read& read) {
     float quality{read.calculate_read_quality()};
     float gc_content{m_gc ? read.get_gc_content() : 0.0f};
     m_stats_result[0].emplace_back(read.get_id(), len, quality, gc_content);
-    auto line = fmt::format("{}\t{}\t{}\t{}\n", read.get_id(), len, quality, gc_content);
+    auto line = fmt::format("{}\t{}\t{}\t{}\n",
+                            read.get_id(),
+                            len,
+                            fmt::format("{:.{}f}", quality, 2),
+                            fmt::format("{:.{}f}", gc_content, 2));
     m_out << line;
 }
 

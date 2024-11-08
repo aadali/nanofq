@@ -31,18 +31,18 @@ struct myUtility {
 
     [[nodiscard]] static vector<string_view> split(string_view str, string_view delim);
 
-    template <typename T>
-    static std::string join(const std::string& separator, const std::vector<T>& list){
-        std::stringstream oos;
-        for (int i {0}; i<list.size(); i++){
-            if (i == list.size()-1){
-                oos << list[i];
-            } else {
-                oos << list[i] << separator;
-            }
-        }
-        return oos.str();
-    };
+    // template <typename T>
+    // static std::string join(const std::string& separator, const std::vector<T>& list){
+    //     std::stringstream oos;
+    //     for (int i {0}; i<list.size(); i++){
+    //         if (i == list.size()-1){
+    //             oos << list[i];
+    //         } else {
+    //             oos << list[i] << separator;
+    //         }
+    //     }
+    //     return oos.str();
+    // };
 
     static string_view get_read_name_prefix(string_view header, unsigned key_length);
 

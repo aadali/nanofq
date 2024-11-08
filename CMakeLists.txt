@@ -26,6 +26,8 @@ add_executable(nanofq
         src/submain.h
 )
 
-target_link_libraries(nanofq fmt)
+#target_link_libraries(nanofq fmt)
 target_link_libraries(nanofq z)
 include_directories(./src)
+add_subdirectory(fmt)
+target_link_libraries(nanofq fmt::fmt)

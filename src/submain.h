@@ -31,7 +31,7 @@ int sub_main(int argc, char* argv[]) {
         std::vector<std::string> format{stats.get<std::vector<std::string>>("--format")};
         std::vector<std::string> allowed_choices{"pdf", "jpg", "png"};
         check_choices<std::string>("--format", format, allowed_choices, stats);
-        FastqReader fq{"input", static_cast<unsigned>(chunk)};
+        FastqReader fq{input, static_cast<unsigned>(chunk)};
         std::ofstream out;
         if (output != "-") {
             out.open(output.data(), std::ios::out);
@@ -102,7 +102,7 @@ int sub_main(int argc, char* argv[]) {
         std::string input{find.get("--input")};
         std::string output{find.get("--output")};
         std::string reads{find.get("--reads")};
-        bool use_index{find.get<bool>("-use_index")};
+        bool use_index{find.get<bool>("--use_index")};
         int key_len;
         if (!use_index) {
             if (find.is_used("--key_len")) {

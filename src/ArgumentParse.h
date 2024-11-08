@@ -3,6 +3,7 @@
 
 #include <string>
 #include <fmt/core.h>
+#include <fmt/ranges.h>
 #include "argparse.h"
 #include "myUtility.h"
 
@@ -39,7 +40,7 @@ void check_choices(const std::string& parameter, std::vector<T>& choices, std::v
     for (T& candidate : choices) {
         if (std::find(allowed_choices.begin(), allowed_choices.end(), candidate) == allowed_choices.end()) {
             std::cerr << fmt::format("{} allowed choice should be in [{}]", parameter,
-                                     myUtility::join<std::string>(", ", allowed_choices)) << '\n';
+                                     fmt::format("{}", fmt::join(allowed_choices, ", "))) << '\n';
             std::cerr << parser << std::endl;
             exit(1);
         }

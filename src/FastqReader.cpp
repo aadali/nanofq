@@ -136,7 +136,7 @@ std::unordered_set<std::string> FastqReader::get_searching_read_names(const std:
 
 void FastqReader::find_reads(const std::string &input_reads, std::ostream &out, bool use_index, unsigned key_length) {
     std::ifstream infile_text{m_input_file.data(), std::ios::in};
-    std::unordered_set<std::string> read_names{FastqReader::get_searching_read_names(input_reads)};
+    std::unordered_set<std::string> read_names{get_searching_read_names(input_reads)};
     if (use_index) {
         index(key_length);
         std::unordered_multimap<std::string, std::pair<size_t, size_t>> reads_index;
@@ -173,11 +173,12 @@ void FastqReader::find_reads(const std::string &input_reads, std::ostream &out, 
                 }
             }
             if (!find_read_name) {
-                std::cerr << REDS + fmt::format("There is no read named {} in this fastq file", id) + COLOR_END<< endl;
+                std::cerr << WARNS + fmt::format("There is no read named {} in this fastq file", id) + COLOR_END<< endl;
             }
         }
         return;
     }
+    // TODO with no use_index, maybe bug
     infile_text.seekg(std::ios::beg);
     int line_number{1};
     bool find_read{false};

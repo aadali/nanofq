@@ -29,7 +29,7 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
          .help("whether the stats gc content, if not set, all gc content will be set 0.0")
          .flag();
     stats.add_argument("-t", "--threads")
-         .help("threads number used").default_value(4)
+         .help("threads number used").default_value(1)
          .scan<'i', int>();
     stats.add_argument("-c", "--chunk")
          .help("chunk number used, more chunk more memory")
@@ -72,7 +72,7 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
           .scan<'g', double>();
     filter.add_argument("-t", "--threads")
           .help("threads number used, range (1, 16)")
-          .default_value(4)
+          .default_value(1)
           .scan<'i', int>();
     filter.add_argument("-c", "--chunk")
           .help("chunk number used, more chunk more memory, range (10000, 100000)")
@@ -159,7 +159,7 @@ you can change this value by set specified parameter)");
 
     trim.add_argument("-t", "--threads")
         .help("threads number used, range (1, 16)")
-        .default_value(4)
+        .default_value(1)
         .scan<'i', int>();
     trim.add_argument("-c", "--chunk")
         .help("chunk number used, more chunk more memory, range (10000, 100000)")
