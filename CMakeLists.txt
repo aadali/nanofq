@@ -21,6 +21,9 @@ add_executable(nanofq
         src/Adapter.h
         src/SequenceInfo.h
         src/SequenceInfo.cpp
+        src/parse_arguments.cpp
+        src/parse_arguments.h
+        src/submain.h
 )
 
 target_link_libraries(nanofq fmt)

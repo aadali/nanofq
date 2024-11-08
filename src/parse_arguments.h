@@ -21,13 +21,11 @@ const int MAX_TARGET = 2000;
 void check_file(const std::string& file, bool need_directory);
 
 template <typename T>
-T check_number(const std::string& parameter, const std::string& number_str, T min, T max,
-               argparse::ArgumentParser& parser, bool integer);
+void check_number_in_range(const std::string& parameter, const T& number, T min, T max, argparse::ArgumentParser&parser, bool integer);
 
 template <typename T>
-void check_number_in_range(const std::string& parameter, const T& number, T min, T max, argparse::ArgumentParser&parser, bool integer);
-template <typename T>
-void check_choices(const std::string& parameter, std::vector<T>& choices, std::vector<T> allowed_choices,
+void check_choices(const std::string& parameter, std::vector<T>& choices, std::vector<T>& allowed_choices,
                    argparse::ArgumentParser& parser);
+
 argparse::ArgumentParser& get_arguments(int argc, char* argv[]);
 #endif //PARSE_ARGUMENTS_H

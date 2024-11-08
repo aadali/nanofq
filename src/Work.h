@@ -18,7 +18,7 @@ class Work
 private:
     FastqReader& m_fq;
     unsigned m_thread{1};
-    bool m_gc;
+    bool m_gc{false};
     std::string_view m_outfile_path;
     std::ofstream m_outfile_stream;
     std::barrier<> m_bar;
@@ -28,6 +28,7 @@ private:
 public:
     Work() = delete;
     explicit Work(FastqReader& fq, unsigned thread, bool gc, std::string_view outfile_path);
+    explicit Work(FastqReader& fq);
     Work(const Work& w) = delete;
     Work(Work&& w) = delete;
     Work& operator=(const Work& w) = delete;

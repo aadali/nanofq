@@ -4,7 +4,7 @@
 #include <tuple>
 
 
-using trim_end = std::tuple< int, float, float>; // std::tuple<end_target_len, align_percent, align_identity>
+using trim_end = std::tuple<int, float, float>; // std::tuple<end_target_len, align_percent, align_identity>
 class SequenceInfo {
 public:
     /*LSK114; NBD114*/
@@ -14,8 +14,7 @@ public:
         const trim_end& top5end,
         const std::string& top3end_query,
         const trim_end& top3end
-        );
-
+    );
 
 
     /*RAD114; RBK114; ULK114*/
@@ -41,7 +40,12 @@ public:
         const std::string& bot3end_query,
         const trim_end& bot3end
     );
-    SequenceInfo(const SequenceInfo&) = delete;
+    /*Custom Sequence*/
+    SequenceInfo(
+        const std::string& forward,
+        const std::string& reversed);
+
+    SequenceInfo(const SequenceInfo&) = default;
     SequenceInfo(SequenceInfo&&) = delete;
     SequenceInfo& operator=(const SequenceInfo&) = delete;
     SequenceInfo& operator=(SequenceInfo&&) = delete;
@@ -85,6 +89,11 @@ public:
 
 public:
     std::string seq_info();
+    SequenceInfo& update_sequence_info(int top5end_len, float top5end_percent,
+                                       float top5end_identity, int top3end_len, float top3end_percent,
+                                       float top3end_identity, int bot5end_len, float bot5end_percent,
+                                       float bot5end_identity, int bot3end_len, float bot3end_percent,
+                                       float bot3end_identity);
 };
 
 

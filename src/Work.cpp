@@ -18,6 +18,8 @@ Work::Work(FastqReader& fq, unsigned thread, const bool gc, std::string_view out
         throw std::runtime_error(fmt::format("Cannot open file: {}", m_outfile_path));
     }
 }
+Work::Work(FastqReader& fq):m_fq{fq}, m_bar(1) {}
+
 
 std::vector<std::pair<unsigned, unsigned>> Work::get_bins(unsigned length) const {
     std::vector<std::pair<unsigned, unsigned>> idx_ranges;
