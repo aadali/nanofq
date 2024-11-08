@@ -3,16 +3,9 @@
 #include <charconv>
 
 #include <fmt/core.h>
-//#include <cereal/types/unordered_map.hpp>
-//#include <cereal/types/tuple.hpp>
-//#include <cereal/types/string.hpp>
-//#include <cereal/archives/binary.hpp>
 
 #include "FastqReader.h"
 #include "myUtility.h"
-#include "kseq.h"
-
-KSEQ_INIT(gzFile, gzread)
 
 #define FASTQ_BUFFER_SIZE (1<<23)
 
@@ -33,6 +26,7 @@ FastqReader::FastqReader(std::string_view input_file, unsigned chunk)
         std::cerr << REDS+ fmt::format("Failed opening file: {}", input_file) + COLOR_END<< std::endl;;
         exit(1);
     }
+    m_seq = kseq_init(m_infile_gz);
 }
 
 FastqReader::~FastqReader() {
@@ -43,36 +37,48 @@ FastqReader::~FastqReader() {
     }
 }
 
-int FastqReader::read_chunk_fastq() {
-    std::string id, desc, sequence, quality;
-    kseq_t *seq = kseq_init(m_infile_gz);
+Read FastqReader::read_one_fastq() {
     int l;
+    l = kseq_read(m_seq);
+    if (l == -1){ // end of file
+        std::string id = finished_read_name, qual = id, seq=id, desc=id;
+        Read read {id, desc, seq, qual};
+        return read;
+    }
+    if (l == -2) {
+        std::cerr << REDS+ fmt::format("Error: bad FASTQ format for read {}", m_seq->name.s) + COLOR_END<< std::endl;;
+        exit(1);
+    }
+    if (l == -3){
+        std::cerr << REDS+ fmt::format("Error reading {}", m_input_file) + COLOR_END << std::endl;;
+        exit(1);
+    }
+    bool fastq_format{m_seq->qual.l > 0 && m_seq->seq.l > 0 && m_seq->seq.l == m_seq->qual.l};
+    if (!fastq_format) {
+        std::cerr << REDS + fmt::format("\n\nError: could not parse input read \nproblem occurred at read {}", m_seq->name.s) + COLOR_END << std::endl;;
+        exit(1);
+    }
+    Read read{m_seq->name.s, m_seq->comment.s , m_seq->seq.s, m_seq->qual.s};
+    // m_reads->emplace_back(std::make_shared<Read>(std::move(read)));
+    return read;
+}
+
+
+void FastqReader::read_chunk_fastq() {
+    // std::string id, desc, sequence, quality;
+    // int l;
     while (true) {
-        l = kseq_read(seq);
-        if (l == -1) break; // end of file
-        if (l == -2) {
-            std::cerr << REDS+ fmt::format("Error: bad FASTQ format for read {}", seq->name.s) + COLOR_END<< std::endl;;
-            exit(1);
-        }
-        if (l == -3) {
-            std::cerr << REDS+ fmt::format("Error reading {}", m_input_file) + COLOR_END << std::endl;;
-            exit(1);
-        }
-        bool fastq_format{seq->qual.l > 0 && seq->seq.l > 0 && seq->seq.l == seq->qual.l};
-        if (!fastq_format) {
-            std::cerr << REDS + fmt::format("\n\nError: could not parse input read \nproblem occurred at read {}", seq->name.s) + COLOR_END << std::endl;;
-            exit(1);
-        }
+        Read read{read_one_fastq()};
+        if (read.get_id() == finished_read_name) break;
         std::unique_lock<std::mutex> lock{ms_mtx};
-        m_reads->emplace_back(std::make_shared<Read>(seq->name.s, seq->comment.s, seq->seq.s, seq->qual.s));
+        m_reads->emplace_back(std::make_shared<Read>(std::move(read)));
         if (m_reads->size() == m_chunk) {
             // std::cout << "first finished" << std::endl;
             ms_cond.wait(lock, [this]() { return m_reads->empty(); });
         }
     }
-    kseq_destroy(seq);
+    kseq_destroy(m_seq);
     m_finish = true;
-    return 0;
 }
 
 std::optional<shared_vec_reads> FastqReader::get_reads() {

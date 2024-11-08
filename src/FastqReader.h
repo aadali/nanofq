@@ -10,7 +10,9 @@
 #include <optional>
 #include <zlib.h>
 #include "Read.h"
-
+#include "kseq.h"
+const std::string finished_read_name{"FINISHED FINISHED FINISHED"};
+KSEQ_INIT(gzFile, gzread)
 using shared_vec_reads = std::shared_ptr<std::vector<std::shared_ptr<Read>>>;
 using shared_read = std::shared_ptr<Read>;
 
@@ -20,6 +22,7 @@ private:
     bool m_finish{false};
     //    std::fstream m_infile_text{};
     gzFile m_infile_gz{nullptr};
+    kseq_t* m_seq;
     shared_vec_reads m_reads{};
     std::string_view m_input_file;
     unsigned m_chunk;
@@ -42,7 +45,9 @@ public:
 
     ~FastqReader();
 
-    int read_chunk_fastq();
+    void read_chunk_fastq();
+
+    Read read_one_fastq();
 
     inline bool read_finish() const { return m_finish; };
 

@@ -1,7 +1,7 @@
 #include "test.h"
 #include "myUtility.h"
 #include "Adapter.h"
-#include "parse_arguments.h"
+#include "ArgumentParse.h"
 #include "submain.h"
 using namespace std;
 

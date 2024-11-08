@@ -9,7 +9,7 @@
 #include "AlignmentConfig.h"
 #include "AlignmentResult.h"
 #include "Adapter.h"
-#include "parse_arguments.h"
+#include "ArgumentParse.h"
 
 int sub_main(int argc, char* argv[]) {
     argparse::ArgumentParser& nanofq{get_arguments(argc, argv)};
@@ -41,10 +41,14 @@ int sub_main(int argc, char* argv[]) {
             }
         }
         Work work{fq, static_cast<unsigned>(threads), gc, output == "-" ? std::cout : out};
-        std::thread t1{&FastqReader::read_chunk_fastq, &fq};
-        std::thread t2{&Work::run_stats, &work};
-        t1.join();
-        t2.join();
+        if (threads == 1) {
+            work.run_stats();
+        } else {
+            std::thread t1{&FastqReader::read_chunk_fastq, &fq};
+            std::thread t2{&Work::run_stats, &work};
+            t1.join();
+            t2.join();
+        }
         if (out.is_open()) { out.close(); }
     } else if (nanofq.is_subcommand_used("filter")) {
         argparse::ArgumentParser& filter{nanofq.at<argparse::ArgumentParser>("filter")};
@@ -75,10 +79,15 @@ int sub_main(int argc, char* argv[]) {
             }
         }
         Work work{fq, static_cast<unsigned>(threads), gc, output == "-" ? std::cout : out};
-        std::thread t1{&FastqReader::read_chunk_fastq, &fq};
-        std::thread t2{&Work::run_filter, &work, min_length, max_length, min_quality, min_gc, max_gc};
-        t1.join();
-        t2.join();
+        if (threads == 1){
+            work.run_filter(min_length, max_length, min_quality, min_gc, max_gc);
+        } else {
+            std::thread t1{&FastqReader::read_chunk_fastq, &fq};
+            std::thread t2{&Work::run_filter, &work, min_length, max_length, min_quality, min_gc, max_gc};
+            t1.join();
+            t2.join();
+
+        }
         if (out.is_open()) out.close();
     } else if (nanofq.is_subcommand_used("index")) {
         argparse::ArgumentParser& index{nanofq.at<argparse::ArgumentParser>("index")};
@@ -286,12 +295,21 @@ int sub_main(int argc, char* argv[]) {
             exit(1);
         }
         logfile << sequence_info.seq_info() << '\n';
-        std::thread t1{&FastqReader::read_chunk_fastq, &fq};
-        std::thread t2{
-            &Work::run_trim, &work, std::ref(sequence_info), std::ref(td), std::ref(align_configs), std::ref(logfile)
-        };
-        t1.join();
-        t2.join();
+        if (threads == 1) {
+            work.run_trim(sequence_info, td, align_configs, logfile);
+        } else {
+            std::thread t1{&FastqReader::read_chunk_fastq, &fq};
+            std::thread t2{
+                &Work::run_trim,
+                &work,
+                std::ref(sequence_info),
+                std::ref(td),
+                std::ref(align_configs),
+                std::ref(logfile)
+            };
+            t1.join();
+            t2.join();
+        }
         if (out.is_open()) out.close();
     }
     return 0;

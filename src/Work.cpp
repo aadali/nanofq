@@ -12,9 +12,9 @@ Work::Work(FastqReader& fq, unsigned thread, const bool gc, std::ostream& out) :
     m_gc(gc),
     m_out(out),
     m_bar(static_cast<int>(m_thread)) {
-    m_sub_stats_result.reserve(m_thread);
+    m_stats_result.reserve(m_thread);
     for (int i{0}; i < m_thread; i++) {
-        m_sub_stats_result.emplace_back();
+        m_stats_result.emplace_back();
     }
 }
 
@@ -39,6 +39,13 @@ std::vector<std::pair<unsigned, unsigned>> Work::get_bins(unsigned length) const
 }
 
 void Work::run_stats() {
+    if (m_thread == 1) {
+        while (true) {
+            Read read{m_fq.read_one_fastq()};
+            if (read.get_id() == finished_read_name) return;
+            stats_one_thread(read);
+        }
+    }
     while (true) {
         if (std::optional<shared_vec_reads> reads = m_fq.get_reads(); reads.has_value()) {
             std::vector<std::jthread> threads;
@@ -50,18 +57,17 @@ void Work::run_stats() {
                                      bins[i].first,
                                      bins[i].second,
                                      reads.value(),
-                                     std::ref(m_sub_stats_result[i]));
+                                     std::ref(m_stats_result[i]));
             }
         }
         if (m_fq.read_finish() && m_fq.is_empty()) break;
     }
-    for (std::vector<read_stats_result>& item : m_sub_stats_result) {
+    for (std::vector<read_stats_result>& item : m_stats_result) {
         for (read_stats_result& x : item) {
             auto line = fmt::format("{}\t{}\t{}\t{}\n", std::get<0>(x), std::get<1>(x), std::get<2>(x), std::get<3>(x));
             m_out << line;
         }
     }
-    //    cout << m_stats_result.size() << endl;
 }
 
 
@@ -70,6 +76,13 @@ void Work::run_filter(unsigned min_len,
                       float min_quality,
                       float min_gc,
                       float max_gc) {
+    if (m_thread == 1) {
+        while (true) {
+            Read read{m_fq.read_one_fastq()};
+            if (read.get_id() == finished_read_name) return;
+            filter_one_thread(read, min_len, max_len, min_quality, min_gc, max_gc);
+        }
+    }
     while (true) {
         if (std::optional<shared_vec_reads> reads = m_fq.get_reads(); reads.has_value()) {
             std::vector<std::jthread> threads;
@@ -96,6 +109,13 @@ void Work::run_trim(const SequenceInfo& seq_info,
                     const trim_direction& td,
                     std::vector<AlignmentConfig>& align_configs,
                     std::ostream& log_fstream) {
+    if (m_thread == 1){
+        while (true){
+            Read read{m_fq.read_one_fastq()};
+            if (read.get_id() == finished_read_name) return;
+            trim_one_thread(read, seq_info, td, align_configs[0], log_fstream);
+        }
+    }
     while (true) {
         if (std::optional<shared_vec_reads> reads = m_fq.get_reads(); reads.has_value()) {
             std::vector<std::jthread> threads;
@@ -117,7 +137,7 @@ void Work::run_trim(const SequenceInfo& seq_info,
     }
 }
 
-void Work::run_find(const std::string& input_reads, bool use_index, unsigned key_length) {
+void Work::run_find(const std::string& input_reads, bool use_index, unsigned key_length) const {
     m_fq.find_reads(input_reads, m_out, use_index, key_length);
 }
 
@@ -137,6 +157,15 @@ void Work::stats(unsigned start,
         sub_stats_result.emplace_back((*reads)[idx]->get_id(), len, quality, gc_content);
     }
     m_bar.arrive_and_wait();
+}
+
+void Work::stats_one_thread(const Read& read) {
+    unsigned len{read.get_length()};
+    float quality{read.calculate_read_quality()};
+    float gc_content{m_gc ? read.get_gc_content() : 0.0f};
+    m_stats_result[0].emplace_back(read.get_id(), len, quality, gc_content);
+    auto line = fmt::format("{}\t{}\t{}\t{}\n", read.get_id(), len, quality, gc_content);
+    m_out << line;
 }
 
 
@@ -166,12 +195,38 @@ void Work::filter(unsigned start,
     m_bar.arrive_and_wait();
 }
 
+void Work::filter_one_thread(const Read& read, unsigned min_len, unsigned max_len, float min_quality, float min_gc,
+                             float max_gc) const {
+    unsigned len{read.get_length()};
+    float quality{read.calculate_read_quality()};
+    if (m_gc) {
+        if (float gc_content{read.get_gc_content()};
+            len >= min_len &&
+            len <= max_len &&
+            quality > min_quality &&
+            gc_content > min_gc &&
+            gc_content < max_gc) {
+            m_out << read.get_record();
+        }
+    } else {
+        if (len >= min_len && len <= max_len && quality > min_quality) {
+            m_out << read.get_record();
+        }
+    }
+}
+
 
 void Work::trim(unsigned start, unsigned end, const shared_vec_reads& reads, const SequenceInfo& seq_info,
-                const trim_direction& td, AlignmentConfig& alignment_config, std::ostream& log_fstream) {
+                const trim_direction& td, AlignmentConfig& align_config, std::ostream& log_fstream) {
     for (unsigned idx{start}; idx < end; idx++) {
-        (*reads)[idx]->trim(seq_info, td, alignment_config, log_fstream);
+        (*reads)[idx]->trim(seq_info, td, align_config, log_fstream);
         std::osyncstream{m_out} << *(*reads)[idx];
     }
     m_bar.arrive_and_wait();
+}
+
+void Work::trim_one_thread(Read& read, const SequenceInfo& seq_info, const trim_direction& td,
+                           AlignmentConfig& alignment_config, std::ostream& log_fstream) const {
+    read.trim(seq_info, td, alignment_config, log_fstream);
+    m_out << read;
 }

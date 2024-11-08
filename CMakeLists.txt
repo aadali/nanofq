@@ -21,8 +21,8 @@ add_executable(nanofq
         src/Adapter.h
         src/SequenceInfo.h
         src/SequenceInfo.cpp
-        src/parse_arguments.cpp
-        src/parse_arguments.h
+        src/ArgumentParse.cpp
+        src/ArgumentParse.h
         src/submain.h
 )
 

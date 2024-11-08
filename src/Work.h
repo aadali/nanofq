@@ -19,11 +19,9 @@ private:
     FastqReader& m_fq;
     unsigned m_thread{1};
     bool m_gc{false};
-    // std::string_view m_outfile_path;
     std::ostream& m_out{std::cout};
     std::barrier<> m_bar;
-    //    std::vector<read_stats_result> m_stats_result{};
-    std::vector<std::vector<read_stats_result>> m_sub_stats_result{};
+    std::vector<std::vector<read_stats_result>> m_stats_result{};
 
 public:
     Work() = delete;
@@ -39,7 +37,7 @@ public:
     void run_stats();
     void run_filter(unsigned min_len, unsigned max_len, float min_quality, float min_gc,
                     float max_gc);
-    void run_find(const std::string& input_reads, bool use_index, unsigned key_length = 5);
+    void run_find(const std::string& input_reads, bool use_index, unsigned key_length = 5) const;
     void run_index(unsigned key_length) const;
     void run_trim(const SequenceInfo& seq_info, const trim_direction&td, std::vector<AlignmentConfig>& align_configs, std::ostream& log_fstream) ;
     ~Work()= default;
@@ -49,6 +47,7 @@ private:
                unsigned,
                const shared_vec_reads&,
                std::vector<read_stats_result>& sub_stats_result);
+    void stats_one_thread(const Read &read);
     void filter(unsigned start,
                 unsigned end,
                 unsigned min_len,
@@ -57,15 +56,17 @@ private:
                 float min_gc,
                 float max_gc,
                 const shared_vec_reads& reads);
+    void filter_one_thread(const Read& read, unsigned min_len, unsigned max_len, float min_quality, float min_gc, float max_gc) const;
 
     void trim(unsigned start,
               unsigned end,
               const shared_vec_reads& reads,
               const SequenceInfo& seq_info,
               const trim_direction& td,
-              AlignmentConfig& alignment_config,
+              AlignmentConfig& align_config,
               std::ostream& log_fstream
               );
+    void trim_one_thread(Read& read, const SequenceInfo& seq_info, const trim_direction& td, AlignmentConfig& alignment_config, std::ostream& log_fstream) const;
 };
 
 
