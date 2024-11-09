@@ -16,14 +16,14 @@ std::mutex FastqReader::ms_mtx{};
 std::condition_variable FastqReader::ms_cond{};
 
 FastqReader::FastqReader(std::string_view input_file, unsigned chunk)
-        : m_input_file(input_file), m_chunk(chunk) {
+    : m_input_file(input_file), m_chunk(chunk) {
     std::vector<std::shared_ptr<Read>> tmp;
     tmp.reserve(m_chunk);
     m_reads = std::make_shared<std::vector<std::shared_ptr<Read>>>(tmp);
     m_buffer = new char[FASTQ_BUFFER_SIZE];
     m_infile_gz = gzopen(input_file.data(), "rb");
     if (!m_infile_gz) {
-        std::cerr << REDS+ fmt::format("Failed opening file: {}", input_file) + COLOR_END<< std::endl;;
+        std::cerr << REDS + fmt::format("Failed opening file: {}", input_file) + COLOR_END << std::endl;;
         exit(1);
     }
     m_seq = kseq_init(m_infile_gz);
@@ -35,30 +35,33 @@ FastqReader::~FastqReader() {
         delete[] m_buffer;
         m_buffer = nullptr;
     }
+    if (m_seq) { kseq_destroy(m_seq); }
 }
 
 Read FastqReader::read_one_fastq() {
     int l;
     l = kseq_read(m_seq);
-    if (l == -1){ // end of file
-        std::string id = finished_read_name, qual = id, seq=id, desc=id;
-        Read read {id, desc, seq, qual};
+    if (l == -1) {
+        // end of file
+        std::string id = finished_read_name, qual = id, seq = id, desc = id;
+        Read read{id, desc, seq, qual};
         return read;
     }
     if (l == -2) {
-        std::cerr << REDS+ fmt::format("Error: bad FASTQ format for read {}", m_seq->name.s) + COLOR_END<< std::endl;;
+        std::cerr << REDS + fmt::format("Error: bad FASTQ format for read {}", m_seq->name.s) + COLOR_END << std::endl;;
         exit(1);
     }
-    if (l == -3){
-        std::cerr << REDS+ fmt::format("Error reading {}", m_input_file) + COLOR_END << std::endl;;
+    if (l == -3) {
+        std::cerr << REDS + fmt::format("Error reading {}", m_input_file) + COLOR_END << std::endl;;
         exit(1);
     }
     bool fastq_format{m_seq->qual.l > 0 && m_seq->seq.l > 0 && m_seq->seq.l == m_seq->qual.l};
     if (!fastq_format) {
-        std::cerr << REDS + fmt::format("\n\nError: could not parse input read \nproblem occurred at read {}", m_seq->name.s) + COLOR_END << std::endl;;
+        std::cerr << REDS + fmt::format("\n\nError: could not parse input read \nproblem occurred at read {}",
+                                        m_seq->name.s) + COLOR_END << std::endl;;
         exit(1);
     }
-    Read read{m_seq->name.s, m_seq->comment.s , m_seq->seq.s, m_seq->qual.s};
+    Read read{m_seq->name.s, m_seq->comment.s, m_seq->seq.s, m_seq->qual.s};
     // m_reads->emplace_back(std::make_shared<Read>(std::move(read)));
     return read;
 }
@@ -74,7 +77,7 @@ void FastqReader::read_chunk_fastq() {
         m_reads->emplace_back(std::make_shared<Read>(std::move(read)));
         if (m_reads->size() == m_chunk) {
             // std::cout << "first finished" << std::endl;
-            ms_cond.wait(lock, [this]() { return m_reads->empty(); });
+            ms_cond.wait(lock, [this](){ return m_reads->empty(); });
         }
     }
     kseq_destroy(m_seq);
@@ -94,7 +97,7 @@ std::optional<shared_vec_reads> FastqReader::get_reads() {
     return {};
 }
 
-std::unordered_set<std::string> FastqReader::get_searching_read_names(const std::string &input_reads) {
+std::unordered_set<std::string> FastqReader::get_searching_read_names(const std::string& input_reads) {
     std::unordered_set<std::string> read_names;
     const unsigned read_name_buf{256};
     if (exists(std::filesystem::path{input_reads.data()})) {
@@ -103,12 +106,12 @@ std::unordered_set<std::string> FastqReader::get_searching_read_names(const std:
         char read_name[read_name_buf];
         std::fstream infile{input_reads.data(), std::ios::in};
         if (!infile) {
-            std::cerr << REDS+fmt::format("Failed when opened file: {}", input_reads.data()) + COLOR_END << std::endl;
+            std::cerr << REDS + fmt::format("Failed when opened file: {}", input_reads.data()) + COLOR_END << std::endl;
             exit(1);
         }
         while (infile.getline(read_name, read_name_buf, '\n')) {
             bool empty_line{true};
-            for (char &c: read_name) {
+            for (char& c : read_name) {
                 if (isprint(c) && c != ' ') {
                     empty_line = false;
                     break;
@@ -124,23 +127,26 @@ std::unordered_set<std::string> FastqReader::get_searching_read_names(const std:
         }
     } else {
         std::vector<std::string_view> read_names_view{myUtility::split(input_reads, ",")};
-        for (auto read_name: read_names_view) {
+        for (auto read_name : read_names_view) {
             read_names.emplace(read_name);
         }
     }
-    for (auto &r: read_names) {
+    for (auto& r : read_names) {
         cout << r << endl;
     }
     return read_names;
 }
 
-void FastqReader::find_reads(const std::string &input_reads, std::ostream &out, bool use_index, unsigned key_length) {
+void FastqReader::find_reads(const std::string& input_reads, std::ostream& out, bool use_index, unsigned key_length) {
     std::ifstream infile_text{m_input_file.data(), std::ios::in};
     std::unordered_set<std::string> read_names{get_searching_read_names(input_reads)};
+    std::filesystem::path index_file_path_prefix{m_input_file.data()};
     if (use_index) {
+        /* when user need use index, firstly check whether the index file exists.
+        If true and index is newer than input file, just use it, else make index and use it */
         index(key_length);
         std::unordered_multimap<std::string, std::pair<size_t, size_t>> reads_index;
-        std::fstream input_file_index{std::filesystem::path{m_input_file.data()}.concat(".idx").c_str(), std::ios::in};
+        std::fstream input_file_index{index_file_path_prefix.concat(".idx").c_str(), std::ios::in};
         char index_line[1024];
         input_file_index.getline(index_line, 1024, '\n');
         unsigned used_key_length;
@@ -156,7 +162,7 @@ void FastqReader::find_reads(const std::string &input_reads, std::ostream &out, 
         }
         input_file_index.close();
         char read_name[4096];
-        for (const std::string &id: read_names) {
+        for (const std::string& id : read_names) {
             string key{id.size() <= used_key_length ? id : id.substr(0, used_key_length)};
             auto [begin_ele, end_ele] = reads_index.equal_range(key);
             bool find_read_name{false};
@@ -173,64 +179,68 @@ void FastqReader::find_reads(const std::string &input_reads, std::ostream &out, 
                 }
             }
             if (!find_read_name) {
-                std::cerr << WARNS + fmt::format("There is no read named {} in this fastq file", id) + COLOR_END<< endl;
+                std::cerr << WARNS + fmt::format("There is no read named {} in this fastq file", id) + COLOR_END <<
+                    endl;
             }
         }
         return;
     }
-    // TODO with no use_index, maybe bug
-    infile_text.seekg(std::ios::beg);
-    int line_number{1};
-    bool find_read{false};
-    std::string id;
-    infile_text.getline(m_buffer, FASTQ_BUFFER_SIZE, '\n');
-    while (infile_text.getline(m_buffer, FASTQ_BUFFER_SIZE, '\n')) {
-        if (!find_read && read_names.empty())break;
-        if (m_buffer[strlen(m_buffer) - 1] == '\r') m_buffer[strlen(m_buffer) - 1] = '\0';
-        switch (line_number) {
-            case 1: {
-                if (strlen(m_buffer) == 0) { break; }
-                for (int idx{0}; idx < strlen(m_buffer); idx++) {
-                    if (m_buffer[idx] == ' ') {
-                        id.assign(m_buffer, 1, idx - 1);
-                        break;
-                    }
+    if (exists(index_file_path_prefix.concat(".idx")) &&
+        last_write_time(index_file_path_prefix.concat(".idx")) > last_write_time(std::filesystem::path{m_input_file})) {
+        /*
+        * if user didn't set --use_index, check whether the index file exists firstly, if true and index file is newer than input
+        * file, so just use it, else do the following iteration searching
+        * */
+        find_reads(input_reads, out, true, key_length);
+        return;
+    }
+    while (true) {
+        // iteration searching
+        int l;
+        l = kseq_read(m_seq);
+        if (l == -1 || read_names.empty()) {
+            // end of file or find all reads
+            if (!read_names.empty()) {
+                for (std::string name : read_names) {
+                    std::cerr << WARNS + fmt::format("There is no read named {} in this fastq", name) << COLOR_END <<
+                        std::endl;
                 }
-                if (id.empty()) { id = m_buffer; };
-                if (read_names.contains(id)) {
-                    read_names.erase(id);
-                    out << m_buffer << '\n';
-                    find_read = true;
-                }
-                line_number++;
-                break;
             }
-            case 2:
-            case 3: {
-                if (find_read) out << m_buffer << '\n';
-                line_number++;
-                break;
-            }
-
-            case 4: {
-                if (find_read) out << m_buffer << '\n';
-                line_number = 1;
-                find_read = false;
-                break;
-            }
-            default: {
-                break;
-            }
+            kseq_destroy(m_seq);
+            return;
+        }
+        if (l == -2) {
+            std::cerr << REDS + fmt::format("Error: bad FASTQ format for read {}", m_seq->name.s) + COLOR_END <<
+                std::endl;;
+            exit(1);
+        }
+        if (l == -3) {
+            std::cerr << REDS + fmt::format("Error reading {}", m_input_file) + COLOR_END << std::endl;;
+            exit(1);
+        }
+        bool fastq_format{m_seq->qual.l > 0 && m_seq->seq.l > 0 && m_seq->seq.l == m_seq->qual.l};
+        if (!fastq_format) {
+            std::cerr << REDS + fmt::format("\n\nError: could not parse input read \nproblem occurred at read {}",
+                                            m_seq->name.s) + COLOR_END << std::endl;;
+            exit(1);
+        }
+        if (read_names.contains(m_seq->name.s)) {
+            out << fmt::format("@{} {}\n{}\n+\n{}\n",
+                               m_seq->name.s,
+                               m_seq->comment.s ? m_seq->comment.s : "",
+                               m_seq->seq.s,
+                               m_seq->qual.s);
+            read_names.erase(m_seq->name.s);
         }
     }
-    infile_text.close();
 }
 
 void FastqReader::index(unsigned key_len) {
     std::filesystem::path input_file{m_input_file};
     std::filesystem::path input_file_idx{input_file.concat(".idx")};
     if (exists(input_file_idx)) {
-        if (last_write_time(input_file) > last_write_time(input_file_idx)) { // input_file is newer than index
+        if (last_write_time(input_file) > last_write_time(input_file_idx)) {
+            // input_file is newer than index
             index_fastq(input_file_idx.c_str(), key_len);
         }
     } else {
@@ -242,11 +252,12 @@ void FastqReader::index_fastq(std::string_view output_file_path, unsigned key_le
     std::ifstream infile_text{m_input_file.data(), std::ios::in};
     std::fstream output_index_stream{output_file_path.data(), std::ios::out};
     if (!output_index_stream) {
-        std::cerr << REDS + fmt::format("Failed when opened file: {}", output_file_path.data()) + COLOR_END<< std::endl;
+        std::cerr << REDS + fmt::format("Failed when opened file: {}", output_file_path.data()) + COLOR_END <<
+            std::endl;
         exit(1);
     }
     output_index_stream << '#' << key_len << '\n';
-//    cereal::BinaryOutputArchive bin_index{output_index_stream};
+    //    cereal::BinaryOutputArchive bin_index{output_index_stream};
     std::unordered_map<std::string, std::vector<size_t>> reads_index{};
     infile_text.seekg(std::ios::beg);
     std::string id;
@@ -255,40 +266,38 @@ void FastqReader::index_fastq(std::string_view output_file_path, unsigned key_le
     size_t stop{0};
     while (infile_text.getline(m_buffer, FASTQ_BUFFER_SIZE, '\n')) {
         switch (line_number) {
-            case 1: {
-                string_view read_name_prefix{myUtility::get_read_name_prefix(m_buffer, key_len)};
-                id = read_name_prefix;
-//                if (!reads_index.contains(id)){
-//                    reads_index.insert(std::make_pair(id, std::vector<size_t>{}));
-//                }
-                stop += strlen(m_buffer) + 1;
-                line_number++;
-                break;
-            }
-            case 2:
-            case 3: {
-                stop += strlen(m_buffer) + 1;
-                line_number++;
-                break;
-            }
-            case 4: {
-                stop += strlen(m_buffer) + 1;
-                line_number = 1;
-                output_index_stream << id << '\t' << start << '\t' << stop << '\n';
-//                reads_index.try_emplace(id, start, stop);
-//                reads_index.at(id).push_back(start);
-//                reads_index.at(id).push_back(stop);
-                start = stop;
-//                id.clear();
-                break;
-            }
-            default: {
-                break;
-            }
+        case 1: {
+            string_view read_name_prefix{myUtility::get_read_name_prefix(m_buffer, key_len)};
+            id = read_name_prefix;
+            //                if (!reads_index.contains(id)){
+            //                    reads_index.insert(std::make_pair(id, std::vector<size_t>{}));
+            //                }
+            stop += strlen(m_buffer) + 1;
+            line_number++;
+            break;
+        }
+        case 2:
+        case 3: {
+            stop += strlen(m_buffer) + 1;
+            line_number++;
+            break;
+        }
+        case 4: {
+            stop += strlen(m_buffer) + 1;
+            line_number = 1;
+            output_index_stream << id << '\t' << start << '\t' << stop << '\n';
+            //                reads_index.try_emplace(id, start, stop);
+            //                reads_index.at(id).push_back(start);
+            //                reads_index.at(id).push_back(stop);
+            start = stop;
+            //                id.clear();
+            break;
+        }
+        default: {
+            break;
+        }
         }
     }
     output_index_stream.close();
     infile_text.close();
 }
-
-

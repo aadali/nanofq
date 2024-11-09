@@ -54,7 +54,7 @@ public:
     inline bool is_empty() const { return m_reads->empty(); }
 
     std::optional<shared_vec_reads> get_reads();
-    void find_reads(const std::string &input_reads, std::ostream &out, bool use_index, unsigned key_length = 5);
+    void find_reads(const std::string &input_reads, std::ostream &out, bool use_index, unsigned key_length = 8);
     void index(unsigned key_len);
 
 private:

@@ -8,31 +8,31 @@ using std::endl;
 
 argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
     static argparse::ArgumentParser nanofq{"nanofq", "1.0"};
-    nanofq.add_description("A tool for treat Nanopore fastq[.gz]");
-    nanofq.add_epilog("aadali@gmail.com");
+    nanofq.add_description("A tool for stats, filter, index, find, trim nanopore fastq reads");
+    nanofq.add_epilog("Contact aadali@gmail.com");
     static argparse::ArgumentParser stats{"stats"};
-    stats.add_description("stats the Nanopore fastq[.gz]");
+    stats.add_description("stats nanopore fastq");
 
     stats.add_argument("-i", "--input")
          .help("the input fastq[.gz]")
          .required();
     stats.add_argument("-o", "--output")
-         .help("the stats output file name")
+         .help("the stats output file name, default print all results to stdout")
          .default_value("-");
     stats.add_argument("-p", "--plot")
          .help("whether plot the stats result, if it's set, the value will be the figure file name prefix");
     stats.add_argument("-f", "--format")
-         .help("what figure format you need")
+         .help("what figure format you need, range {pdf, jpg, png}")
          .default_value<std::vector<std::string>>({"pdf"})
          .append();
     stats.add_argument("-g", "--gc")
          .help("whether the stats gc content, if not set, all gc content will be set 0.0")
          .flag();
     stats.add_argument("-t", "--threads")
-         .help("threads number used").default_value(1)
+         .help("threads number used, range (1, 16)").default_value(1)
          .scan<'i', int>();
     stats.add_argument("-c", "--chunk")
-         .help("chunk number used, more chunk more memory")
+         .help("chunk number used, more chunk more memory, range (10000, 100000)")
          .default_value(20000)
          .scan<'i', int>();
     nanofq.add_subparser(stats);
@@ -43,7 +43,7 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
           .help("the input fastq[.gz]")
           .required();
     filter.add_argument("-o", "--output")
-          .help("the stats output file name")
+          .help("the stats output file name, default print all results to stdout")
           .default_value("-");
     filter.add_argument("-l", "--min_len")
           .help("read min length, range (" + std::to_string(MINL) + ", " + std::to_string(MAXL) + ")")
@@ -61,12 +61,12 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
           .help("whether filter the gc content, used with --min_gc/--max_gc")
           .flag();
     filter.add_argument("-g", "--min_gc")
-          .help("read min gc content, used with --gc, range (" + std::to_string(static_cast<int>(MIN_PERCENT)) + ", " +
+          .help("read min gc content, used with --gc, otherwise ignore this parameter, range (" + std::to_string(static_cast<int>(MIN_PERCENT)) + ", " +
               std::to_string(static_cast<int>(MAX_PERCENT)) + ")")
           .default_value(MIN_PERCENT)
           .scan<'g', double>();
     filter.add_argument("-G", "--max_gc")
-          .help("read max gc content, used with --gc, range (" + std::to_string(static_cast<int>(MIN_PERCENT)) + ", " +
+          .help("read max gc content, used with --gc, otherwise ignore this parameter, range (" + std::to_string(static_cast<int>(MIN_PERCENT)) + ", " +
               std::to_string(static_cast<int>(MAX_PERCENT)) + ")")
           .default_value(MAX_PERCENT)
           .scan<'g', double>();
@@ -81,7 +81,7 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
     nanofq.add_subparser(filter);
 
     static argparse::ArgumentParser index{"index"};
-    index.add_description("index the input fastq");
+    index.add_description("index the input fastq. Never do it for short reads");
     index.add_argument("-i", "--input")
          .help("the input fastq[.gz]")
          .required();
@@ -93,12 +93,12 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
     nanofq.add_subparser(index);
 
     static argparse::ArgumentParser find{"find"};
-    find.add_description("find specified record from input fastq depends on the specified readnames");
+    find.add_description("find specified records from input fastq depends on the specified readnames");
     find.add_argument("-i", "--input")
         .help("the input fastq[.gz]")
         .required();
     find.add_argument("-o", "--output")
-        .help("the output file name, default, output to stdout")
+        .help("the output file name, default print all results to stdout")
         .default_value("-");
     find.add_argument("-r", "--reads")
         .help(
@@ -273,175 +273,4 @@ you can change this value by set specified parameter)");
         exit(1);
     }
     return nanofq;
-    // if (nanofq.is_subcommand_used("stats")) {
-    //     cout << "=================stats================" << endl;
-    //     auto input{stats.get("--input")};
-    //     cout << "input: " << input << endl;;
-    //     auto output{stats.get("--output")};
-    //     cout << "output: " << output << endl;
-    //     if (stats.is_used("--plot")) {
-    //         auto plot{stats.get("--plot")};
-    //         cout << "plot: " << plot << endl;
-    //     } else {
-    //         cout << "plot: " << "not set" << endl;
-    //     }
-    //     auto threads{stats.get<int>("--threads")};
-    //     check_number_in_range("--threads", threads, MINT, MAXT, stats, true);
-    //     cout << "threads: " << threads << endl;
-    //     auto chunk{stats.get<int>("--chunk")};
-    //     check_number_in_range("--chunk", chunk, MINC, MAXC, stats, true);
-    //     cout << "chunk: " << chunk << endl;
-    // } else if (nanofq.is_subcommand_used("filter")) {
-    //     cout << "=================filter================" << endl;
-    //     auto input{filter.get("--input")};
-    //     cout << "input: " << input << endl;;
-    //     auto output{filter.get("--output")};
-    //     cout << "output: " << output << endl;
-    //     auto min_len{filter.get<int>("--min_len")};
-    //     auto max_len{filter.get<int>("--max_len")};
-    //     check_number_in_range("--min_len", min_len, MINL, MAXL, filter, true);
-    //     check_number_in_range("--max_len", max_len, MINL, MAXL, filter, true);
-    //     cout << "min_len: " << min_len << endl;
-    //     cout << "max_len: " << max_len << endl;
-    //     if (filter.get<bool>("--gc")) {
-    //         auto min_gc = filter.get<double>("--min_gc");
-    //         auto max_gc = filter.get<double>("--max_gc");
-    //         check_number_in_range("--min_gc", min_gc, MIN_PERCENT, MAX_PERCENT, filter, false);
-    //         check_number_in_range("--max_gc", max_gc, MIN_PERCENT, MAX_PERCENT, filter, false);
-    //         cout << "min_gc: " << min_gc << endl;
-    //         cout << "max_gc: " << max_gc << endl;
-    //     } else {
-    //         cout << "gc: " << "not set" << endl;
-    //     }
-    //     auto threads{filter.get<int>("--threads")};
-    //     check_number_in_range("--threads", threads, MINT, MAXT, filter, true);
-    //     cout << "threads: " << threads << endl;
-    //     auto chunk{filter.get<int>("--chunk")};
-    //     check_number_in_range("--chunk", chunk, MINC, MAXC, filter, true);
-    //     cout << "chunk: " << chunk << endl;
-    // } else if (nanofq.is_subcommand_used("index")) {
-    //     // TODO
-    // } else if (nanofq.is_subcommand_used("trim")) {
-    //     /*
-    //     std::string input = trim.get("--input");
-    //     cout << "input: " << input << endl;
-    //     std::string output = trim.get("--output");
-    //     cout << "output: " << output << endl;
-    //     auto threads{trim.get<int>("--threads")};
-    //     check_number_in_range("--threads", threads, MINT, MAXT, trim, true);
-    //     cout << "threads: " << threads << endl;
-    //     auto chunk{trim.get<int>("--chunk")};
-    //     check_number_in_range("--chunk", chunk, MINC, MAXC, trim, true);
-    //     cout << "chunk: " << chunk << endl;
-    //     if (trim.is_used("--kit")) {
-    //         auto kit = trim.get("--kit");
-    //         cout << "kit: " << kit << endl;
-    //         if (trim.is_used("--barcode")) {
-    //             auto barcode = trim.get<int>("--barcode");
-    //             if (kit.ends_with(".24")) {
-    //                 if (barcode < MINB || barcode > MAX24B) {
-    //                     cerr << "If kit with 24 barcodes used, --barcode should be a integer and  in range (1, 24)" <<
-    //                         endl;
-    //                     cerr << trim << endl;
-    //                     exit(1);
-    //                 }
-    //                 cout << "barcode: " << barcode << endl;
-    //             } else if (kit.ends_with(".96")) {
-    //                 if (barcode < MINB || barcode > MAX96B) {
-    //                     cerr << "If kit with 96 barcodes used, --barcode should be a integer and  in range (1, 96)" <<
-    //                         endl;
-    //                     cerr << trim << endl;
-    //                     exit(1);
-    //                 }
-    //                 cout << "barcode: " << barcode << endl;
-    //             } else {
-    //                 cerr << "If kit with no barcode used, ignore --barcode" << endl;
-    //             }
-    //         }
-    //     } else {
-    //         auto primer = trim.get("--primers");
-    //         cout << "primer: " << primer << endl;
-    //         if (trim.is_used("--barcode")) {
-    //             cerr << "If --kit no used, --barcode will be ignored" << endl;
-    //         }
-    //     }
-    //     int match{trim.get<int>("--match")};
-    //     check_number_in_range<int>("--match", match, 1, 100, trim, true);
-    //     cout << "match: " << match << endl;
-    //     int mismatch{trim.get<int>("--mismatch")};
-    //     check_number_in_range<int>("--mismatch", mismatch, -100, 0, trim, true);
-    //     cout << "mismatch: " << mismatch << endl;
-    //     int gap_open{trim.get<int>("--gap_open")};
-    //     check_number_in_range<int>("--gap_open", gap_open, -100, 0, trim, true);
-    //     cout << "gap_open: " << gap_open << endl;
-    //     int gap_extend{trim.get<int>("--gap_extend")};
-    //     check_number_in_range<int>("--gap_extend", gap_extend, -100, 0, trim, true);
-    //     cout << "gap_extend: " << gap_extend << endl;
-    //     if (trim.is_used("--5end_len")) {
-    //         int end5_len{trim.get<int>("--5end_len")};
-    //         check_number_in_range("--5end_len", end5_len, MIN_TARGET, MAX_TARGET, trim, true);
-    //         cout << "5end_len: " << end5_len << endl;
-    //     }
-    //     if (trim.is_used("--5end_align_percent")) {
-    //         double end5_align_percent{trim.get<double>("--5end_align_percent")};
-    //         check_number_in_range("--5end_align_percent", end5_align_percent, MIN_PERCENT, MAX_PERCENT, trim, false);
-    //         cout << "5end_align_percent: " << end5_align_percent << endl;
-    //     }
-    //     if (trim.is_used("--5end_align_identity")) {
-    //         double end5_align_identity{trim.get<double>("--5end_align_identity")};
-    //         check_number_in_range("--5end_align_identity", end5_align_identity, MIN_PERCENT, MAX_PERCENT, trim, false);
-    //         cout << "5end_align_identity: " << end5_align_identity << endl;
-    //     }
-    //     if (trim.is_used("--3end_len")) {
-    //         int end3_len{trim.get<int>("--3end_len")};
-    //         check_number_in_range("--3end_len", end3_len, MIN_TARGET, MAX_TARGET, trim, true);
-    //         cout << "3end_len: " << end3_len << endl;
-    //     }
-    //     if (trim.is_used("--3end_align_percent")) {
-    //         double end3_align_percent{trim.get<double>("--3end_align_percent")};
-    //         check_number_in_range("--3end_align_percent", end3_align_percent, MIN_PERCENT, MAX_PERCENT, trim, false);
-    //         cout << "3end_align_percent: " << end3_align_percent << endl;
-    //     }
-    //     if (trim.is_used("--3end_align_identity")) {
-    //         double end3_align_identity{trim.get<double>("--3end_align_identity")};
-    //         check_number_in_range("--3end_align_identity", end3_align_identity, MIN_PERCENT, MAX_PERCENT, trim, false);
-    //         cout << "3end_align_identity: " << end3_align_identity << endl;
-    //     }
-    //     if (trim.is_used("--5end_len_rc")) {
-    //         int end5_len_rc{trim.get<int>("--5end_len_rc")};
-    //         check_number_in_range("--5end_len_rc", end5_len_rc, MIN_TARGET, MAX_TARGET, trim, true);
-    //         cout << "5end_len_rc: " << end5_len_rc << endl;
-    //     }
-    //     if (trim.is_used("--5end_align_percent_rc")) {
-    //         double end5_align_percent_rc{trim.get<double>("--5end_align_percent_rc")};
-    //         check_number_in_range("--5end_align_percent_rc", end5_align_percent_rc, MIN_PERCENT, MAX_PERCENT, trim,
-    //                               false);
-    //         cout << "5end_align_percent_rc: " << end5_align_percent_rc << endl;
-    //     }
-    //     if (trim.is_used("--5end_align_identity_rc")) {
-    //         double end5_align_identity_rc{trim.get<double>("--5end_align_identity_rc")};
-    //         check_number_in_range("--5end_align_identity_rc", end5_align_identity_rc, MIN_PERCENT, MAX_PERCENT, trim,
-    //                               false);
-    //         cout << "5end_align_identity_rc: " << end5_align_identity_rc << endl;
-    //     }
-    //     if (trim.is_used("--3end_len_rc")) {
-    //         int end3_len_rc{trim.get<int>("--3end_len_rc")};
-    //         check_number_in_range("--3end_len_rc", end3_len_rc, MIN_TARGET, MAX_TARGET, trim, true);
-    //         cout << "3end_len_rc: " << end3_len_rc << endl;
-    //     }
-    //     if (trim.is_used("--3end_align_percent_rc")) {
-    //         double end3_align_percent_rc{trim.get<double>("--3end_align_percent_rc")};
-    //         check_number_in_range("--3end_align_percent_rc", end3_align_percent_rc, MIN_PERCENT, MAX_PERCENT, trim,
-    //                               false);
-    //         cout << "3end_align_percent_rc: " << end3_align_percent_rc << endl;
-    //     }
-    //     if (trim.is_used("--3end_align_identity_rc")) {
-    //         double end3_align_identity_rc{trim.get<double>("--3end_align_identity_rc")};
-    //         check_number_in_range("--3end_align_identity_rc", end3_align_identity_rc, MIN_PERCENT, MAX_PERCENT, trim,
-    //                               false);
-    //         cout << "3end_align_identity_rc: " << end3_align_identity_rc << endl;
-    //     }
-    //     */
-    // }
-    // return nanofq;
 }
