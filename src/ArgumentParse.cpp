@@ -19,6 +19,19 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
     stats.add_argument("-o", "--output")
          .help("the stats output file name, default print all results to stdout")
          .default_value("-");
+    stats.add_argument("-s", "--summary")
+        .help("output the summary into this file")
+        .default_value("./summary.txt");
+    stats.add_argument("-n", "--firstN")
+        .help("get the top N longest and high quality reads info in summary, range (1, 1000)")
+        .default_value(5)
+        .scan<'i', int>();
+
+    stats.add_argument("-q", "--quality")
+        .help("stats the reads that whose quality is bigger than this value, can be set multi times, range (1, 50)")
+        .append()
+        .scan<'i', int>();
+
     stats.add_argument("-p", "--plot")
          .help("whether plot the stats result, if it's set, the value will be the figure file name prefix");
     stats.add_argument("-f", "--format")

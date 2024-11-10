@@ -17,6 +17,20 @@ int sub_main(int argc, char* argv[]) {
         argparse::ArgumentParser& stats{nanofq.at<argparse::ArgumentParser>("stats")};
         std::string input{stats.get("--input")};
         std::string output{stats.get("--output")};
+        std::string summary{stats.get("--summary")};
+        int n{stats.get<int>("--firstN")};
+        check_number_in_range("--firstN", n, 1, 1000, stats, true);
+        std::vector<int> quals;
+        if (!stats.is_used("--quality")) {
+            // quals = {9, 12, 15, 18, 20, 25};
+            quals = {25, 20, 18, 15, 12, 9};
+        } else {
+            quals = {stats.get<std::vector<int>>("--quality")};
+            for (int i : quals) {
+                check_number_in_range("--quality", i, 1, 50, stats, true);
+            }
+            std::ranges::sort(quals, greater<>());
+        }
         bool make_plot{false};
         std::string plot_prefix;
         if (stats.is_used("--plot")) {
@@ -49,6 +63,7 @@ int sub_main(int argc, char* argv[]) {
             t1.join();
             t2.join();
         }
+        work.save_summary(n, quals, summary);
         if (out.is_open()) { out.close(); }
     } else if (nanofq.is_subcommand_used("filter")) {
         argparse::ArgumentParser& filter{nanofq.at<argparse::ArgumentParser>("filter")};
@@ -79,14 +94,13 @@ int sub_main(int argc, char* argv[]) {
             }
         }
         Work work{fq, static_cast<unsigned>(threads), gc, output == "-" ? std::cout : out};
-        if (threads == 1){
+        if (threads == 1) {
             work.run_filter(min_length, max_length, min_quality, min_gc, max_gc);
         } else {
             std::thread t1{&FastqReader::read_chunk_fastq, &fq};
             std::thread t2{&Work::run_filter, &work, min_length, max_length, min_quality, min_gc, max_gc};
             t1.join();
             t2.join();
-
         }
         if (out.is_open()) out.close();
     } else if (nanofq.is_subcommand_used("index")) {
