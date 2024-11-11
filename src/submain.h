@@ -2,6 +2,7 @@
 #define SUBMAIN_H
 #include <thread>
 #include <filesystem>
+#include <regex>
 
 #include "FastqReader.h"
 #include "Work.h"
@@ -30,6 +31,14 @@ int sub_main(int argc, char* argv[]) {
                 check_number_in_range("--quality", i, 1, 50, stats, true);
             }
             std::ranges::sort(quals, greater<>());
+        }
+        std::vector<int> lengths;
+        if (stats.is_used("--length")){
+            lengths = stats.get<std::vector<int>>("--length");
+            for (int i : lengths){
+                check_number_in_range("--length", i, MINL, MAXL, stats, true);
+            }
+            std::ranges::sort(lengths, greater<>());
         }
         bool make_plot{false};
         std::string plot_prefix;
@@ -63,7 +72,7 @@ int sub_main(int argc, char* argv[]) {
             t1.join();
             t2.join();
         }
-        work.save_summary(n, quals, summary);
+        work.save_summary(n, quals, lengths, summary);
         if (out.is_open()) { out.close(); }
     } else if (nanofq.is_subcommand_used("filter")) {
         argparse::ArgumentParser& filter{nanofq.at<argparse::ArgumentParser>("filter")};

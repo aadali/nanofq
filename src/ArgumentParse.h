@@ -28,7 +28,7 @@ void check_number_in_range(const std::string& parameter, const T& number, T min,
                            argparse::ArgumentParser& parser, bool integer) {
     std::string type{integer ? "integer" : "float"};
     if (number < min || number > max) {
-        std::cerr << fmt::format("{} should be a {}, and in range ({}, {})", parameter, type, min, max) << std::endl;
+        std::cerr << REDS + fmt::format("{} should be a {}, and in range ({}, {})", parameter, type, min, max)  + COLOR_END<< std::endl;
         std::cerr << parser << std::endl;
         exit(1);
     }
@@ -39,8 +39,8 @@ void check_choices(const std::string& parameter, std::vector<T>& choices, std::v
                    argparse::ArgumentParser& parser) {
     for (T& candidate : choices) {
         if (std::find(allowed_choices.begin(), allowed_choices.end(), candidate) == allowed_choices.end()) {
-            std::cerr << fmt::format("{} allowed choice should be in [{}]", parameter,
-                                     fmt::format("{}", fmt::join(allowed_choices, ", "))) << '\n';
+            std::cerr << REDS + fmt::format("{} allowed choice should be in [{}]", parameter,
+                                     fmt::format("{}", fmt::join(allowed_choices, ", "))) + COLOR_END << '\n';
             std::cerr << parser << std::endl;
             exit(1);
         }

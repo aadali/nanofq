@@ -28,10 +28,13 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
         .scan<'i', int>();
 
     stats.add_argument("-q", "--quality")
-        .help("count the reads number that whose quality is bigger than this value, can be set multi times, range (1, 50)")
+        .help("count the reads number that whose quality is bigger than this value, can be set multi times, default vector<int>{10,12,15,18,20,25}, range (1, 50)")
         .append()
         .scan<'i', int>();
-
+    stats.add_argument("-l", "--length")
+        .help("count the reads number that longer than this value, can be set multi times, no default value, range >= 1")
+        .append()
+        .scan<'i', int>();
     stats.add_argument("-p", "--plot")
          .help("whether plot the stats result, if it's set, the value will be the figure file name prefix");
     stats.add_argument("-f", "--format")

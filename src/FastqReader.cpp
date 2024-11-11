@@ -35,7 +35,7 @@ FastqReader::~FastqReader() {
         delete[] m_buffer;
         m_buffer = nullptr;
     }
-    if (m_seq) { kseq_destroy(m_seq); }
+    // if (m_seq) { kseq_destroy(m_seq); }
 }
 
 Read FastqReader::read_one_fastq() {

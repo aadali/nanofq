@@ -143,8 +143,9 @@ void Work::run_trim(const SequenceInfo& seq_info,
     }
 }
 
-void Work::save_summary(int n, std::vector<int>& read_quals, const std::string& summary_file_path) {
-    std::string summary_info{summary_stats_result(n, read_quals)};
+void Work::save_summary(int n, const std::vector<int>& read_quals, const std::vector<int>& read_lengths,
+                        const std::string& summary_file_path) {
+    std::string summary_info{summary_stats_result(n, read_quals, read_lengths)};
     std::ofstream summary_file{summary_file_path, std::ios::out};
     if (summary_file) {
         summary_file << summary_info;
@@ -186,7 +187,8 @@ void Work::stats(unsigned start,
     m_bar.arrive_and_wait();
 }
 
-std::string Work::summary_stats_result(int n, std::vector<int>& read_quals) {
+std::string Work::summary_stats_result(int n, const std::vector<int>& read_quals,
+                                       const std::vector<int>& read_lengths) {
     std::stringstream summary_stream;
     for (int i{1}; i < m_stats_result.size(); i++) {
         for (read_stats_result& item : m_stats_result[i]) {
@@ -247,12 +249,42 @@ std::string Work::summary_stats_result(int n, std::vector<int>& read_quals) {
     longest_reads << fmt::format("#Top {} longest  reads\nnth\tReadName\tReadLen\tReadQuality\tGC\n", n);
     for (int i{0}; i < n; i++) {
         if (i >= total_reads_number) { break; }
-        longest_reads<< fmt::format("{}\t{}\t{}\t{}\t{}\n",
-                                      i + 1,
-                                      std::get<0>(stats_result[i]),
-                                      std::get<1>(stats_result[i]),
-                                      fmt::format("{:.{}f}", std::get<2>(stats_result[i]), 2),
-                                      fmt::format("{:.{}f}", std::get<3>(stats_result[i]), 2));
+        longest_reads << fmt::format("{}\t{}\t{}\t{}\t{}\n",
+                                     i + 1,
+                                     std::get<0>(stats_result[i]),
+                                     std::get<1>(stats_result[i]),
+                                     fmt::format("{:.{}f}", std::get<2>(stats_result[i]), 2),
+                                     fmt::format("{:.{}f}", std::get<3>(stats_result[i]), 2));
+    }
+    std::stringstream lengths_info;
+    int read_idx{0};
+    ulong reads_count = 0;
+    ulong bases_count = 0;
+    auto stats_depend_length{
+        [&](int length){
+            for (; read_idx < total_reads_number; read_idx++) {
+                if (std::get<1>(stats_result[read_idx]) < length || read_idx == total_reads_number - 1) {
+                    lengths_info << fmt::format("ReadLength > {}\t{}({});{}({})\n",
+                                                length,
+                                                reads_count,
+                                                fmt::format(
+                                                    "{:.{}f}", static_cast<double>(reads_count) / total_reads_number,
+                                                    2),
+                                                bases_count,
+                                                fmt::format(
+                                                    "{:.{}f}", static_cast<double>(bases_count) / total_bases_number,
+                                                    2));
+                    break;
+                }
+                reads_count += 1;
+                bases_count += std::get<1>(stats_result[read_idx]);
+            }
+        }
+    };
+    if (!read_lengths.empty()) {
+        for (const int& length : read_lengths) {
+            stats_depend_length(length);
+        }
     }
     // decreased by read quality
     std::ranges::sort(stats_result, [](auto& x, auto& y){ return std::get<2>(x) > std::get<2>(y); });
@@ -274,16 +306,16 @@ std::string Work::summary_stats_result(int n, std::vector<int>& read_quals) {
     summary_stream << fmt::format("ReadMeanQuality\t{}", fmt::format("{:.{}f}\n", mean_quality, 2));
 
 
-    summary_stream << "#ReadQuality>SpecifiedQuality\tReadsNumber(ReadsPercent);BasesNumber(BasesPercent)\n";
-    int read_idx{0};
-    ulong reads_count{0};
-    ulong bases_count{0};
+    summary_stream << "#ReadQuality > SpecifiedValue\tReadsNumber(ReadsPercent);BasesNumber(BasesPercent)\n";
+    read_idx = 0;
+    reads_count = 0;
+    bases_count = 0;
 
     auto stats_depend_quality{
         [&](int quality){
             for (; read_idx < total_reads_number; read_idx++) {
                 if (std::get<2>(stats_result[read_idx]) < quality || read_idx == total_reads_number - 1) {
-                    summary_stream << fmt::format("ReadQuality>{}\t{}({});{}({})\n",
+                    summary_stream << fmt::format("ReadQuality > {}\t{}({});{}({})\n",
                                                   quality,
                                                   reads_count,
                                                   fmt::format(
@@ -300,9 +332,10 @@ std::string Work::summary_stats_result(int n, std::vector<int>& read_quals) {
             }
         }
     };
-    for (int& quality : read_quals) {
+    for (const int& quality : read_quals) {
         stats_depend_quality(quality);
     }
+    summary_stream << lengths_info.str();
     summary_stream << longest_reads.str();
     summary_stream << fmt::format("#Top {} high quality reads\nnth\tReadName\tReadLen\tReadQuality\tGC\n", n);
     for (int i{0}; i < n; i++) {

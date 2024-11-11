@@ -41,7 +41,7 @@ public:
     void run_find(const std::string& input_reads, bool use_index, unsigned key_length = 5) const;
     void run_index(unsigned key_length) const;
     void run_trim(const SequenceInfo& seq_info, const trim_direction&td, std::vector<AlignmentConfig>& align_configs, std::ostream& log_fstream) ;
-    void save_summary(int, std::vector<int>&, const std::string& summary_file_path);
+    void save_summary(int, const std::vector<int>&, const std::vector<int>&, const std::string& summary_file_path);
     ~Work()= default;
 
 private:
@@ -49,7 +49,7 @@ private:
                unsigned,
                const shared_vec_reads&,
                std::vector<read_stats_result>& sub_stats_result);
-    std::string summary_stats_result(int n, std::vector<int>& read_quals);
+    std::string summary_stats_result(int n, const std::vector<int>& read_quals, const std::vector<int>& read_lengths);
     void stats_one_thread(const Read &read);
     void filter(unsigned start,
                 unsigned end,
