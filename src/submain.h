@@ -23,7 +23,7 @@ int sub_main(int argc, char* argv[]) {
         std::vector<int> quals;
         if (!stats.is_used("--quality")) {
             // quals = {9, 12, 15, 18, 20, 25};
-            quals = {25, 20, 18, 15, 12, 9};
+            quals = {25, 20, 18, 15, 12, 10};
         } else {
             quals = {stats.get<std::vector<int>>("--quality")};
             for (int i : quals) {

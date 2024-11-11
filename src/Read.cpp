@@ -46,11 +46,11 @@ void Read::rev_com() {
 }
 
 float Read::calculate_read_quality() const {
-    auto error_p{m_quality | std::views::transform([](const char& c){ return s_char_to_score_table[c]; })};
-    double total_error_p{
-        std::accumulate(std::cbegin(error_p), std::cend(error_p), 0.0) / static_cast<float>(m_quality.size())
+    auto error_probability{m_quality | std::views::transform([](const char& c){ return s_char_to_score_table[c]; })};
+    double total_error_probability{
+        std::accumulate(std::cbegin(error_probability), std::cend(error_probability), 0.0) / static_cast<float>(m_quality.size())
     };
-    return std::log10(total_error_p) * -10.0;
+    return std::log10(total_error_probability) * -10.0;
 }
 
 bool Read::is_passed(const unsigned min_length, const unsigned max_length, const float quality) const {

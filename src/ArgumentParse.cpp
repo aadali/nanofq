@@ -28,7 +28,7 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
         .scan<'i', int>();
 
     stats.add_argument("-q", "--quality")
-        .help("stats the reads that whose quality is bigger than this value, can be set multi times, range (1, 50)")
+        .help("count the reads number that whose quality is bigger than this value, can be set multi times, range (1, 50)")
         .append()
         .scan<'i', int>();
 

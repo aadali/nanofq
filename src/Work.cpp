@@ -193,26 +193,26 @@ std::string Work::summary_stats_result(int n, std::vector<int>& read_quals) {
             m_stats_result[0].push_back(std::move(item));
         }
     }
-    // vector<read_stats_result>& stats_result = m_stats_result[0];
-    std::span<read_stats_result> stats_result_span{m_stats_result[0]};
+    std::vector<read_stats_result>& stats_result = m_stats_result[0];
+    // std::span<read_stats_result> stats_result_span{m_stats_result[0]};
     ulong total_bases_number{
-        std::accumulate(stats_result_span.begin(),
-                        stats_result_span.end(),
+        std::accumulate(stats_result.begin(),
+                        stats_result.end(),
                         0ul,
                         [](ulong x, const read_stats_result& y){ return x + static_cast<ulong>(std::get<1>(y)); }
         )
     };
-    ulong total_reads_number{stats_result_span.size()};
+    ulong total_reads_number{stats_result.size()};
     summary_stream << fmt::format("BasesNumber\t{}\n", total_bases_number);
     summary_stream << fmt::format("ReadsNumber\t{}\n", total_reads_number);
     // decreased by read length
-    std::ranges::sort(stats_result_span, [](auto& x, auto& y){ return std::get<1>(x) > std::get<1>(y); });
+    std::ranges::sort(stats_result, [](auto& x, auto& y){ return std::get<1>(x) > std::get<1>(y); });
     size_t n_idx{0};
     double n_length;
     auto get_n_percent{
-        [&n_idx, &n_length, &stats_result_span, total_bases_number](double percent){
-            for (; n_idx < stats_result_span.size(); n_idx++) {
-                ulong this_len{get<1>(stats_result_span[n_idx])};
+        [&n_idx, &n_length, &stats_result, total_bases_number](double percent){
+            for (; n_idx < stats_result.size(); n_idx++) {
+                ulong this_len{get<1>(stats_result[n_idx])};
                 n_length += this_len;
                 if (n_length / total_bases_number > percent) { return this_len; }
             }
@@ -223,46 +223,47 @@ std::string Work::summary_stats_result(int n, std::vector<int>& read_quals) {
     ulong n50{get_n_percent(0.5)};
     ulong n90{get_n_percent(0.9)};
     summary_stream << fmt::format("N10\t{}\nN50\t{}\nN90\t{}\n", n10, n50, n90);
-    auto get_quantile_len{
+    auto get_len_quantile{
         [&](double quantile){
             size_t quantile_idx{static_cast<size_t>(total_reads_number * quantile)};
-            return std::get<1>(stats_result_span[total_reads_number - quantile_idx + 1]);
+            return std::get<1>(stats_result[total_reads_number - quantile_idx + 1]);
         }
     };
     auto get_quantile_quality{
         [&](double quantile){
             size_t quantile_idx{static_cast<size_t>(total_reads_number * quantile)};
-            return std::get<2>(stats_result_span[total_reads_number - quantile_idx + 1]);
+            return std::get<2>(stats_result[total_reads_number - quantile_idx + 1]);
         }
     };
 
-    unsigned read_len_quantile25{get_quantile_len(0.25)};
-    unsigned read_len_quantile50{get_quantile_len(0.5)};
-    unsigned read_len_quantile75{get_quantile_len(0.75)};
-    unsigned mean_read_len{static_cast<unsigned>(total_bases_number / stats_result_span.size())};
+    unsigned read_len_quantile25{get_len_quantile(0.25)};
+    unsigned read_len_quantile50{get_len_quantile(0.5)};
+    unsigned read_len_quantile75{get_len_quantile(0.75)};
+    unsigned mean_read_len{static_cast<unsigned>(total_bases_number / total_reads_number)};
     summary_stream << fmt::format("ReadLenQuantile25\t{}\nReadLenQuantile50\t{}\nReadLenQuantile75\t{}\n",
                                   read_len_quantile25, read_len_quantile50, read_len_quantile75);
     summary_stream << fmt::format("ReadMeanLen\t{}\n", mean_read_len);
-    summary_stream << fmt::format("#Top {} longest  reads: nth\tReadName\tReadLen\tReadQuality\tGC\n", n);
+    std::stringstream longest_reads;
+    longest_reads << fmt::format("#Top {} longest  reads\nnth\tReadName\tReadLen\tReadQuality\tGC\n", n);
     for (int i{0}; i < n; i++) {
         if (i >= total_reads_number) { break; }
-        summary_stream << fmt::format("{}\t{}\n",
+        longest_reads<< fmt::format("{}\t{}\t{}\t{}\t{}\n",
                                       i + 1,
-                                      std::get<0>(stats_result_span[i]),
-                                      std::get<1>(stats_result_span[i]),
-                                      fmt::format("{:.{}f}", std::get<2>(stats_result_span[i]), 2),
-                                      fmt::format("{:.{}f}", std::get<3>(stats_result_span[i]), 2));
+                                      std::get<0>(stats_result[i]),
+                                      std::get<1>(stats_result[i]),
+                                      fmt::format("{:.{}f}", std::get<2>(stats_result[i]), 2),
+                                      fmt::format("{:.{}f}", std::get<3>(stats_result[i]), 2));
     }
     // decreased by read quality
-    std::ranges::sort(stats_result_span, [](auto& x, auto& y){ return std::get<2>(x) > std::get<2>(y); });
-    float sum_quality{
-        std::accumulate(stats_result_span.begin(),
-                        stats_result_span.end(),
+    std::ranges::sort(stats_result, [](auto& x, auto& y){ return std::get<2>(x) > std::get<2>(y); });
+    float total_error_probability{
+        std::accumulate(stats_result.begin(),
+                        stats_result.end(),
                         0.0f,
-                        [](float x, const read_stats_result& y){ return x + (std::get<2>(y)); }
+                        [](float x, const read_stats_result& y){ return x + std::pow(10.0f, std::get<2>(y) / -10.0f); }
         )
     };
-    double mean_quality{sum_quality / total_reads_number};
+    double mean_quality{std::log10(total_error_probability / total_reads_number) * -10};
     double read_quality_quantile25{get_quantile_quality(0.25f)};
     double read_quality_quantile50{get_quantile_quality(0.5f)};
     double read_quality_quantile75{get_quantile_quality(0.75f)};
@@ -271,19 +272,9 @@ std::string Work::summary_stats_result(int n, std::vector<int>& read_quals) {
                                   fmt::format("{:.{}f}", read_quality_quantile50, 2),
                                   fmt::format("{:.{}f}", read_quality_quantile75, 2));
     summary_stream << fmt::format("ReadMeanQuality\t{}", fmt::format("{:.{}f}\n", mean_quality, 2));
-    summary_stream << fmt::format("#Top {} high quality reads: nth\tReadName\tReadLen\tReadQuality\tGC\n", n);
-    for (int i{0}; i < n; i++) {
-        summary_stream << fmt::format("{}\t{}\n",
-                                      i + 1,
-                                      std::get<0>(stats_result_span[total_reads_number - i - 1]),
-                                      std::get<1>(stats_result_span[total_reads_number - i - 1]),
-                                      fmt::format("{:.{}f}", std::get<2>(stats_result_span[total_reads_number - i - 1]),
-                                                  2),
-                                      fmt::format("{:.{}f}", std::get<3>(stats_result_span[total_reads_number - i - 1]),
-                                                  2));
-    }
 
-    summary_stream << "ReadQuality>{ReadQuality}\t{ReadsNumber(ReadsPercent)};{BasesNumber(BasesPercent)}\n";
+
+    summary_stream << "#ReadQuality>SpecifiedQuality\tReadsNumber(ReadsPercent);BasesNumber(BasesPercent)\n";
     int read_idx{0};
     ulong reads_count{0};
     ulong bases_count{0};
@@ -291,7 +282,7 @@ std::string Work::summary_stats_result(int n, std::vector<int>& read_quals) {
     auto stats_depend_quality{
         [&](int quality){
             for (; read_idx < total_reads_number; read_idx++) {
-                if (std::get<2>(stats_result_span[read_idx]) > quality) {
+                if (std::get<2>(stats_result[read_idx]) < quality || read_idx == total_reads_number - 1) {
                     summary_stream << fmt::format("ReadQuality>{}\t{}({});{}({})\n",
                                                   quality,
                                                   reads_count,
@@ -305,12 +296,25 @@ std::string Work::summary_stats_result(int n, std::vector<int>& read_quals) {
                     break;
                 }
                 reads_count += 1;
-                bases_count += std::get<1>(stats_result_span[read_idx]);
+                bases_count += std::get<1>(stats_result[read_idx]);
             }
         }
     };
     for (int& quality : read_quals) {
         stats_depend_quality(quality);
+    }
+    summary_stream << longest_reads.str();
+    summary_stream << fmt::format("#Top {} high quality reads\nnth\tReadName\tReadLen\tReadQuality\tGC\n", n);
+    for (int i{0}; i < n; i++) {
+        if (i >= total_reads_number) { break; }
+        summary_stream << fmt::format("{}\t{}\t{}\t{}\t{}\n",
+                                      i + 1,
+                                      std::get<0>(stats_result[i]),
+                                      std::get<1>(stats_result[i]),
+                                      fmt::format("{:.{}f}", std::get<2>(stats_result[i]),
+                                                  2),
+                                      fmt::format("{:.{}f}", std::get<3>(stats_result[i]),
+                                                  2));
     }
     return summary_stream.str();
 }
