@@ -205,7 +205,7 @@ std::string Work::summary_stats_result(int n, const std::vector<int>& read_quals
         )
     };
     ulong total_reads_number{stats_result.size()};
-    summary_stream << fmt::format("BasesNumber\t{}\n", total_bases_number);
+    summary_stream << fmt::format("BasesNumber\t{:.6f}Mb\n", static_cast<double>(total_bases_number) / 1000000);
     summary_stream << fmt::format("ReadsNumber\t{}\n", total_reads_number);
     // decreased by read length
     std::ranges::sort(stats_result, [](auto& x, auto& y){ return std::get<1>(x) > std::get<1>(y); });
@@ -225,6 +225,7 @@ std::string Work::summary_stats_result(int n, const std::vector<int>& read_quals
     ulong n50{get_n_percent(0.5)};
     ulong n90{get_n_percent(0.9)};
     summary_stream << fmt::format("N10\t{}\nN50\t{}\nN90\t{}\n", n10, n50, n90);
+
     auto get_len_quantile{
         [&](double quantile){
             size_t quantile_idx{static_cast<size_t>(total_reads_number * quantile)};
@@ -241,10 +242,19 @@ std::string Work::summary_stats_result(int n, const std::vector<int>& read_quals
     unsigned read_len_quantile25{get_len_quantile(0.25)};
     unsigned read_len_quantile50{get_len_quantile(0.5)};
     unsigned read_len_quantile75{get_len_quantile(0.75)};
-    unsigned mean_read_len{static_cast<unsigned>(total_bases_number / total_reads_number)};
+    double mean_read_len{static_cast<double>(total_bases_number) / static_cast<double>(total_reads_number)};
     summary_stream << fmt::format("ReadLenQuantile25\t{}\nReadLenQuantile50\t{}\nReadLenQuantile75\t{}\n",
                                   read_len_quantile25, read_len_quantile50, read_len_quantile75);
-    summary_stream << fmt::format("ReadMeanLen\t{}\n", mean_read_len);
+    summary_stream << fmt::format("ReadMeanLen\t{:.2f}\n", mean_read_len);
+    double sum_std = std::accumulate(stats_result.begin(),
+                    stats_result.end(),
+                    0.0,
+                    [&](double x, const read_stats_result& y){
+                        return x + std::pow(static_cast<double>(std::get<1>(y)) - mean_read_len, 2);
+                    }
+    );
+    double std {std::sqrt(sum_std/total_reads_number)};
+    summary_stream <<fmt::format("ReadLenStd\t{:.2f}\n", std);
     std::stringstream longest_reads;
     longest_reads << fmt::format("#Top {} longest  reads\nnth\tReadName\tReadLen\tReadQuality\tGC\n", n);
     for (int i{0}; i < n; i++) {
@@ -253,8 +263,8 @@ std::string Work::summary_stats_result(int n, const std::vector<int>& read_quals
                                      i + 1,
                                      std::get<0>(stats_result[i]),
                                      std::get<1>(stats_result[i]),
-                                     fmt::format("{:.{}f}", std::get<2>(stats_result[i]), 2),
-                                     fmt::format("{:.{}f}", std::get<3>(stats_result[i]), 2));
+                                     fmt::format("{:.2f}", std::get<2>(stats_result[i])),
+                                     fmt::format("{:.2f}", std::get<3>(stats_result[i])));
     }
     std::stringstream lengths_info;
     int read_idx{0};
@@ -268,12 +278,12 @@ std::string Work::summary_stats_result(int n, const std::vector<int>& read_quals
                                                 length,
                                                 reads_count,
                                                 fmt::format(
-                                                    "{:.{}f}", static_cast<double>(reads_count) / total_reads_number,
-                                                    2),
-                                                bases_count,
+                                                    "{:.2f}%",
+                                                    100 * static_cast<double>(reads_count) / total_reads_number),
+                                                fmt::format("{:.6f}Mb", static_cast<double>(bases_count) / 1000000),
                                                 fmt::format(
-                                                    "{:.{}f}", static_cast<double>(bases_count) / total_bases_number,
-                                                    2));
+                                                    "{:.2f}%",
+                                                    100 * static_cast<double>(bases_count) / total_bases_number));
                     break;
                 }
                 reads_count += 1;
@@ -300,10 +310,10 @@ std::string Work::summary_stats_result(int n, const std::vector<int>& read_quals
     double read_quality_quantile50{get_quantile_quality(0.5f)};
     double read_quality_quantile75{get_quantile_quality(0.75f)};
     summary_stream << fmt::format("ReadQualityQuantile25\t{}\nReadQualityQuantile50\t{}\nReadQualityQuantile75\t{}\n",
-                                  fmt::format("{:.{}f}", read_quality_quantile25, 2),
-                                  fmt::format("{:.{}f}", read_quality_quantile50, 2),
-                                  fmt::format("{:.{}f}", read_quality_quantile75, 2));
-    summary_stream << fmt::format("ReadMeanQuality\t{}", fmt::format("{:.{}f}\n", mean_quality, 2));
+                                  fmt::format("{:.2f}", read_quality_quantile25),
+                                  fmt::format("{:.2f}", read_quality_quantile50),
+                                  fmt::format("{:.2f}", read_quality_quantile75));
+    summary_stream << fmt::format("ReadMeanQuality\t{}", fmt::format("{:.2f}\n", mean_quality));
 
 
     summary_stream << "#ReadQuality > SpecifiedValue\tReadsNumber(ReadsPercent);BasesNumber(BasesPercent)\n";
@@ -319,12 +329,13 @@ std::string Work::summary_stats_result(int n, const std::vector<int>& read_quals
                                                   quality,
                                                   reads_count,
                                                   fmt::format(
-                                                      "{:.{}f}", static_cast<double>(reads_count) / total_reads_number,
-                                                      2),
-                                                  bases_count,
+                                                      "{:.2f}%",
+                                                      100 * static_cast<double>(reads_count) / total_reads_number),
+                                                  fmt::format("{:.6f}Mb", static_cast<double>(bases_count) / 1000000),
                                                   fmt::format(
-                                                      "{:.{}f}", static_cast<double>(bases_count) / total_bases_number,
-                                                      2));
+                                                      "{:.2f}%",
+                                                      100 * static_cast<double>(bases_count) / total_bases_number
+                                                  ));
                     break;
                 }
                 reads_count += 1;
@@ -344,10 +355,8 @@ std::string Work::summary_stats_result(int n, const std::vector<int>& read_quals
                                       i + 1,
                                       std::get<0>(stats_result[i]),
                                       std::get<1>(stats_result[i]),
-                                      fmt::format("{:.{}f}", std::get<2>(stats_result[i]),
-                                                  2),
-                                      fmt::format("{:.{}f}", std::get<3>(stats_result[i]),
-                                                  2));
+                                      fmt::format("{:.2f}", std::get<2>(stats_result[i])),
+                                      fmt::format("{:.2f}", std::get<3>(stats_result[i])));
     }
     return summary_stream.str();
 }
