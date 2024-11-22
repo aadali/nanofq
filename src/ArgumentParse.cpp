@@ -69,8 +69,8 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
           .help("read max length, range (" + std::to_string(MINL) + ", " + std::to_string(MAXL) + ")")
           .default_value(MAXL)
           .scan<'i', int>();
-    filter.add_argument("-q", "--min_quality, range (0.0, 100.0)")
-          .help("read min quality")
+    filter.add_argument("-q", "--min_quality")
+          .help("read min quality, range (0.0, 100.0)")
           .default_value(8.0)
           .scan<'g', double>();
     filter.add_argument("", "--gc")
@@ -272,7 +272,7 @@ you can change this value by set specified parameter)");
         nanofq.parse_args(argc, argv);
     }
     catch (const std::exception& e) {
-        cerr << REDS << e.what() << COLOR_END << endl;
+        cerr << "\n" <<REDS << e.what() << COLOR_END << "\n" << endl;
         if (nanofq.is_subcommand_used("stats")) {
             cerr << stats << endl;
         } else if (nanofq.is_subcommand_used("trim")) {

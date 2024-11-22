@@ -78,10 +78,10 @@ int sub_main(int argc, char* argv[]) {
         argparse::ArgumentParser& filter{nanofq.at<argparse::ArgumentParser>("filter")};
         std::string input{filter.get("--input")};
         std::string output{filter.get("--output")};
-        int min_length{filter.get<int>("--min_length")};
-        check_number_in_range("--min_length", min_length, MINL, MAXL, filter, true);
-        int max_length{filter.get<int>("--max_length")};
-        check_number_in_range("--max_length", max_length, MINL, MAXL, filter, true);
+        int min_length{filter.get<int>("--min_len")};
+        check_number_in_range("--min_len", min_length, MINL, MAXL, filter, true);
+        int max_length{filter.get<int>("--max_len")};
+        check_number_in_range("--max_len", max_length, MINL, MAXL, filter, true);
         double min_quality{filter.get<double>("--min_quality")};
         check_number_in_range("--min_double", min_quality, 0.0, 100.0, filter, false);
         bool gc{filter.get<bool>("--gc")};

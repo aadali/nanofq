@@ -24,6 +24,7 @@ add_executable(nanofq
         src/ArgumentParse.cpp
         src/ArgumentParse.h
         src/submain.h
+        src/ThreadPool.h
 )
 
 #target_link_libraries(nanofq fmt)
