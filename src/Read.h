@@ -41,9 +41,9 @@ public:
 
     Read& operator=(const Read& read) = delete;
 
-    Read(Read&& read) = default;
+    Read(Read&& read) noexcept ;
 
-    Read& operator=(Read&& read) = delete;
+    Read& operator=(Read&& read) noexcept;
 
     ~Read() = default;
 

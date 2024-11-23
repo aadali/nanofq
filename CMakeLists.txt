@@ -23,7 +23,7 @@ add_executable(nanofq
         src/SequenceInfo.cpp
         src/ArgumentParse.cpp
         src/ArgumentParse.h
-        src/submain.h
+#        src/submain.h
         src/ThreadPool.h
 )
 

@@ -8,7 +8,27 @@ Read::Read(std::string& id, std::string& desc, std::string& sequence, std::strin
 Read::Read(char* id, char* desc, char* sequence, char* quality) :
     m_id(id), m_desc(desc ? desc : ""), m_sequence(sequence), m_quality(quality) {}
 
-float Read::get_gc_content() const {
+Read& Read::operator=(Read&& read) noexcept
+{
+    if (&read != this) {
+        m_id = std::move(read.m_id);
+        m_desc = std::move(read.m_desc);
+        m_sequence = std::move(read.m_sequence);
+        m_quality = std::move(read.m_quality);
+    }
+    return *this;
+}
+
+Read::Read(Read&& read) noexcept
+{
+    m_id = std::move(read.m_id);
+    m_desc = std::move(read.m_desc);
+    m_sequence = std::move(read.m_sequence);
+    m_quality = std::move(read.m_quality);
+}
+
+float Read::get_gc_content() const
+{
     auto gc_number{
         std::ranges::count_if(m_sequence,
                               [](const char& c){ return c == 'G' || c == 'C' || c == 'g' || c == 'c'; })
@@ -16,7 +36,8 @@ float Read::get_gc_content() const {
     return static_cast<float>(gc_number) / static_cast<float>(m_sequence.size());
 }
 
-void Read::rev_com() {
+void Read::rev_com()
+{
     std::ranges::transform(m_sequence,
                            std::begin(m_sequence),
                            [](const char& c){
@@ -45,22 +66,26 @@ void Read::rev_com() {
     std::ranges::reverse(m_quality);
 }
 
-float Read::calculate_read_quality() const {
+float Read::calculate_read_quality() const
+{
     auto error_probability{m_quality | std::views::transform([](const char& c){ return s_char_to_score_table[c]; })};
     double total_error_probability{
-        std::accumulate(std::cbegin(error_probability), std::cend(error_probability), 0.0) / static_cast<float>(m_quality.size())
+        std::accumulate(std::cbegin(error_probability), std::cend(error_probability), 0.0) / static_cast<float>(
+            m_quality.size())
     };
     return std::log10(total_error_probability) * -10.0;
 }
 
-bool Read::is_passed(const unsigned min_length, const unsigned max_length, const float quality) const {
+bool Read::is_passed(const unsigned min_length, const unsigned max_length, const float quality) const
+{
     return m_sequence.size() >= min_length
         && m_sequence.size() <= max_length
         && calculate_read_quality() > quality;
 }
 
 bool Read::is_passed(const unsigned min_length, const unsigned max_length, float quality, float min_gc,
-                     float max_gc) const {
+                     float max_gc) const
+{
     float gc{get_gc_content()};
     return m_sequence.size() >= min_length
         && m_sequence.size() <= max_length
@@ -69,7 +94,8 @@ bool Read::is_passed(const unsigned min_length, const unsigned max_length, float
         && gc < max_gc;
 }
 
-std::string Read::get_record() const {
+std::string Read::get_record() const
+{
     if (m_desc.empty()) {
         return fmt::format("@{}\n{}\n+\n{}\n", m_id, m_sequence, m_quality);
     }
@@ -78,7 +104,8 @@ std::string Read::get_record() const {
 
 
 size_t Read::trim_positive_strand_left(std::string_view top5end_query, const trim_end& top5end,
-                                       AlignmentConfig& align_config, AlignmentResult& align_5end_result) const {
+                                       AlignmentConfig& align_config, AlignmentResult& align_5end_result) const
+{
     std::string_view sequence_view{m_sequence};
     std::string_view top5end_target{
         sequence_view.size() > get<0>(top5end)
@@ -97,7 +124,8 @@ size_t Read::trim_positive_strand_left(std::string_view top5end_query, const tri
 
 size_t Read::trim_positive_strand_right(std::string_view& left_trimmed_seq_view, std::string_view top3end_query,
                                         const trim_end& top3end, AlignmentConfig& align_config,
-                                        AlignmentResult& align_3end_result) const {
+                                        AlignmentResult& align_3end_result) const
+{
     std::string_view top3end_target{
         left_trimmed_seq_view.size() > get<0>(top3end)
             ? left_trimmed_seq_view.substr(left_trimmed_seq_view.size() - get<0>(top3end))
@@ -114,7 +142,8 @@ size_t Read::trim_positive_strand_right(std::string_view& left_trimmed_seq_view,
 }
 
 size_t Read::trim_negative_strand_left(std::string_view bot5end_query, const trim_end& bot5end,
-                                       AlignmentConfig& align_config, AlignmentResult& align_5end_result) const {
+                                       AlignmentConfig& align_config, AlignmentResult& align_5end_result) const
+{
     std::string_view sequence_view{m_sequence};
     std::string_view bot5end_target{
         sequence_view.size() > get<0>(bot5end)
@@ -133,7 +162,8 @@ size_t Read::trim_negative_strand_left(std::string_view bot5end_query, const tri
 
 size_t Read::trim_negative_strand_right(std::string_view& left_trimmed_seq_view, std::string_view bot3end_query,
                                         const trim_end& bot3end, AlignmentConfig& align_config,
-                                        AlignmentResult& align_3end_result) const {
+                                        AlignmentResult& align_3end_result) const
+{
     std::string_view bot3end_target{
         left_trimmed_seq_view.size() > get<0>(bot3end)
             ? left_trimmed_seq_view.substr(left_trimmed_seq_view.size() - get<0>(bot3end))
@@ -150,7 +180,8 @@ size_t Read::trim_negative_strand_right(std::string_view& left_trimmed_seq_view,
 }
 
 void Read::trim(const SequenceInfo& seq_info, const trim_direction& td, AlignmentConfig& align_config,
-                std::ostream& log) {
+                std::ostream& log)
+{
     AlignmentResult align_5end_result{true};
     AlignmentResult align_3end_result{false};
     std::string_view sequence_view{m_sequence};
@@ -204,6 +235,6 @@ void Read::trim(const SequenceInfo& seq_info, const trim_direction& td, Alignmen
                                              trim_stop_idx == m_sequence.size() ? 0 : m_sequence.size() - trim_stop_idx,
                                              align_string.str());
     }
-    m_sequence = m_sequence.substr(trim_start_idx, trim_stop_idx-trim_start_idx);
-    m_quality= m_quality.substr(trim_start_idx, trim_stop_idx-trim_start_idx);
+    m_sequence = m_sequence.substr(trim_start_idx, trim_stop_idx - trim_start_idx);
+    m_quality = m_quality.substr(trim_start_idx, trim_stop_idx - trim_start_idx);
 }

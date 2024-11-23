@@ -19,21 +19,17 @@ using shared_read = std::shared_ptr<Read>;
 class FastqReader
 {
 private:
-    bool m_finish{false};
-    //    std::fstream m_infile_text{};
+    std::string_view m_input_file;
     gzFile m_infile_gz{nullptr};
     kseq_t* m_seq;
-    shared_vec_reads m_reads{};
-    std::string_view m_input_file;
-    unsigned m_chunk;
+    int m_chunk_size;
     char *m_buffer;
-    static std::mutex ms_mtx;
-    static std::condition_variable ms_cond;
+    bool m_finish{false};
 
 public:
     FastqReader() = delete;
 
-    FastqReader(std::string_view input_file, unsigned chunk);
+    FastqReader(std::string_view input_file, int chunk);
 
     FastqReader(const FastqReader &) = delete;
 
@@ -45,15 +41,12 @@ public:
 
     ~FastqReader();
 
-    void read_chunk_fastq();
+    std::shared_ptr<std::vector<Read>> read_chunk_fastq();
 
     Read read_one_fastq();
 
     inline bool read_finish() const { return m_finish; };
 
-    inline bool is_empty() const { return m_reads->empty(); }
-
-    std::optional<shared_vec_reads> get_reads();
     void find_reads(const std::string &input_reads, std::ostream &out, bool use_index, unsigned key_length = 8);
     void index(unsigned key_len);
 

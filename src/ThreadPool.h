@@ -19,6 +19,7 @@ private:
     std::mutex m_mtx;
     std::condition_variable m_cv;
     std::atomic<bool> m_running;
+    std::vector<std::tuple<std::string, unsigned, double, double>>& m_result;
 
 public:
     ThreadPool() = delete;
@@ -27,7 +28,9 @@ public:
     ThreadPool& operator=(const ThreadPool&) = delete;
     ThreadPool& operator=(ThreadPool&&) = delete;
 
-    explicit ThreadPool(int threads_number) : m_running(true)
+    explicit ThreadPool(int threads_number, std::vector<std::tuple<std::string, unsigned, double, double>>& res) :
+        m_running(true),
+        m_result(res)
     {
         if (threads_number < 1) {
             std::cerr << "Thread number must >= 1" << std::endl;
@@ -35,7 +38,7 @@ public:
         }
         m_threads.reserve(threads_number);
         for (int i{0}; i < threads_number; i++) {
-            m_threads.emplace_back([this](){
+            m_threads.emplace_back([this,i](){
                 while (true) {
                     std::function<void()> task;
                     {
@@ -44,8 +47,8 @@ public:
                             task = std::move(m_tasks.front());
                             m_tasks.pop();
                         } else {
-                            m_cv.wait(lock, [this](){ return !m_running && !m_tasks.empty(); });
-                            if (!m_running) return;
+                            m_cv.wait(lock, [this](){ return !m_running || !m_tasks.empty(); });
+                            if (!m_running) {  return; }
                             task = std::move(m_tasks.front());
                             m_tasks.pop();
                         }
@@ -63,6 +66,8 @@ public:
         for (auto& t : m_threads) {
             if (t.joinable()) t.join();
         }
+        std::cout << "all finished" << std::endl;
+        std::cout << m_result.size() << std::endl;
     }
 
     template <typename Func, typename... Args>
@@ -80,6 +85,8 @@ public:
         m_cv.notify_one();
         return future;
     }
+
+    int threads_number() const { return m_threads.size(); }
 };
 
 

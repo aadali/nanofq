@@ -11,7 +11,7 @@
 #include "AlignmentResult.h"
 #include "Adapter.h"
 #include "ArgumentParse.h"
-
+/*
 int sub_main(int argc, char* argv[]) {
     argparse::ArgumentParser& nanofq{get_arguments(argc, argv)};
     if (nanofq.is_subcommand_used("stats")) {
@@ -338,4 +338,5 @@ int sub_main(int argc, char* argv[]) {
     return 0;
 }
 
+*/
 #endif //SUBMAIN_H

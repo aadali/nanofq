@@ -12,14 +12,12 @@
 using std::cout;
 using std::endl;
 using std::filesystem::last_write_time;
-std::mutex FastqReader::ms_mtx{};
-std::condition_variable FastqReader::ms_cond{};
 
-FastqReader::FastqReader(std::string_view input_file, unsigned chunk)
-    : m_input_file(input_file), m_chunk(chunk) {
-    std::vector<std::shared_ptr<Read>> tmp;
-    tmp.reserve(m_chunk);
-    m_reads = std::make_shared<std::vector<std::shared_ptr<Read>>>(tmp);
+FastqReader::FastqReader(std::string_view input_file, int chunk)
+    : m_input_file(input_file), m_chunk_size(chunk) {
+    // std::vector<Read> tmp;
+    // tmp.reserve(m_chunk_size);
+    // m_reads = std::make_shared<std::vector<std::shared_ptr<Read>>>(tmp);
     m_buffer = new char[FASTQ_BUFFER_SIZE];
     m_infile_gz = gzopen(input_file.data(), "rb");
     if (!m_infile_gz) {
@@ -35,7 +33,9 @@ FastqReader::~FastqReader() {
         delete[] m_buffer;
         m_buffer = nullptr;
     }
-    // if (m_seq) { kseq_destroy(m_seq); }
+    if (m_seq){
+        kseq_destroy(m_seq);
+    }
 }
 
 Read FastqReader::read_one_fastq() {
@@ -62,40 +62,41 @@ Read FastqReader::read_one_fastq() {
         exit(1);
     }
     Read read{m_seq->name.s, m_seq->comment.s, m_seq->seq.s, m_seq->qual.s};
-    // m_reads->emplace_back(std::make_shared<Read>(std::move(read)));
     return read;
 }
 
 
-void FastqReader::read_chunk_fastq() {
-    // std::string id, desc, sequence, quality;
-    // int l;
+std::shared_ptr<std::vector<Read>> FastqReader::read_chunk_fastq() {
+    // std::vector<Read> reads;
+    // reads.reserve(m_chunk_size);
+    std::shared_ptr<std::vector<Read>> reads_ptr=std::make_shared<std::vector<Read>>();
+    reads_ptr->reserve(m_chunk_size);
     while (true) {
-        Read read{read_one_fastq()};
-        if (read.get_id() == finished_read_name) break;
-        std::unique_lock<std::mutex> lock{ms_mtx};
-        m_reads->emplace_back(std::make_shared<Read>(std::move(read)));
-        if (m_reads->size() == m_chunk) {
-            // std::cout << "first finished" << std::endl;
-            ms_cond.wait(lock, [this](){ return m_reads->empty(); });
-        }
+        reads_ptr->emplace_back(read_one_fastq());
+        if (reads_ptr->size() == m_chunk_size || reads_ptr->back().get_id() == finished_read_name) {
+            if (reads_ptr->back().get_id() == finished_read_name){
+                reads_ptr->pop_back();
+                m_finish = true;
+            }
+            break;
+        };
     }
-    kseq_destroy(m_seq);
-    m_finish = true;
+    reads_ptr->shrink_to_fit();
+    return reads_ptr;
 }
 
-std::optional<shared_vec_reads> FastqReader::get_reads() {
-    if (m_reads->size() == m_chunk || m_finish) {
-        std::unique_lock<std::mutex> lock{ms_mtx};
-        shared_vec_reads a{std::move(m_reads)};
-        std::vector<std::shared_ptr<Read>> tmp;
-        tmp.reserve(m_chunk);
-        m_reads = std::make_shared<std::vector<std::shared_ptr<Read>>>(tmp);
-        ms_cond.notify_all();
-        return a;
-    }
-    return {};
-}
+// std::optional<shared_vec_reads> FastqReader::get_reads() {
+//     if (m_reads->size() == m_chunk_size || m_finish) {
+//         std::unique_lock<std::mutex> lock{ms_mtx};
+//         shared_vec_reads a{std::move(m_reads)};
+//         std::vector<std::shared_ptr<Read>> tmp;
+//         tmp.reserve(m_chunk_size);
+//         m_reads = std::make_shared<std::vector<std::shared_ptr<Read>>>(tmp);
+//         ms_cond.notify_all();
+//         return a;
+//     }
+//     return {};
+// }
 
 std::unordered_set<std::string> FastqReader::get_searching_read_names(const std::string& input_reads) {
     std::unordered_set<std::string> read_names;
@@ -206,7 +207,7 @@ void FastqReader::find_reads(const std::string& input_reads, std::ostream& out, 
                         std::endl;
                 }
             }
-            kseq_destroy(m_seq);
+            // kseq_destroy(m_seq);
             return;
         }
         if (l == -2) {
