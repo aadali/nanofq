@@ -25,6 +25,8 @@ add_executable(nanofq
         src/ArgumentParse.h
 #        src/submain.h
         src/ThreadPool.h
+        src/NanoBgzip.cpp
+        src/NanoBgzip.h
 )
 
 #target_link_libraries(nanofq fmt)
