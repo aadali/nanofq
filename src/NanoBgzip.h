@@ -1,14 +1,15 @@
-//
-// Created by a on 24-11-27.
-//
-
 #ifndef NANOBGZIP_H
 #define NANOBGZIP_H
 
-#include <string_view>
+/*
+ * gzip format: https://www.ietf.org/rfc/rfc1952.txt
+ * bgzf format: The BGZF compression format in SAMv1.pdf https://samtools.github.io/hts-specs/SAMv1.pdf
+*/
 #include <iostream>
 #include <fstream>
+#include <filesystem>
 #include <memory>
+#include <sstream>
 #include <zlib.h>
 #include <fmt/format.h>
 #include <bitset>
@@ -18,29 +19,61 @@ using std::cout;
 using std::cin;
 using std::cerr;
 using std::endl;
-enum class GzipType {
-    B_GZIP, //
+
+enum class GzipType
+{
+    B_GZIP,
     GZIP,
     NANO_B_GZIP
 };
-enum class OperationType{
-    COMPRESS,
-    DECOMPRESS
+
+
+struct BGZFHeader
+{
+    uint8_t id1; // 31
+    uint8_t id2; // 139
+    uint8_t cm;
+    uint8_t flg; // 4 => 00000100
+    uint32_t mtime;
+    uint8_t xfl;
+    uint8_t os;
+    uint16_t xlen;  // 6
+    uint8_t si1; // B
+    uint8_t si2; // C
+    uint16_t slen; // 2
+    uint16_t bsize;
 };
 
-class NanoBgzip {
-private:
-    std::string m_infile{"-"};
+struct NanoBgzipHeader
+{
+    uint8_t id1; // 31
+    uint8_t id2; // 139
+    uint8_t cm;
+    uint8_t flg; // 4 => 00000100
+    uint32_t mtime;
+    uint8_t xfl;
+    uint8_t os;
+    uint16_t xlen; // 8
+    uint8_t si1; // N
+    uint8_t si2; // A
+    uint16_t slen; // 2
+    uint32_t bsize;
+};
 
+class NanoBgzip
+{
 public:
-    explicit NanoBgzip(const std::string& infile);
-    void compress();
-    //    void decompress();
-    //    void index();
-    //private:
-    GzipType check_compress_type() const;
+    NanoBgzip(){};
+    NanoBgzip(const NanoBgzip&) = delete;
+    NanoBgzip(NanoBgzip&&) = delete;
+    NanoBgzip& operator=(const NanoBgzip&) = delete;
+    NanoBgzip& operator=(NanoBgzip&&) = delete;
+    static void nano_compress(const std::string& infile, const std::string& outfile, int reads_number = 10);
+    static GzipType check_compress_type(const std::string& infile);
+
+    static std::vector<std::string> get_index_in_block(const std::vector<uint8_t>& input_data);
 private:
-    std::vector<uint8_t> compress(std::vector<uint8_t>& input_data);
+    static std::vector<uint8_t> nano_block_compress(std::vector<uint8_t>& input_data, std::ostream& output_index_stream, size_t written_bytes);
 };
 
 
