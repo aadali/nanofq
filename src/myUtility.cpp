@@ -6,7 +6,8 @@
 #include "myUtility.h"
 #include "Adapter.h"
 
-std::string myUtility::rev_com(const std::string& seq) {
+std::string myUtility::rev_com(const std::string& seq)
+{
     std::string sequence{seq};
     std::ranges::transform(sequence,
                            std::begin(sequence),
@@ -31,7 +32,8 @@ std::string myUtility::rev_com(const std::string& seq) {
     return sequence;
 }
 
-[[nodiscard]] vector<string_view> myUtility::split(string_view str, string_view delim) {
+[[nodiscard]] vector<string_view> myUtility::split(string_view str, string_view delim)
+{
     vector<string_view> result;
     size_t pos = 0;
     while ((pos = str.find(delim)) != string::npos) {
@@ -44,28 +46,30 @@ std::string myUtility::rev_com(const std::string& seq) {
 }
 
 
-
-string_view myUtility::get_read_name_prefix(string_view header, unsigned key_length) {
+string_view myUtility::get_read_name_prefix(string_view header, unsigned key_length)
+{
     size_t space_idx{header.find(' ')};
     if (space_idx == std::string::npos) {
         return header.size() < key_length + 1 ? header.substr(1) : header.substr(1, key_length);
-    } else {
-        return space_idx <= key_length ? header.substr(1, space_idx - 1) : header.substr(1, key_length);
     }
+    return space_idx <= key_length ? header.substr(1, space_idx - 1) : header.substr(1, key_length);
 }
 
 void myUtility::smith_waterman(string_view target_seq, string_view query_seq, AlignmentConfig& config,
-                               AlignmentResult& result) {
+                               AlignmentResult& result)
+{
     if (!result.is_empty()) {
         std::cerr << REDS + "AlignmentResult should be empty" + COLOR_END << std::endl;;
         exit(1);
     }
     if (target_seq.size() > MAX_TARGET_LEN) {
-        std::cerr << REDS + fmt::format("max length of target seq should less than {}", MAX_TARGET_LEN) + COLOR_END << std::endl;;
+        std::cerr << REDS + fmt::format("max length of target seq should less than {}", MAX_TARGET_LEN) + COLOR_END <<
+            std::endl;;
         exit(1);
     }
     if (query_seq.size() > MAX_QUERY_LEN) {
-        std::cerr << REDS + fmt::format("max length of query seq should less than {}", MAX_QUERY_LEN)+ COLOR_END << std::endl;;
+        std::cerr << REDS + fmt::format("max length of query seq should less than {}", MAX_QUERY_LEN) + COLOR_END <<
+            std::endl;;
         exit(1);
     }
     int diagonal_score{0}, up_score{0}, left_score{0};
@@ -148,7 +152,8 @@ void myUtility::update_sequence_info(SequenceInfo& seq_info, int top5end_len, fl
                                      float top5end_identity, int top3end_len, float top3end_percent,
                                      float top3end_identity, int bot5end_len, float bot5end_percent,
                                      float bot5end_identity, int bot3end_len, float bot3end_percent,
-                                     float bot3end_identity) {
+                                     float bot3end_identity)
+{
     /*
      * parameter: *len, *percent, *identity should be checked at the stage of parsing argument from CLI
      * all of them couldn't be negative
@@ -200,7 +205,8 @@ void myUtility::update_sequence_info(SequenceInfo& seq_info, int top5end_len, fl
     }
 }
 
-trim_direction myUtility::how_trim(const SequenceInfo& seq_info) {
+trim_direction myUtility::how_trim(const SequenceInfo& seq_info)
+{
     trim_direction td;
     if (!seq_info.m_top5end_query.empty() && get<0>(seq_info.m_top5end) > 0) {
         td.trim_top5end = true;
@@ -217,7 +223,8 @@ trim_direction myUtility::how_trim(const SequenceInfo& seq_info) {
     return td;
 }
 
-std::string myUtility::get_all_seq_info() {
+std::string myUtility::get_all_seq_info()
+{
     std::stringstream info;
     std::unordered_map<std::string, SequenceInfo> all_trim_info = barcode_info::get_trim_info();
     for (std::string kit : std::vector{"SQK-LSK114", "SQK-ULK114", "SQK-RAD114", "SQK-PCS114"}) {
@@ -237,4 +244,3 @@ std::string myUtility::get_all_seq_info() {
     }
     return info.str();
 }
-

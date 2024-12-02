@@ -5,6 +5,8 @@
  * gzip format: https://www.ietf.org/rfc/rfc1952.txt
  * bgzf format: The BGZF compression format in SAMv1.pdf https://samtools.github.io/hts-specs/SAMv1.pdf
 */
+
+
 #include <iostream>
 #include <fstream>
 #include <filesystem>
@@ -19,61 +21,33 @@ using std::cout;
 using std::cin;
 using std::cerr;
 using std::endl;
+constexpr size_t LINE_BUFFER{1<<23};
+
+namespace nanobgzip
+{
+    enum class GzipType{GZIP, B_GZIP, NANO_B_GZIP};
+
+    struct BGZFHeader;
+
+    struct NanoBgzipHeader;
+
+    void nano_compress(const std::string& infile, const std::string& outfile, int reads_number = 10);
+    GzipType check_compress_type(const std::string& infile);
+    std::vector<std::string> get_index_in_block(const std::vector<uint8_t>& input_data);
+    void build_index(const std::string& file);
+    std::vector<uint8_t> nano_block_compress(std::shared_ptr<std::vector<uint8_t>> input_data,
+                                             std::ostream& output_index_stream,
+                                             size_t written_bytes);
+    std::vector<uint8_t> get_uncompressed_from_block(std::ifstream& infile,
+                                               std::pair<size_t, size_t>& block_edge,
+                                               unsigned need_uncompressed_size);
+}
 
 enum class GzipType
 {
     B_GZIP,
     GZIP,
     NANO_B_GZIP
-};
-
-
-struct BGZFHeader
-{
-    uint8_t id1; // 31
-    uint8_t id2; // 139
-    uint8_t cm;
-    uint8_t flg; // 4 => 00000100
-    uint32_t mtime;
-    uint8_t xfl;
-    uint8_t os;
-    uint16_t xlen;  // 6
-    uint8_t si1; // B
-    uint8_t si2; // C
-    uint16_t slen; // 2
-    uint16_t bsize;
-};
-
-struct NanoBgzipHeader
-{
-    uint8_t id1; // 31
-    uint8_t id2; // 139
-    uint8_t cm;
-    uint8_t flg; // 4 => 00000100
-    uint32_t mtime;
-    uint8_t xfl;
-    uint8_t os;
-    uint16_t xlen; // 8
-    uint8_t si1; // N
-    uint8_t si2; // A
-    uint16_t slen; // 2
-    uint32_t bsize;
-};
-
-class NanoBgzip
-{
-public:
-    NanoBgzip(){};
-    NanoBgzip(const NanoBgzip&) = delete;
-    NanoBgzip(NanoBgzip&&) = delete;
-    NanoBgzip& operator=(const NanoBgzip&) = delete;
-    NanoBgzip& operator=(NanoBgzip&&) = delete;
-    static void nano_compress(const std::string& infile, const std::string& outfile, int reads_number = 10);
-    static GzipType check_compress_type(const std::string& infile);
-
-    static std::vector<std::string> get_index_in_block(const std::vector<uint8_t>& input_data);
-private:
-    static std::vector<uint8_t> nano_block_compress(std::vector<uint8_t>& input_data, std::ostream& output_index_stream, size_t written_bytes);
 };
 
 
