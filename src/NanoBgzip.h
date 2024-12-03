@@ -21,26 +21,28 @@ using std::cout;
 using std::cin;
 using std::cerr;
 using std::endl;
-constexpr size_t LINE_BUFFER{1<<23};
+constexpr size_t LINE_BUFFER{1 << 23};
 
 namespace nanobgzip
 {
-    enum class GzipType{GZIP, B_GZIP, NANO_B_GZIP};
+    enum class GzipType { GZIP, B_GZIP, NANO_B_GZIP };
 
-    struct BGZFHeader;
 
-    struct NanoBgzipHeader;
+    void nano_compress(const std::string& infile,
+                       const std::string& outfile,
+                       const std::string& index_file,
+                       int reads_number = 10,
+                       unsigned key_len = 12);
 
-    void nano_compress(const std::string& infile, const std::string& outfile, int reads_number = 10);
     GzipType check_compress_type(const std::string& infile);
-    std::vector<std::string> get_index_in_block(const std::vector<uint8_t>& input_data);
-    void build_index(const std::string& file);
-    std::vector<uint8_t> nano_block_compress(std::shared_ptr<std::vector<uint8_t>> input_data,
-                                             std::ostream& output_index_stream,
-                                             size_t written_bytes);
+
+    void build_index(const std::string& file,
+                    const std::string& index_file,
+                     unsigned key_len);
+
     std::vector<uint8_t> get_uncompressed_from_block(std::ifstream& infile,
-                                               std::pair<size_t, size_t>& block_edge,
-                                               unsigned need_uncompressed_size);
+                                                     std::pair<size_t, size_t>& block_edge,
+                                                     unsigned need_uncompressed_size);
 }
 
 enum class GzipType
