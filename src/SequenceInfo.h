@@ -2,6 +2,11 @@
 #define SEQUENCEINFO_H
 #include <string>
 #include <tuple>
+#include <sstream>
+#include <vector>
+#include <algorithm>
+#include "fmt/core.h"
+#include "myUtility.h"
 
 
 using trim_end = std::tuple<int, float, float>; // std::tuple<end_target_len, align_percent, align_identity>

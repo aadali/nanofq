@@ -2,6 +2,9 @@
 #define NANOFQ_ALIGNMENTRESULT_H
 
 #include <string>
+#include <algorithm>
+#include <iostream>
+#include <fmt/core.h>
 
 class AlignmentResult {
 private:

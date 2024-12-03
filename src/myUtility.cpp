@@ -1,12 +1,9 @@
-#include <algorithm>
-#include <ranges>
-#include <regex>
-#include <sstream>
-#include <filesystem>
 #include "myUtility.h"
+#include "SequenceInfo.h"
 #include "Adapter.h"
 
-std::string myUtility::rev_com(const std::string& seq)
+namespace myutility {
+std::string rev_com(const std::string& seq)
 {
     std::string sequence{seq};
     std::ranges::transform(sequence,
@@ -32,12 +29,12 @@ std::string myUtility::rev_com(const std::string& seq)
     return sequence;
 }
 
-[[nodiscard]] vector<string_view> myUtility::split(string_view str, string_view delim)
+[[nodiscard]] std::vector<std::string_view> split(std::string_view str, std::string_view delim)
 {
-    vector<string_view> result;
+    std::vector<std::string_view> result;
     size_t pos = 0;
-    while ((pos = str.find(delim)) != string::npos) {
-        string_view token{str.substr(0, pos)};
+    while ((pos = str.find(delim)) != std::string::npos) {
+        std::string_view token{str.substr(0, pos)};
         result.push_back(token);
         str.remove_prefix(pos + delim.size());
     }
@@ -46,7 +43,7 @@ std::string myUtility::rev_com(const std::string& seq)
 }
 
 
-string_view myUtility::get_read_name_prefix(string_view header, unsigned key_length)
+std::string_view get_read_name_prefix(std::string_view header, unsigned key_length)
 {
     size_t space_idx{header.find(' ')};
     if (space_idx == std::string::npos) {
@@ -55,7 +52,7 @@ string_view myUtility::get_read_name_prefix(string_view header, unsigned key_len
     return space_idx <= key_length ? header.substr(1, space_idx - 1) : header.substr(1, key_length);
 }
 
-void myUtility::smith_waterman(string_view target_seq, string_view query_seq, AlignmentConfig& config,
+void smith_waterman(std::string_view target_seq, std::string_view query_seq, AlignmentConfig& config,
                                AlignmentResult& result)
 {
     if (!result.is_empty()) {
@@ -148,7 +145,7 @@ void myUtility::smith_waterman(string_view target_seq, string_view query_seq, Al
 }
 
 
-void myUtility::update_sequence_info(SequenceInfo& seq_info, int top5end_len, float top5end_percent,
+void update_sequence_info(SequenceInfo& seq_info, int top5end_len, float top5end_percent,
                                      float top5end_identity, int top3end_len, float top3end_percent,
                                      float top3end_identity, int bot5end_len, float bot5end_percent,
                                      float bot5end_identity, int bot3end_len, float bot3end_percent,
@@ -205,7 +202,7 @@ void myUtility::update_sequence_info(SequenceInfo& seq_info, int top5end_len, fl
     }
 }
 
-trim_direction myUtility::how_trim(const SequenceInfo& seq_info)
+trim_direction how_trim(const SequenceInfo& seq_info)
 {
     trim_direction td;
     if (!seq_info.m_top5end_query.empty() && get<0>(seq_info.m_top5end) > 0) {
@@ -223,7 +220,7 @@ trim_direction myUtility::how_trim(const SequenceInfo& seq_info)
     return td;
 }
 
-std::string myUtility::get_all_seq_info()
+std::string get_all_seq_info()
 {
     std::stringstream info;
     std::unordered_map<std::string, SequenceInfo> all_trim_info = barcode_info::get_trim_info();
@@ -243,4 +240,5 @@ std::string myUtility::get_all_seq_info()
         }
     }
     return info.str();
+}
 }

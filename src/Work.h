@@ -40,8 +40,8 @@ public:
                     float min_gc,
                     float max_gc,
                     std::osyncstream& out) const;
-    // void run_find(const std::string& input_reads, bool use_index, unsigned key_length = 5) const;
-    // void run_index(unsigned key_length) const;
+    void run_find(const std::string& input_reads, bool use_index, unsigned key_length = 12) const;
+    void run_index(unsigned key_length) const;
     // void run_trim(const SequenceInfo& seq_info, const trim_direction&td, std::vector<AlignmentConfig>& align_configs, std::ostream& log_fstream) ;
     void save_summary(int n, const std::vector<int>& read_quals, const std::vector<int>& read_length,
                       std::vector<read_stats_result>& stats_result, const std::string& summary_file_path);

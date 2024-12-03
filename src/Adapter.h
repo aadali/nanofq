@@ -356,7 +356,7 @@ namespace barcode_info
                 std::string pcb24_name{fmt::format("SQK-PCB114.24-{}", i + 1)};
                 trim_info.try_emplace(nbd24_name,
                                       nbd24_name,
-                                      NA_ADAPTER_5 + NB_LEFT_FLANKING_5 + myUtility::rev_com(NB_VEC[i]) +
+                                      NA_ADAPTER_5 + NB_LEFT_FLANKING_5 + myutility::rev_com(NB_VEC[i]) +
                                       NB_RIGHT_FLANKING_5,
                                       NBD_TOP5END,
                                       NB_LEFT_FLANKING_3 + NB_VEC[i] + NB_RIGHT_FLANKING_3 + NA_ADAPTER_3,
@@ -369,10 +369,10 @@ namespace barcode_info
                 );
                 trim_info.try_emplace(pcb24_name,
                                       pcb24_name,
-                                      RB_VEC[i] + SSPII, PCB_TOP5END, CRTA + myUtility::rev_com(RB_VEC[i]),
+                                      RB_VEC[i] + SSPII, PCB_TOP5END, CRTA + myutility::rev_com(RB_VEC[i]),
                                       PCB_TOP3END,
                                       RB_VEC[i] + CRTA_REV_COM, PCB_BOT5END,
-                                      SSPII_REV_COM + myUtility::rev_com(RB_VEC[i]),
+                                      SSPII_REV_COM + myutility::rev_com(RB_VEC[i]),
                                       PCB_BOT3END
                 );
             }
@@ -380,7 +380,7 @@ namespace barcode_info
             std::string rbk96_name{fmt::format("SQK-RBK114.96-{}", i + 1)};
             trim_info.try_emplace(nbd96_name,
                                   nbd96_name,
-                                  NA_ADAPTER_5 + NB_LEFT_FLANKING_5 + myUtility::rev_com(NB_VEC[i]) +
+                                  NA_ADAPTER_5 + NB_LEFT_FLANKING_5 + myutility::rev_com(NB_VEC[i]) +
                                   NB_RIGHT_FLANKING_5,
                                   NBD_TOP5END,
                                   NB_LEFT_FLANKING_3 + NB_VEC[i] + NB_RIGHT_FLANKING_3 +

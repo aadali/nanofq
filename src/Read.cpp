@@ -112,7 +112,7 @@ size_t Read::trim_positive_strand_left(std::string_view top5end_query, const tri
             ? sequence_view.substr(0, get<0>(top5end))
             : sequence_view
     };
-    myUtility::smith_waterman(top5end_target, top5end_query, align_config, align_5end_result);
+    myutility::smith_waterman(top5end_target, top5end_query, align_config, align_5end_result);
     if (align_5end_result.get_percent(top5end_query) > get<1>(top5end) &&
         align_5end_result.get_identity() > get<2>(top5end)
     ) {
@@ -131,7 +131,7 @@ size_t Read::trim_positive_strand_right(std::string_view& left_trimmed_seq_view,
             ? left_trimmed_seq_view.substr(left_trimmed_seq_view.size() - get<0>(top3end))
             : left_trimmed_seq_view
     };
-    myUtility::smith_waterman(top3end_target, top3end_query, align_config, align_3end_result);
+    myutility::smith_waterman(top3end_target, top3end_query, align_config, align_3end_result);
     if (align_3end_result.get_percent(top3end_query) > get<1>(top3end) &&
         align_3end_result.get_identity() > get<2>(top3end)
     ) {
@@ -150,7 +150,7 @@ size_t Read::trim_negative_strand_left(std::string_view bot5end_query, const tri
             ? sequence_view.substr(0, get<0>(bot5end))
             : sequence_view
     };
-    myUtility::smith_waterman(bot5end_target, bot5end_query, align_config, align_5end_result);
+    myutility::smith_waterman(bot5end_target, bot5end_query, align_config, align_5end_result);
     if (align_5end_result.get_percent(bot5end_query) > get<1>(bot5end) &&
         align_5end_result.get_identity() > get<2>(bot5end)
     ) {
@@ -169,7 +169,7 @@ size_t Read::trim_negative_strand_right(std::string_view& left_trimmed_seq_view,
             ? left_trimmed_seq_view.substr(left_trimmed_seq_view.size() - get<0>(bot3end))
             : left_trimmed_seq_view
     };
-    myUtility::smith_waterman(bot3end_target, bot3end_query, align_config, align_3end_result);
+    myutility::smith_waterman(bot3end_target, bot3end_query, align_config, align_3end_result);
     if (align_3end_result.get_percent(bot3end_query) > get<1>(bot3end) &&
         align_3end_result.get_identity() > get<2>(bot3end)
     ) {

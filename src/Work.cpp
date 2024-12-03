@@ -161,10 +161,10 @@ void Work::save_summary(int n, const std::vector<int>& read_quals, const std::ve
 //     m_fq.find_reads(input_reads, m_out, use_index, key_length);
 // }
 //
-// void Work::run_index(unsigned key_length) const
-// {
-//     m_fq.index(key_length);
-// }
+void Work::run_index(unsigned key_length) const
+{
+    m_fq.index(key_length);
+}
 
 void Work::stats(int start,
                  int end,

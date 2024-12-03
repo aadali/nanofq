@@ -1,11 +1,4 @@
-#include <sstream>
-#include <vector>
-#include <algorithm>
 #include "SequenceInfo.h"
-
-#include <fmt/core.h>
-
-#include "myUtility.h"
 
 // LSK114; NBD114
 SequenceInfo::SequenceInfo(
@@ -58,9 +51,9 @@ SequenceInfo::SequenceInfo(const std::string& forward,
       m_top5end(180, 0.8, 0.8),
       m_top3end_query(reversed),
       m_top3end(180, 0.8, 0.8),
-      m_bot5end_query(myUtility::rev_com(reversed)),
+      m_bot5end_query(myutility::rev_com(reversed)),
       m_bot5end(180, 0.8, 0.8),
-      m_bot3end_query(myUtility::rev_com(forward)),
+      m_bot3end_query(myutility::rev_com(forward)),
       m_bot3end(180, 0.8, 0.8) {}
 
 std::string SequenceInfo::seq_info() {
