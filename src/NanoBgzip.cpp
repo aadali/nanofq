@@ -36,7 +36,9 @@ namespace nanobgzip
             uint32_t bsize;
         };
 
-        std::vector<std::string> get_index_in_block(const std::vector<uint8_t>& input_data, unsigned key_len)
+        std::vector<std::string> get_index_in_block(
+            const std::vector<uint8_t>& input_data,
+            unsigned key_len)
         {
             std::vector<std::string> reads_position;
             int line_number{0};
@@ -73,10 +75,11 @@ namespace nanobgzip
             return reads_position;
         }
 
-        std::vector<uint8_t> nano_block_compress(std::shared_ptr<std::vector<uint8_t>> input_data,
-                                                 std::ostream& output_index_stream,
-                                                 size_t written_bytes,
-                                                 unsigned key_len)
+        std::vector<uint8_t> nano_block_compress(
+            std::shared_ptr<std::vector<uint8_t>> input_data,
+            std::ostream& output_index_stream,
+            size_t written_bytes,
+            unsigned key_len)
         {
             std::vector<std::string> index_in_block{get_index_in_block(*input_data, key_len)};
             /* create header, not text, no hcrc, no name, no comment, but need extra field */
@@ -160,7 +163,12 @@ namespace nanobgzip
         }
     }
 
-    void nano_compress(const std::string& infile, const std::string& outfile, const std::string&index_file, int reads_number, unsigned key_len)
+    void nano_compress(
+        const std::string& infile,
+        const std::string& outfile,
+        const std::string& index_file,
+        int reads_number,
+        unsigned key_len)
     {
         std::istream* is = nullptr;
         bool using_infile = false;
@@ -280,7 +288,10 @@ namespace nanobgzip
         return GzipType::GZIP;
     }
 
-    void build_index(const std::string& file, const std::string& index_file, unsigned key_len)
+    void build_index(
+        const std::string& file,
+        const std::string& index_file,
+        unsigned key_len)
     {
         GzipType compress_type = check_compress_type(file);
         if (compress_type != GzipType::NANO_B_GZIP) {
@@ -309,9 +320,11 @@ namespace nanobgzip
     }
 
 
-    std::vector<uint8_t> get_uncompressed_from_block(std::ifstream& infile,
-                                                     std::pair<size_t, size_t>& block_edge,
-                                                     unsigned need_uncompressed_size)
+    std::vector<uint8_t> get_uncompressed_from_block(
+        std::ifstream& infile,
+        std::pair<size_t,
+        size_t>& block_edge,
+        unsigned need_uncompressed_size)
     {
         const bool specified_block{!(block_edge.first == 0 && block_edge.second == 0)};
         if (specified_block) {

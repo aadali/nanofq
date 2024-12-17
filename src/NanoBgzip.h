@@ -28,21 +28,24 @@ namespace nanobgzip
     enum class GzipType { GZIP, B_GZIP, NANO_B_GZIP };
 
 
-    void nano_compress(const std::string& infile,
-                       const std::string& outfile,
-                       const std::string& index_file,
-                       int reads_number = 10,
-                       unsigned key_len = 12);
+    void nano_compress(
+        const std::string& infile,
+        const std::string& outfile,
+        const std::string& index_file,
+        int reads_number = 10,
+        unsigned key_len = 8);
 
     GzipType check_compress_type(const std::string& infile);
 
-    void build_index(const std::string& file,
-                    const std::string& index_file,
-                     unsigned key_len);
+    void build_index(
+        const std::string& file,
+        const std::string& index_file,
+        unsigned key_len);
 
-    std::vector<uint8_t> get_uncompressed_from_block(std::ifstream& infile,
-                                                     std::pair<size_t, size_t>& block_edge,
-                                                     unsigned need_uncompressed_size);
+    std::vector<uint8_t> get_uncompressed_from_block(
+        std::ifstream& infile,
+        std::pair<size_t, size_t>& block_edge,
+        unsigned need_uncompressed_size);
 }
 
 enum class GzipType

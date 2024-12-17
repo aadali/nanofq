@@ -1,12 +1,25 @@
 #include <syncstream>
 #include "Read.h"
 
-Read::Read(std::string& id, std::string& desc, std::string& sequence, std::string& quality) :
-    m_id(std::move(id)), m_desc(std::move(desc)), m_sequence(std::move(sequence)),
+Read::Read(
+    std::string& id,
+    std::string& desc,
+    std::string& sequence,
+    std::string& quality):
+    m_id(std::move(id)),
+    m_desc(std::move(desc)),
+    m_sequence(std::move(sequence)),
     m_quality(std::move(quality)) {}
 
-Read::Read(char* id, char* desc, char* sequence, char* quality) :
-    m_id(id), m_desc(desc ? desc : ""), m_sequence(sequence), m_quality(quality) {}
+Read::Read(
+    char* id,
+    char* desc,
+    char* sequence,
+    char* quality):
+    m_id(id),
+    m_desc(desc ? desc : ""),
+    m_sequence(sequence),
+    m_quality(quality) {}
 
 Read& Read::operator=(Read&& read) noexcept
 {
@@ -76,15 +89,22 @@ float Read::calculate_read_quality() const
     return std::log10(total_error_probability) * -10.0;
 }
 
-bool Read::is_passed(const unsigned min_length, const unsigned max_length, const float quality) const
+bool Read::is_passed(
+    const unsigned min_length,
+    const unsigned max_length,
+    const float quality) const
 {
     return m_sequence.size() >= min_length
         && m_sequence.size() <= max_length
         && calculate_read_quality() > quality;
 }
 
-bool Read::is_passed(const unsigned min_length, const unsigned max_length, float quality, float min_gc,
-                     float max_gc) const
+bool Read::is_passed(
+    const unsigned min_length,
+    const unsigned max_length,
+    float quality,
+    float min_gc,
+    float max_gc) const
 {
     float gc{get_gc_content()};
     return m_sequence.size() >= min_length
@@ -103,8 +123,11 @@ std::string Read::get_record() const
 }
 
 
-size_t Read::trim_positive_strand_left(std::string_view top5end_query, const trim_end& top5end,
-                                       AlignmentConfig& align_config, AlignmentResult& align_5end_result) const
+size_t Read::trim_positive_strand_left(
+    std::string_view top5end_query,
+    const trim_end& top5end,
+    AlignmentConfig& align_config,
+    AlignmentResult& align_5end_result) const
 {
     std::string_view sequence_view{m_sequence};
     std::string_view top5end_target{
@@ -122,9 +145,12 @@ size_t Read::trim_positive_strand_left(std::string_view top5end_query, const tri
     return 0;
 }
 
-size_t Read::trim_positive_strand_right(std::string_view& left_trimmed_seq_view, std::string_view top3end_query,
-                                        const trim_end& top3end, AlignmentConfig& align_config,
-                                        AlignmentResult& align_3end_result) const
+size_t Read::trim_positive_strand_right(
+    std::string_view& left_trimmed_seq_view,
+    std::string_view top3end_query,
+    const trim_end& top3end,
+    AlignmentConfig& align_config,
+    AlignmentResult& align_3end_result) const
 {
     std::string_view top3end_target{
         left_trimmed_seq_view.size() > get<0>(top3end)
@@ -141,8 +167,11 @@ size_t Read::trim_positive_strand_right(std::string_view& left_trimmed_seq_view,
     return m_sequence.size();
 }
 
-size_t Read::trim_negative_strand_left(std::string_view bot5end_query, const trim_end& bot5end,
-                                       AlignmentConfig& align_config, AlignmentResult& align_5end_result) const
+size_t Read::trim_negative_strand_left(
+    std::string_view bot5end_query,
+    const trim_end& bot5end,
+    AlignmentConfig& align_config,
+    AlignmentResult& align_5end_result) const
 {
     std::string_view sequence_view{m_sequence};
     std::string_view bot5end_target{
@@ -160,9 +189,12 @@ size_t Read::trim_negative_strand_left(std::string_view bot5end_query, const tri
     return 0;
 }
 
-size_t Read::trim_negative_strand_right(std::string_view& left_trimmed_seq_view, std::string_view bot3end_query,
-                                        const trim_end& bot3end, AlignmentConfig& align_config,
-                                        AlignmentResult& align_3end_result) const
+size_t Read::trim_negative_strand_right(
+    std::string_view& left_trimmed_seq_view,
+    std::string_view bot3end_query,
+    const trim_end& bot3end,
+    AlignmentConfig& align_config,
+    AlignmentResult& align_3end_result) const
 {
     std::string_view bot3end_target{
         left_trimmed_seq_view.size() > get<0>(bot3end)
@@ -179,8 +211,11 @@ size_t Read::trim_negative_strand_right(std::string_view& left_trimmed_seq_view,
     return m_sequence.size();
 }
 
-void Read::trim(const SequenceInfo& seq_info, const trim_direction& td, AlignmentConfig& align_config,
-                std::ostream& log)
+void Read::trim(
+    const SequenceInfo& seq_info,
+    const trim_direction& td,
+    AlignmentConfig& align_config,
+    std::ostream& log)
 {
     AlignmentResult align_5end_result{true};
     AlignmentResult align_3end_result{false};

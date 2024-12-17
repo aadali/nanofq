@@ -23,7 +23,8 @@ static const std::array<double, 256> s_char_to_score_table = []{
     return a;
 }();
 
-class Read {
+class Read
+{
 public:
     std::string m_id;
     std::string m_desc;
@@ -41,7 +42,7 @@ public:
 
     Read& operator=(const Read& read) = delete;
 
-    Read(Read&& read) noexcept ;
+    Read(Read&& read) noexcept;
 
     Read& operator=(Read&& read) noexcept;
 
@@ -60,28 +61,56 @@ public:
     void rev_com();
 
     [[nodiscard]] float calculate_read_quality() const;
-    [[nodiscard]] bool is_passed(const unsigned min_length, const unsigned max_length, const float quality) const;
+    [[nodiscard]] bool is_passed(
+        const unsigned min_length,
+        const unsigned max_length,
+        const float quality) const;
 
 
-    [[nodiscard]] bool is_passed(const unsigned min_length, const unsigned max_length, float quality, float min_gc,
-                                 float max_gc) const;
+    [[nodiscard]] bool is_passed(
+        const unsigned min_length,
+        const unsigned max_length,
+        float quality,
+        float min_gc,
+        float max_gc) const;
 
     [[nodiscard]] std::string get_record() const;
-    void trim(const SequenceInfo& seq_info, const trim_direction& td, AlignmentConfig& align_config,
-               std::ostream& log);
+    void trim(
+        const SequenceInfo& seq_info,
+        const trim_direction& td,
+        AlignmentConfig& align_config,
+        std::ostream& log);
 
 private:
-    size_t trim_positive_strand_left(std::string_view top5end_query, const trim_end& top5end, AlignmentConfig& align_config,
-                           AlignmentResult& align_5end_result) const;
-    size_t trim_positive_strand_right(std::string_view& left_trimmed_seq_view, std::string_view top3end_query, const trim_end& top3end, AlignmentConfig& align_config,
-                            AlignmentResult& align_3end_result) const;
-    size_t trim_negative_strand_left(std::string_view bot5end_query, const trim_end& bot5end, AlignmentConfig& align_config,
-                           AlignmentResult& align_5end_result) const;
-    size_t trim_negative_strand_right(std::string_view& left_trimmed_seq_view, std::string_view bot3end_query, const trim_end& bot3end, AlignmentConfig& align_config,
-                            AlignmentResult& align_3end_result) const;
+    size_t trim_positive_strand_left(
+        std::string_view top5end_query,
+        const trim_end& top5end,
+        AlignmentConfig& align_config,
+        AlignmentResult& align_5end_result) const;
+
+    size_t trim_positive_strand_right(
+        std::string_view& left_trimmed_seq_view,
+        std::string_view top3end_query,
+        const trim_end& top3end,
+        AlignmentConfig& align_config,
+        AlignmentResult& align_3end_result) const;
+
+    size_t trim_negative_strand_left(
+        std::string_view bot5end_query,
+        const trim_end& bot5end,
+        AlignmentConfig& align_config,
+        AlignmentResult& align_5end_result) const;
+
+    size_t trim_negative_strand_right(
+        std::string_view& left_trimmed_seq_view,
+        std::string_view bot3end_query,
+        const trim_end& bot3end,
+        AlignmentConfig& align_config,
+        AlignmentResult& align_3end_result) const;
 };
 
-inline std::ostream& operator<<(std::ostream& c, const Read& read) {
+inline std::ostream& operator<<(std::ostream& c, const Read& read)
+{
     if (read.m_desc.empty()) {
         c << fmt::format("@{}\n{}\n+\n{}\n", read.m_id, read.m_sequence, read.m_quality);
     } else {

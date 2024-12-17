@@ -53,17 +53,40 @@ public:
 
     inline bool read_finish() const { return m_finish; };
 
-    void find_reads(const std::string& input_reads, std::ostream& out, bool use_index, unsigned key_len = 12);
-    void find_reads_in_gz(const std::string& input_reads, std::ostream& out, bool use_index, unsigned key_len = 12);
     void index(unsigned key_len);
+
+    void find(
+        const std::string& input_reads,
+        std::ostream& out,
+        bool use_index,
+        unsigned key_len = 8);
 
 private:
     static std::unordered_set<std::string> get_searching_read_names(const std::string& input_reads);
-    void search_read_one_by_one(std::unordered_set<std::string>& read_names, std::ostream&out);
+
+    void search_read_one_by_one(
+        std::unordered_set<std::string>& read_names,
+        std::ostream& out);
+
     void index_fastq(unsigned key_len);
+
     void index_fastq_gz(unsigned key_len);
+
     std::unordered_map<std::string, std::vector<size_t>> read_index() const;
+
     nanobgzip_reads_index read_gz_index() const;
+
+    void find_reads(
+        const std::string& input_reads,
+        std::ostream& out,
+        bool use_index,
+        unsigned key_len);
+
+    void find_reads_in_gz(
+        const std::string& input_reads,
+        std::ostream& out,
+        bool use_index,
+        unsigned key_len);
 };
 
 #endif // FASTQREADER_H

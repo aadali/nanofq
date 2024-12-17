@@ -277,6 +277,14 @@ void FastqReader::index(unsigned key_len)
     }
 }
 
+void FastqReader::find(const std::string& input_reads, std::ostream& out, bool use_index, unsigned key_len) {
+    if (m_input_file.ends_with(".gz")){
+        this->find_reads_in_gz(input_reads, out, use_index, key_len);
+    } else {
+        this->find_reads(input_reads, out, use_index, key_len);
+    }
+}
+
 void FastqReader::index_fastq(unsigned key_len)
 {
     std::ifstream infile_text{m_input_file.data(), std::ios::in};
