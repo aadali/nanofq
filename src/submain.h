@@ -11,8 +11,9 @@
 #include "AlignmentResult.h"
 #include "Adapter.h"
 #include "ArgumentParse.h"
-/*
-int sub_main(int argc, char* argv[]) {
+
+int sub_main(int argc, char* argv[])
+{
     argparse::ArgumentParser& nanofq{get_arguments(argc, argv)};
     if (nanofq.is_subcommand_used("stats")) {
         argparse::ArgumentParser& stats{nanofq.at<argparse::ArgumentParser>("stats")};
@@ -30,15 +31,15 @@ int sub_main(int argc, char* argv[]) {
             for (int i : quals) {
                 check_number_in_range("--quality", i, 1, 50, stats, true);
             }
-            std::ranges::sort(quals, greater<>());
+            std::ranges::sort(quals, std::greater<>());
         }
         std::vector<int> lengths;
-        if (stats.is_used("--length")){
+        if (stats.is_used("--length")) {
             lengths = stats.get<std::vector<int>>("--length");
-            for (int i : lengths){
+            for (int i : lengths) {
                 check_number_in_range("--length", i, MINL, MAXL, stats, true);
             }
-            std::ranges::sort(lengths, greater<>());
+            std::ranges::sort(lengths, std::greater<>());
         }
         bool make_plot{false};
         std::string plot_prefix;
@@ -54,7 +55,7 @@ int sub_main(int argc, char* argv[]) {
         std::vector<std::string> format{stats.get<std::vector<std::string>>("--format")};
         std::vector<std::string> allowed_choices{"pdf", "jpg", "png"};
         check_choices<std::string>("--format", format, allowed_choices, stats);
-        FastqReader fq{input, static_cast<unsigned>(chunk)};
+        FastqReader fq{input, chunk};
         std::ofstream out;
         if (output != "-") {
             out.open(output.data(), std::ios::out);
@@ -63,16 +64,11 @@ int sub_main(int argc, char* argv[]) {
                 exit(1);
             }
         }
-        Work work{fq, static_cast<unsigned>(threads), gc, output == "-" ? std::cout : out};
-        if (threads == 1) {
-            work.run_stats();
-        } else {
-            std::thread t1{&FastqReader::read_chunk_fastq, &fq};
-            std::thread t2{&Work::run_stats, &work};
-            t1.join();
-            t2.join();
-        }
-        work.save_summary(n, quals, lengths, summary);
+        ThreadPool tp{threads};
+        Work work{fq, tp};
+        std::vector<read_stats_result> stats_result{};
+        work.run_stats(stats_result, output != "-" ? out : std::cout, gc);
+        work.save_summary(n, quals, lengths, stats_result, summary);
         if (out.is_open()) { out.close(); }
     } else if (nanofq.is_subcommand_used("filter")) {
         argparse::ArgumentParser& filter{nanofq.at<argparse::ArgumentParser>("filter")};
@@ -82,44 +78,54 @@ int sub_main(int argc, char* argv[]) {
         check_number_in_range("--min_len", min_length, MINL, MAXL, filter, true);
         int max_length{filter.get<int>("--max_len")};
         check_number_in_range("--max_len", max_length, MINL, MAXL, filter, true);
-        double min_quality{filter.get<double>("--min_quality")};
-        check_number_in_range("--min_double", min_quality, 0.0, 100.0, filter, false);
+        float min_quality{filter.get<float>("--min_quality")};
+        check_number_in_range("--min_quality", min_quality, 0.0f, 100.0f, filter, false);
         bool gc{filter.get<bool>("--gc")};
-        double min_gc{filter.get<double>("--min_gc")};
+        float min_gc{filter.get<float>("--min_gc")};
         check_number_in_range("--min_gc", min_gc, MIN_PERCENT, MAX_PERCENT, filter, false);
-        double max_gc{filter.get<double>("--max_gc")};
+        float max_gc{filter.get<float>("--max_gc")};
         check_number_in_range("--max_gc", max_gc, MIN_PERCENT, MAX_PERCENT, filter, false);
         int threads{filter.get<int>("--threads")};
         check_number_in_range("--threads", threads, 1, 16, filter, true);
         int chunk{filter.get<int>("--chunk")};
         check_number_in_range("--chunk", chunk, MINC, MAXC, filter, true);
-        FastqReader fq{input, static_cast<unsigned>(chunk)};
+        FastqReader fq{input, chunk};
+        ThreadPool tp{threads};
         std::ofstream out;
-        if (output == "-") {
+        if (output != "-") {
             out = std::ofstream{output.data(), std::ios::out};
             if (!out) {
                 std::cerr << REDS + "Failed when opened " + output << COLOR_END << std::endl;
                 exit(1);
             }
         }
-        Work work{fq, static_cast<unsigned>(threads), gc, output == "-" ? std::cout : out};
-        if (threads == 1) {
-            work.run_filter(min_length, max_length, min_quality, min_gc, max_gc);
-        } else {
-            std::thread t1{&FastqReader::read_chunk_fastq, &fq};
-            std::thread t2{&Work::run_filter, &work, min_length, max_length, min_quality, min_gc, max_gc};
-            t1.join();
-            t2.join();
-        }
+        Work work{fq, tp};
+        std::atomic<size_t> counter{0};
+        work.run_filter(counter,
+                        gc,
+                        min_length,
+                        max_length,
+                        static_cast<float>(min_quality),
+                        min_gc,
+                        max_gc,
+                        output != "-" ? out : std::cout);
         if (out.is_open()) out.close();
     } else if (nanofq.is_subcommand_used("index")) {
         argparse::ArgumentParser& index{nanofq.at<argparse::ArgumentParser>("index")};
         std::string input{index.get("--input")};
         int key_len{index.get<int>("--key_len")};
-        check_number_in_range("--key_len", key_len, 8, 100, index, true);
-        FastqReader fq{input, 5000};
-        Work work{fq};
-        work.run_index(key_len);
+        if (index.is_used("--key_len")) {
+            if (key_len < 12 || key_len > 100) {
+                std::cerr << REDS << "if --key_len was set, it must be int in range (12, 100)" << COLOR_END <<
+                    std::endl;
+                std::cerr << index << std::endl;
+                exit(1);
+            }
+        }
+        FastqReader fq{input, 20000};
+        ThreadPool tp{1};
+        Work work{fq, tp};
+        work.run_index(key_len, true);
     } else if (nanofq.is_subcommand_used("find")) {
         argparse::ArgumentParser& find{nanofq.at<argparse::ArgumentParser>("find")};
         std::string input{find.get("--input")};
@@ -144,8 +150,9 @@ int sub_main(int argc, char* argv[]) {
                 exit(1);
             }
         }
-        Work work{fq, 1, true, output == "-" ? std::cout : out};
-        work.run_find(reads, use_index, key_len);
+        ThreadPool tp{1};
+        Work work{fq, tp};
+        work.run_find(reads, output != "-" ? out : std::cout, use_index, key_len);
         if (out.is_open()) out.close();
     } else if (nanofq.is_subcommand_used("trim")) {
         argparse::ArgumentParser& trim{nanofq.at<argparse::ArgumentParser>("trim")};
@@ -203,7 +210,7 @@ int sub_main(int argc, char* argv[]) {
                 std::getline(primers_file, reversed);
                 primers_file.close();
             } else {
-                auto primers_vec = myUtility::split(primers, ",");
+                auto primers_vec = myutility::split(primers, ",");
                 if (primers_vec.size() != 2) {
                     cerr << REDS + "if --primer is not file, it should be a pair of primers separated by one comma" +
                         COLOR_END << endl;
@@ -223,20 +230,20 @@ int sub_main(int argc, char* argv[]) {
         int gap_extend{trim.get<int>("--gap_extend")};
         check_number_in_range<int>("--gap_extend", gap_extend, -100, 0, trim, true);
         int end5_len = DEFAULT_INT, end3_len = DEFAULT_INT, end5_len_rc = DEFAULT_INT, end3_len_rc = DEFAULT_INT;
-        double end5_align_percent = DEFAULT_FLOAT, end5_align_identity = DEFAULT_FLOAT;
-        double end3_align_percent = DEFAULT_FLOAT, end3_align_identity = DEFAULT_FLOAT;
-        double end5_align_percent_rc = DEFAULT_FLOAT, end5_align_identity_rc = DEFAULT_FLOAT;
-        double end3_align_percent_rc = DEFAULT_FLOAT, end3_align_identity_rc = DEFAULT_FLOAT;
+        float end5_align_percent = DEFAULT_FLOAT, end5_align_identity = DEFAULT_FLOAT;
+        float end3_align_percent = DEFAULT_FLOAT, end3_align_identity = DEFAULT_FLOAT;
+        float end5_align_percent_rc = DEFAULT_FLOAT, end5_align_identity_rc = DEFAULT_FLOAT;
+        float end3_align_percent_rc = DEFAULT_FLOAT, end3_align_identity_rc = DEFAULT_FLOAT;
         if (trim.is_used("--5end_len")) {
             end5_len = trim.get<int>("--5end_len");
             check_number_in_range("--end5_len", end5_len, MIN_TARGET, MAX_TARGET, trim, true);
         }
         if (trim.is_used("--5end_align_percent")) {
-            end5_align_percent = trim.get<double>("--5end_align_percent");
+            end5_align_percent = trim.get<float>("--5end_align_percent");
             check_number_in_range("--5end_align_percent", end5_align_percent, MIN_PERCENT, MAX_PERCENT, trim, false);
         }
         if (trim.is_used("--5end_align_identity")) {
-            end5_align_identity = trim.get<double>("--5end_align_identity");
+            end5_align_identity = trim.get<float>("--5end_align_identity");
             check_number_in_range("--5end_align_identity", end5_align_identity, MIN_PERCENT, MAX_PERCENT, trim, false);
         }
         if (trim.is_used("--3end_len")) {
@@ -244,11 +251,11 @@ int sub_main(int argc, char* argv[]) {
             check_number_in_range("--3end_len", end3_len, MIN_TARGET, MAX_TARGET, trim, true);
         }
         if (trim.is_used("--3end_align_percent")) {
-            end3_align_percent = trim.get<double>("--3end_align_percent");
+            end3_align_percent = trim.get<float>("--3end_align_percent");
             check_number_in_range("--3end_align_percent", end3_align_percent, MIN_PERCENT, MAX_PERCENT, trim, false);
         }
         if (trim.is_used("--3end_align_identity")) {
-            end3_align_identity = trim.get<double>("--3end_align_identity");
+            end3_align_identity = trim.get<float>("--3end_align_identity");
             check_number_in_range("--3end_align_identity", end3_align_identity, MIN_PERCENT, MAX_PERCENT, trim, false);
         }
         if (trim.is_used("--5end_len_rc")) {
@@ -256,12 +263,12 @@ int sub_main(int argc, char* argv[]) {
             check_number_in_range("--5end_len_rc", end5_len_rc, MIN_TARGET, MAX_TARGET, trim, true);
         }
         if (trim.is_used("--5end_align_percent_rc")) {
-            end5_align_percent_rc = trim.get<double>("--5end_align_percent_rc");
+            end5_align_percent_rc = trim.get<float>("--5end_align_percent_rc");
             check_number_in_range("--5end_align_percent_rc", end5_align_percent_rc, MIN_PERCENT, MAX_PERCENT, trim,
                                   false);
         }
         if (trim.is_used("--5end_align_identity_rc")) {
-            end5_align_identity_rc = trim.get<double>("--5end_align_identity_rc");
+            end5_align_identity_rc = trim.get<float>("--5end_align_identity_rc");
             check_number_in_range("--5end_align_identity_rc", end5_align_identity_rc, MIN_PERCENT, MAX_PERCENT, trim,
                                   false);
         }
@@ -270,18 +277,18 @@ int sub_main(int argc, char* argv[]) {
             check_number_in_range("--3end_len_rc", end3_len_rc, MIN_TARGET, MAX_TARGET, trim, true);
         }
         if (trim.is_used("--3end_align_percent_rc")) {
-            end3_align_percent_rc = trim.get<double>("--3end_align_percent_rc");
+            end3_align_percent_rc = trim.get<float>("--3end_align_percent_rc");
             check_number_in_range("--3end_align_percent_rc", end3_align_percent_rc, MIN_PERCENT, MAX_PERCENT, trim,
                                   false);
         }
         if (trim.is_used("--3end_align_identity_rc")) {
-            end3_align_identity_rc = trim.get<double>("--3end_align_identity_rc");
+            end3_align_identity_rc = trim.get<float>("--3end_align_identity_rc");
             check_number_in_range("--3end_align_identity_rc", end3_align_identity_rc, MIN_PERCENT, MAX_PERCENT, trim,
                                   false);
         }
         // INIT WORKFLOW
         auto trim_info{barcode_info::get_trim_info()};
-        FastqReader fq{input, static_cast<unsigned>(chunk)};
+        FastqReader fq{input, chunk};
         SequenceInfo sequence_info = !kit.empty() ? trim_info.find(kit)->second : SequenceInfo{forward, reversed};
         sequence_info.update_sequence_info(
             end5_len,
@@ -305,8 +312,9 @@ int sub_main(int argc, char* argv[]) {
                 exit(1);
             }
         }
-        Work work{fq, static_cast<unsigned>(threads), true, output == "-" ? std::cout : out};
-        trim_direction td{myUtility::how_trim(sequence_info)};
+        ThreadPool tp{threads};
+        Work work{fq, tp};
+        trim_direction td{myutility::how_trim(sequence_info)};
         AlignmentConfig align_config{match, mismatch, gap_open, gap_extend};
         std::vector<AlignmentConfig> align_configs;
         for (int i{0}; i < threads; i++) {
@@ -318,25 +326,18 @@ int sub_main(int argc, char* argv[]) {
             exit(1);
         }
         logfile << sequence_info.seq_info() << '\n';
-        if (threads == 1) {
-            work.run_trim(sequence_info, td, align_configs, logfile);
-        } else {
-            std::thread t1{&FastqReader::read_chunk_fastq, &fq};
-            std::thread t2{
-                &Work::run_trim,
-                &work,
-                std::ref(sequence_info),
-                std::ref(td),
-                std::ref(align_configs),
-                std::ref(logfile)
-            };
-            t1.join();
-            t2.join();
-        }
+        std::atomic<size_t> counter;
+        work.run_trim(counter, sequence_info, td, align_configs, logfile, output != "-" ? out : std::cout);
         if (out.is_open()) out.close();
+    } else if (nanofq.is_subcommand_used("compress")) {
+        argparse::ArgumentParser& compress{nanofq.at<argparse::ArgumentParser>("compress")};
+        std::string input{compress.get("--input")};
+        // std::cout << "--input: " << input << std::endl;
+        std::string output{compress.get("--output")};
+        // cout << "test compress" << endl;
+        nanobgzip::nano_compress(input, output, fmt::format("{}.index",output), 10, 0);
     }
     return 0;
 }
 
-*/
 #endif //SUBMAIN_H

@@ -1,4 +1,6 @@
 #include "ArgumentParse.h"
+
+#include <ratio>
 #include <fmt/core.h>
 
 using std::cout;
@@ -6,7 +8,8 @@ using std::cerr;
 using std::endl;
 
 
-argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
+argparse::ArgumentParser& get_arguments(int argc, char* argv[])
+{
     static argparse::ArgumentParser nanofq{"nanofq", "1.0"};
     nanofq.add_description("A tool for stats, filter, index, find, trim nanopore fastq reads");
     nanofq.add_epilog("Contact aadali@gmail.com");
@@ -20,21 +23,23 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
          .help("the stats output file name, default print all results to stdout")
          .default_value("-");
     stats.add_argument("-s", "--summary")
-        .help("output the summary into this file")
-        .default_value("./summary.txt");
+         .help("output the stats summary into this file")
+         .default_value("./summary.txt");
     stats.add_argument("-n", "--firstN")
-        .help("get the top N longest and high quality reads info in summary, range (1, 1000)")
-        .default_value(5)
-        .scan<'i', int>();
+         .help("write the top N longest and high quality reads info in summary file, range (1, 1000)")
+         .default_value(5)
+         .scan<'i', int>();
 
     stats.add_argument("-q", "--quality")
-        .help("count the reads number that whose quality is bigger than this value, can be set multi times, default vector<int>{10,12,15,18,20,25}, range (1, 50)")
-        .append()
-        .scan<'i', int>();
+         .help(
+             "count the reads number that whose quality is bigger than this value, can be set multi times, default vector<int>{10,12,15,18,20,25}, range (1, 50)")
+         .append()
+         .scan<'i', int>();
     stats.add_argument("-l", "--length")
-        .help("count the reads number that longer than this value, can be set multi times, no default value, range >= 1")
-        .append()
-        .scan<'i', int>();
+         .help(
+             "count the reads number that longer than this value, can be set multi times, no default value, range >= 1")
+         .append()
+         .scan<'i', int>();
     stats.add_argument("-p", "--plot")
          .help("whether plot the stats result, if it's set, the value will be the figure file name prefix");
     stats.add_argument("-f", "--format")
@@ -71,21 +76,23 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
           .scan<'i', int>();
     filter.add_argument("-q", "--min_quality")
           .help("read min quality, range (0.0, 100.0)")
-          .default_value(8.0)
-          .scan<'g', double>();
+          .default_value(8.0f)
+          .scan<'g', float>();
     filter.add_argument("", "--gc")
           .help("whether filter the gc content, used with --min_gc/--max_gc")
           .flag();
     filter.add_argument("-g", "--min_gc")
-          .help("read min gc content, used with --gc, otherwise ignore this parameter, range (" + std::to_string(static_cast<int>(MIN_PERCENT)) + ", " +
+          .help("read min gc content, used with --gc, otherwise ignore this parameter, range (" + std::to_string(
+                  static_cast<int>(MIN_PERCENT)) + ", " +
               std::to_string(static_cast<int>(MAX_PERCENT)) + ")")
           .default_value(MIN_PERCENT)
-          .scan<'g', double>();
+          .scan<'g', float>();
     filter.add_argument("-G", "--max_gc")
-          .help("read max gc content, used with --gc, otherwise ignore this parameter, range (" + std::to_string(static_cast<int>(MIN_PERCENT)) + ", " +
+          .help("read max gc content, used with --gc, otherwise ignore this parameter, range (" + std::to_string(
+                  static_cast<int>(MIN_PERCENT)) + ", " +
               std::to_string(static_cast<int>(MAX_PERCENT)) + ")")
           .default_value(MAX_PERCENT)
-          .scan<'g', double>();
+          .scan<'g', float>();
     filter.add_argument("-t", "--threads")
           .help("threads number used, range (1, 16)")
           .default_value(1)
@@ -103,8 +110,8 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
          .required();
     index.add_argument("-k", "--key_len")
          .help(
-             "the first N of read name used to make index, if this value bigger than readname, use readname as key, range >=8")
-         .default_value(8)
+             "use the first N characters of readname to make index, it can be set zero or int in range (12, 100), if this value is zero or bigger than length of readname, then use the full readname as key")
+         .default_value(0)
          .scan<'i', int>();
     nanofq.add_subparser(index);
 
@@ -130,6 +137,16 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
         .default_value(8)
         .scan<'i', int>();
     nanofq.add_subparser(find);
+
+    static argparse::ArgumentParser compress{"compress"};
+    compress.add_description("Convert text fastq to NanoBgzip fastq and build an index at same time");
+    compress.add_argument("-i", "--input")
+            .help("the input text fastq, default -, means from stdin")
+            .default_value("-");
+    compress.add_argument("-o", "--output")
+            .help("the output NanoBgzip fastq, must endswith .gz")
+            .required();
+    nanofq.add_subparser(compress);
 
     static argparse::ArgumentParser trim{"trim"};
     trim.add_description("Use local alignment to find possible adapter, barcode, primers in reads and trim them");
@@ -207,13 +224,13 @@ you can change this value by set specified parameter)");
         .help("[search parameter]: the align length between query and reads 5end should bigger than this value, range ("
             + std::to_string(static_cast<int>(MIN_PERCENT)) + ", " + std::to_string(static_cast<int>(MAX_PERCENT)) +
             ")")
-        .scan<'g', double>();
+        .scan<'g', float>();
     trim.add_argument("--5end_align_identity")
         .help(
             "[search parameter]: the align identity between query and reads 5end should bigger than this value, range ("
             + std::to_string(static_cast<int>(MIN_PERCENT)) + ", " + std::to_string(static_cast<int>(MAX_PERCENT)) +
             ")")
-        .scan<'g', double>();
+        .scan<'g', float>();
 
     trim.add_argument("--3end_len")
         .help("[search parameter]: check the first N bases from 3end of reads to find adapter, range (" +
@@ -223,13 +240,13 @@ you can change this value by set specified parameter)");
         .help("[search parameter]: the align length between query and reads 3end should bigger than this value, range ("
             + std::to_string(static_cast<int>(MIN_PERCENT)) + ", " + std::to_string(static_cast<int>(MAX_PERCENT)) +
             ")")
-        .scan<'g', double>();
+        .scan<'g', float>();
     trim.add_argument("--3end_align_identity")
         .help(
             "[search parameter]: the align identity between query and reads 3end should bigger than this value, range ("
             + std::to_string(static_cast<int>(MIN_PERCENT)) + ", " + std::to_string(static_cast<int>(MAX_PERCENT)) +
             ")")
-        .scan<'g', double>();
+        .scan<'g', float>();
 
     trim.add_argument("--5end_len_rc")
         .help(
@@ -241,13 +258,13 @@ you can change this value by set specified parameter)");
             "[search parameter]: the align length between query and reads 5end should bigger than this value if this read is reverse complemented, range ("
             + std::to_string(static_cast<int>(MIN_PERCENT)) + ", " + std::to_string(static_cast<int>(MAX_PERCENT)) +
             ")")
-        .scan<'g', double>();
+        .scan<'g', float>();
     trim.add_argument("--5end_align_identity_rc")
         .help(
             "[search parameter]: the align identity between query and reads 5end should bigger than this value if this read is reverse complemented, range ("
             + std::to_string(static_cast<int>(MIN_PERCENT)) + ", " + std::to_string(static_cast<int>(MAX_PERCENT)) +
             ")")
-        .scan<'g', double>();
+        .scan<'g', float>();
 
     trim.add_argument("--3end_len_rc")
         .help(
@@ -259,20 +276,20 @@ you can change this value by set specified parameter)");
             "[search parameter]: the align length between query and reads 3end should bigger than this value if this read is reverse complemented, range ("
             + std::to_string(static_cast<int>(MIN_PERCENT)) + ", " + std::to_string(static_cast<int>(MAX_PERCENT)) +
             ")")
-        .scan<'g', double>();
+        .scan<'g', float>();
     trim.add_argument("--3end_align_identity_rc")
         .help(
             "[search parameter]: the align identity between query and reads 3end should bigger than this value if this read is reverse complemented, range ("
             + std::to_string(static_cast<int>(MIN_PERCENT)) + ", " + std::to_string(static_cast<int>(MAX_PERCENT)) +
             ")")
-        .scan<'g', double>();
+        .scan<'g', float>();
     nanofq.add_subparser(trim);
 
     try {
         nanofq.parse_args(argc, argv);
     }
     catch (const std::exception& e) {
-        cerr << "\n" <<REDS << e.what() << COLOR_END << "\n" << endl;
+        cerr << "\n" << REDS << e.what() << COLOR_END << "\n" << endl;
         if (nanofq.is_subcommand_used("stats")) {
             cerr << stats << endl;
         } else if (nanofq.is_subcommand_used("trim")) {

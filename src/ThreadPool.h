@@ -19,7 +19,7 @@ private:
     std::mutex m_mtx;
     std::condition_variable m_cv;
     std::atomic<bool> m_running;
-    std::vector<std::tuple<std::string, unsigned, double, double>>& m_result;
+    // std::vector<std::tuple<std::string, unsigned, double, double>>& m_result;
 
 public:
     ThreadPool() = delete;
@@ -28,9 +28,8 @@ public:
     ThreadPool& operator=(const ThreadPool&) = delete;
     ThreadPool& operator=(ThreadPool&&) = delete;
 
-    explicit ThreadPool(int threads_number, std::vector<std::tuple<std::string, unsigned, double, double>>& res) :
-        m_running(true),
-        m_result(res)
+    explicit ThreadPool(int threads_number) :
+        m_running(true)
     {
         if (threads_number < 1) {
             std::cerr << "Thread number must >= 1" << std::endl;
@@ -66,8 +65,8 @@ public:
         for (auto& t : m_threads) {
             if (t.joinable()) t.join();
         }
-        std::cout << "all finished" << std::endl;
-        std::cout << m_result.size() << std::endl;
+        // std::cout << "all finished" << std::endl;
+        // std::cout << m_result.size() << std::endl;
     }
 
     template <typename Func, typename... Args>

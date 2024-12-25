@@ -107,6 +107,7 @@ namespace nanobgzip
 
             input_data->shrink_to_fit();
             //bigger output buffer used to store compressed data, 28 = header + sizeof(xlen) + xlen + crc32 + isize
+            // auto output_data {std::make_shared<std::vector<uint8_t>>(input_data->size() * 1.2 + 28)};
             std::vector<uint8_t> output_data(input_data->size() * 1.2 + 28);
 
             z_stream strm;
@@ -143,18 +144,18 @@ namespace nanobgzip
             block_size = output_data.size();
             uint32_t input_size = strm.total_in;
             // change the extra fields contents in header to save the total block size
-            std::memcpy(output_data.data() + 16, &block_size, 4);
-            // output_data[16] = static_cast<uint8_t>(block_size & 0XFF);
-            // output_data[17] = static_cast<uint8_t>((block_size & 0XFF00) >> 8);
-            // output_data[18] = static_cast<uint8_t>((block_size & 0XFF0000) >> 16);
-            // output_data[19] = static_cast<uint8_t>((block_size & 0XFF000000) >> 24);
+            // std::memcpy(output_data.data() + 16, &block_size, 4);
+            output_data[16] = static_cast<uint8_t>(block_size & 0XFF);
+            output_data[17] = static_cast<uint8_t>((block_size & 0XFF00) >> 8);
+            output_data[18] = static_cast<uint8_t>((block_size & 0XFF0000) >> 16);
+            output_data[19] = static_cast<uint8_t>((block_size & 0XFF000000) >> 24);
             /* ignore CRC32 */
             /* save the input size in isize (the last bytes of this block) */
-            std::memcpy(output_data.data() - 4, &input_size, 4);
-            // output_data[block_size - 4] = static_cast<uint8_t>(input_size & 0XFF);
-            // output_data[block_size - 3] = static_cast<uint8_t>((input_size & 0XFF00) >> 8);
-            // output_data[block_size - 2] = static_cast<uint8_t>((input_size & 0XFF0000) >> 16);
-            // output_data[block_size - 1] = static_cast<uint8_t>((input_size & 0XFF000000) >> 24);
+            // std::memcpy(output_data.data() - 4, &input_size, 4);
+            output_data[block_size - 4] = static_cast<uint8_t>(input_size & 0XFF);
+            output_data[block_size - 3] = static_cast<uint8_t>((input_size & 0XFF00) >> 8);
+            output_data[block_size - 2] = static_cast<uint8_t>((input_size & 0XFF0000) >> 16);
+            output_data[block_size - 1] = static_cast<uint8_t>((input_size & 0XFF000000) >> 24);
             output_index_stream << "#" << written_bytes << '\t' << written_bytes + block_size - 1 << '\n';
             for (auto& read_position : index_in_block) {
                 output_index_stream << read_position;
@@ -198,8 +199,9 @@ namespace nanobgzip
             cerr << "Opened " << index_file << " failed for make index" << endl;
             exit(1);
         }
+        is = new std::ifstream{infile};
         index_stream << "#" << key_len << '\n';
-        std::shared_ptr<std::vector<uint8_t>> in_buffer_ptr;
+        auto in_buffer_ptr{std::make_shared<std::vector<uint8_t>>()};
         unsigned line_count{0};
         size_t written_bytes{0};
         std::string line;
@@ -208,8 +210,10 @@ namespace nanobgzip
             in_buffer_ptr->push_back('\n');
             ++line_count;
             if (line_count == 4 * reads_number) {
-                // the following three lines: consider thread pool
-                auto output_buffer{nano_block_compress(in_buffer_ptr, index_stream, written_bytes, key_len)};
+                // TODO the following three lines: consider thread pool
+                std::vector<uint8_t> output_buffer{
+                    nano_block_compress(in_buffer_ptr, index_stream, written_bytes, key_len)
+                };
                 written_bytes += output_buffer.size();
                 ostream.write(reinterpret_cast<char*>(output_buffer.data()), output_buffer.size());
                 line_count = 0;
@@ -218,7 +222,7 @@ namespace nanobgzip
         }
         if (is->eof()) {
             if (!in_buffer_ptr->empty()) {
-                std::vector<uint8_t> output_buffer{
+                auto output_buffer{
                     nano_block_compress(in_buffer_ptr, index_stream, written_bytes, key_len)
                 };
                 ostream.write(reinterpret_cast<char*>(output_buffer.data()), output_buffer.size());
@@ -323,7 +327,7 @@ namespace nanobgzip
     std::vector<uint8_t> get_uncompressed_from_block(
         std::ifstream& infile,
         std::pair<size_t,
-        size_t>& block_edge,
+                  size_t>& block_edge,
         unsigned need_uncompressed_size)
     {
         const bool specified_block{!(block_edge.first == 0 && block_edge.second == 0)};

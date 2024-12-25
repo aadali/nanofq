@@ -49,7 +49,7 @@ public:
         bool use_index,
         unsigned key_length) const;
 
-    void run_index(unsigned key_length) const;
+    void run_index(unsigned key_length, bool force_index) const;
 
     void run_trim(
         std::atomic<size_t>& counter,

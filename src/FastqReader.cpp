@@ -125,7 +125,7 @@ void FastqReader::find_reads(const std::string& input_reads, std::ostream& out, 
     if (use_index) {
         /* when user need use index, firstly check whether the index file exists.
         If true and index is newer than input file, just use it, else make index and use it */
-        index(key_len);
+        index(key_len, false);
         auto reads_index{read_index()};
         size_t used_key_len{reads_index["used_key_len"][0]};
 
@@ -184,7 +184,7 @@ void FastqReader::find_reads_in_gz(const std::string& input_reads, std::ostream&
     if (use_index) {
         /* when user need use index, firstly check whether the index file exists.
         If true and index is newer than input file, just use it, else make index and use it */
-        index(key_len);
+        index(key_len, false);
         auto reads_index{read_gz_index()};
         auto block_edges{reads_index.first};
         auto reads_index_in_block{reads_index.second};
@@ -263,17 +263,22 @@ void FastqReader::search_read_one_by_one(std::unordered_set<std::string>& read_n
     }
 }
 
-void FastqReader::index(unsigned key_len)
+void FastqReader::index(unsigned key_len, bool force_index)
 {
+    // TODO when key_len, use the full length read name to index
     std::filesystem::path input_file{m_input_file};
     std::filesystem::path input_file_idx{m_input_file_index};
+    if (force_index){
+        m_input_file.ends_with(".gz") ? index_fastq_gz(key_len) : index_fastq(key_len);
+        return;
+    }
     if (exists(input_file_idx)) {
         if (last_write_time(input_file) > last_write_time(input_file_idx)) {
             // input_file is newer than index
             m_input_file.ends_with(".gz") ? index_fastq_gz(key_len) : index_fastq(key_len);
         }
     } else {
-        m_input_file.ends_with(".gz") ? index_fastq_gz(key_len) : index_fastq_gz(key_len);
+        m_input_file.ends_with(".gz") ? index_fastq_gz(key_len) : index_fastq(key_len);
     }
 }
 
@@ -287,6 +292,7 @@ void FastqReader::find(const std::string& input_reads, std::ostream& out, bool u
 
 void FastqReader::index_fastq(unsigned key_len)
 {
+    key_len = key_len == 0 ? 999 : key_len;
     std::ifstream infile_text{m_input_file.data(), std::ios::in};
     std::ofstream output_index_stream{m_input_file_index, std::ios::out};
     if (!output_index_stream) {
@@ -323,8 +329,8 @@ void FastqReader::index_fastq(unsigned key_len)
             /* readName\tstartIndex\tendIndex
              * 0-based, close interval
             */
-            length = 0;
             start += length;
+            length = 0;
             break;
         }
         default: {
@@ -338,6 +344,7 @@ void FastqReader::index_fastq(unsigned key_len)
 
 void FastqReader::index_fastq_gz(unsigned key_len)
 {
+    key_len = key_len == 0 ? 999 : key_len;
     if (!m_input_file.ends_with(".gz")) {
         std::cerr << REDS + fmt::format("Error: input file path {} must ends with .gz when use index_fastq_gz",
                                         m_input_file) + COLOR_END << std::endl;
@@ -347,12 +354,13 @@ void FastqReader::index_fastq_gz(unsigned key_len)
     if (nanobgzip::check_compress_type(std::string{m_input_file}) != nanobgzip::GzipType::NANO_B_GZIP) {
         std::cerr << REDS <<
             "Error: couldn't index common gzip file. \nYou can refer to the following command to convert it into a NanoBgzip file and build an index at the same time"
-            << COLOR_END << endl;
-        std::cerr << "\nzcat input.fastq.gz | nanofq compress - output.fastq.gz\n";
+            << COLOR_END << std::endl;
+        std::cerr << "\nzcat input.fastq.gz | nanofq compress - output.fastq.gz\n\n";
+        std::cerr << REDS <<
+            "The above command will turn comman input.fastq.gz into NanoBgzip output.fastq.gz and create index file simultaneously\n";
         std::cerr <<
-            "#The above command will turn comman input.fastq.gz into NanoBgzip output.fastq.gz and create index file simultaneously";
-        std::cerr <<
-            "Or use bgzip to compress the text file and samtools fqidx to build index. Refer the following command:\n";
+            "Or use bgzip to compress the text file and samtools fqidx to build index. Refer the following command:\n"
+            << COLOR_END << std::endl;
         std::cerr << "zcat input.fastq.gz | bgzip -c > output.fastq.gz && samtools fqidx output.fastq.gz" << std::endl;
         exit(1);
     }

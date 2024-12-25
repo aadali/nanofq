@@ -53,7 +53,7 @@ public:
 
     inline bool read_finish() const { return m_finish; };
 
-    void index(unsigned key_len);
+    void index(unsigned key_len, bool force_index);
 
     void find(
         const std::string& input_reads,

@@ -152,9 +152,9 @@ void Work::save_summary(
     }
 }
 
-void Work::run_index(unsigned key_length) const
+void Work::run_index(unsigned key_length, bool force_index) const
 {
-    m_fq.index(key_length);
+    m_fq.index(key_length, force_index);
 }
 
 void Work::run_trim(
