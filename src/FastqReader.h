@@ -18,8 +18,8 @@ KSEQ_INIT(gzFile, gzread)
 using shared_vec_reads = std::shared_ptr<std::vector<std::shared_ptr<Read>>>;
 using shared_read = std::shared_ptr<Read>;
 constexpr size_t FASTQ_BUFFER_SIZE{1 << 23}; // the longest read length exceeds 4Mb
-using nanobgzip_reads_index = std::pair<std::vector<std::pair<size_t, size_t>>, std::unordered_map<
-                                            std::string, std::vector<std::tuple<unsigned, size_t, size_t>>>>;
+using nanobgzip_reads_index = std::pair<std::vector<std::pair<size_t, size_t>>,
+                                        std::unordered_map<std::string, std::tuple<unsigned, size_t, size_t>>>;
 
 class FastqReader
 {
@@ -53,13 +53,12 @@ public:
 
     inline bool read_finish() const { return m_finish; };
 
-    void index(unsigned key_len, bool force_index);
+    void index(bool force_index);
 
     void find(
         const std::string& input_reads,
         std::ostream& out,
-        bool use_index,
-        unsigned key_len = 8);
+        bool use_index);
 
 private:
     static std::unordered_set<std::string> get_searching_read_names(const std::string& input_reads);
@@ -68,25 +67,23 @@ private:
         std::unordered_set<std::string>& read_names,
         std::ostream& out);
 
-    void index_fastq(unsigned key_len);
+    void index_fastq();
 
-    void index_fastq_gz(unsigned key_len);
+    void index_fastq_gz();
 
-    std::unordered_map<std::string, std::vector<size_t>> read_index() const;
+    std::unordered_map<std::string, std::pair<size_t,size_t>> read_index() const;
 
     nanobgzip_reads_index read_gz_index() const;
 
     void find_reads(
         const std::string& input_reads,
         std::ostream& out,
-        bool use_index,
-        unsigned key_len);
+        bool use_index);
 
     void find_reads_in_gz(
         const std::string& input_reads,
         std::ostream& out,
-        bool use_index,
-        unsigned key_len);
+        bool use_index);
 };
 
 #endif // FASTQREADER_H

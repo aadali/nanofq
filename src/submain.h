@@ -112,20 +112,20 @@ int sub_main(int argc, char* argv[])
         if (out.is_open()) out.close();
     } else if (nanofq.is_subcommand_used("index")) {
         argparse::ArgumentParser& index{nanofq.at<argparse::ArgumentParser>("index")};
-        std::string input{index.get("--input")};
-        int key_len{index.get<int>("--key_len")};
-        if (index.is_used("--key_len")) {
-            if (key_len < 12 || key_len > 100) {
-                std::cerr << REDS << "if --key_len was set, it must be int in range (12, 100)" << COLOR_END <<
-                    std::endl;
-                std::cerr << index << std::endl;
-                exit(1);
-            }
-        }
+        std::string input{index.get("input")};
+        // int key_len{index.get<int>("--key_len")};
+        // if (index.is_used("--key_len")) {
+        //     if (key_len < 12 || key_len > 100) {
+        //         std::cerr << REDS << "if --key_len was set, it must be int in range (12, 100)" << COLOR_END <<
+        //             std::endl;
+        //         std::cerr << index << std::endl;
+        //         exit(1);
+        //     }
+        // }
         FastqReader fq{input, 20000};
         ThreadPool tp{1};
         Work work{fq, tp};
-        work.run_index(key_len, true);
+        work.run_index(true);
     } else if (nanofq.is_subcommand_used("find")) {
         argparse::ArgumentParser& find{nanofq.at<argparse::ArgumentParser>("find")};
         std::string input{find.get("--input")};
@@ -152,7 +152,7 @@ int sub_main(int argc, char* argv[])
         }
         ThreadPool tp{1};
         Work work{fq, tp};
-        work.run_find(reads, output != "-" ? out : std::cout, use_index, key_len);
+        work.run_find(reads, output != "-" ? out : std::cout, use_index);
         if (out.is_open()) out.close();
     } else if (nanofq.is_subcommand_used("trim")) {
         argparse::ArgumentParser& trim{nanofq.at<argparse::ArgumentParser>("trim")};
@@ -332,10 +332,10 @@ int sub_main(int argc, char* argv[])
     } else if (nanofq.is_subcommand_used("compress")) {
         argparse::ArgumentParser& compress{nanofq.at<argparse::ArgumentParser>("compress")};
         std::string input{compress.get("--input")};
-        // std::cout << "--input: " << input << std::endl;
         std::string output{compress.get("--output")};
-        // cout << "test compress" << endl;
-        nanobgzip::nano_compress(input, output, fmt::format("{}.index",output), 10, 0);
+        int reads_number{compress.get<int>("--number")};
+        check_number_in_range("--number", reads_number, 5, 50, compress, true);
+        nanobgzip::nano_compress(input, output, fmt::format("{}.index", output), reads_number);
     }
     return 0;
 }

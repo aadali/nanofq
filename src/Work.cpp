@@ -117,10 +117,9 @@ void Work::run_filter(
 void Work::run_find(
     const std::string& input_reads,
     std::ostream& out,
-    bool use_index,
-    unsigned key_length) const
+    bool use_index) const
 {
-    m_fq.find(input_reads, out, use_index, key_length);
+    m_fq.find(input_reads, out, use_index);
 }
 
 
@@ -152,9 +151,9 @@ void Work::save_summary(
     }
 }
 
-void Work::run_index(unsigned key_length, bool force_index) const
+void Work::run_index(bool force_index) const
 {
-    m_fq.index(key_length, force_index);
+    m_fq.index(force_index);
 }
 
 void Work::run_trim(

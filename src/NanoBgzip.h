@@ -32,15 +32,13 @@ namespace nanobgzip
         const std::string& infile,
         const std::string& outfile,
         const std::string& index_file,
-        int reads_number = 10,
-        unsigned key_len = 8);
+        int reads_number);
 
     GzipType check_compress_type(const std::string& infile);
 
     void build_index(
         const std::string& file,
-        const std::string& index_file,
-        unsigned key_len);
+        const std::string& index_file);
 
     std::vector<uint8_t> get_uncompressed_from_block(
         std::ifstream& infile,

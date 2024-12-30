@@ -37,8 +37,7 @@ namespace nanobgzip
         };
 
         std::vector<std::string> get_index_in_block(
-            const std::vector<uint8_t>& input_data,
-            unsigned key_len)
+            const std::vector<uint8_t>& input_data)
         {
             std::vector<std::string> reads_position;
             int line_number{0};
@@ -50,14 +49,15 @@ namespace nanobgzip
             int record_start_idx{0};
             int record_end_idx{0};
             for (int i{0}; i < input_data.size(); ++i) {
+                uint8_t this_char {input_data[i]};
                 if (line_number == 0 && !find_read_name) {
-                    if (input_data[i] != ' ' && input_data[i] != '\n' && i + 1 < key_len) {
-                        this_read_position << input_data[i];
+                    if (this_char !=' ' && this_char != '\n'){
+                        this_read_position << this_char;
                     } else {
                         find_read_name = true;
                     }
                 }
-                if (input_data[i] == '\n' || i == input_data.size() - 1) {
+                if (this_char == '\n' || i == input_data.size() - 1) {
                     ++line_number;
                     if (line_number == 4) {
                         record_end_idx = i;
@@ -68,7 +68,6 @@ namespace nanobgzip
                         line_number = 0;
                         find_read_name = false;
                         this_read_position.str("");
-                        this_read_position.clear();
                     }
                 }
             }
@@ -78,10 +77,9 @@ namespace nanobgzip
         std::vector<uint8_t> nano_block_compress(
             std::shared_ptr<std::vector<uint8_t>> input_data,
             std::ostream& output_index_stream,
-            size_t written_bytes,
-            unsigned key_len)
+            size_t written_bytes)
         {
-            std::vector<std::string> index_in_block{get_index_in_block(*input_data, key_len)};
+            std::vector<std::string> index_in_block{get_index_in_block(*input_data)};
             /* create header, not text, no hcrc, no name, no comment, but need extra field */
             gz_header header;
             header.extra_len = 8;
@@ -168,8 +166,7 @@ namespace nanobgzip
         const std::string& infile,
         const std::string& outfile,
         const std::string& index_file,
-        int reads_number,
-        unsigned key_len)
+        int reads_number)
     {
         std::istream* is = nullptr;
         bool using_infile = false;
@@ -199,8 +196,6 @@ namespace nanobgzip
             cerr << "Opened " << index_file << " failed for make index" << endl;
             exit(1);
         }
-        is = new std::ifstream{infile};
-        index_stream << "#" << key_len << '\n';
         auto in_buffer_ptr{std::make_shared<std::vector<uint8_t>>()};
         unsigned line_count{0};
         size_t written_bytes{0};
@@ -212,7 +207,7 @@ namespace nanobgzip
             if (line_count == 4 * reads_number) {
                 // TODO the following three lines: consider thread pool
                 std::vector<uint8_t> output_buffer{
-                    nano_block_compress(in_buffer_ptr, index_stream, written_bytes, key_len)
+                    nano_block_compress(in_buffer_ptr, index_stream, written_bytes)
                 };
                 written_bytes += output_buffer.size();
                 ostream.write(reinterpret_cast<char*>(output_buffer.data()), output_buffer.size());
@@ -223,7 +218,7 @@ namespace nanobgzip
         if (is->eof()) {
             if (!in_buffer_ptr->empty()) {
                 auto output_buffer{
-                    nano_block_compress(in_buffer_ptr, index_stream, written_bytes, key_len)
+                    nano_block_compress(in_buffer_ptr, index_stream, written_bytes)
                 };
                 ostream.write(reinterpret_cast<char*>(output_buffer.data()), output_buffer.size());
             }
@@ -294,8 +289,7 @@ namespace nanobgzip
 
     void build_index(
         const std::string& file,
-        const std::string& index_file,
-        unsigned key_len)
+        const std::string& index_file)
     {
         GzipType compress_type = check_compress_type(file);
         if (compress_type != GzipType::NANO_B_GZIP) {
@@ -306,7 +300,6 @@ namespace nanobgzip
         unsigned need_uncompressed_size{0};
         std::ifstream infile{file, std::ios::binary};
         std::ofstream outfile{index_file};
-        outfile << "#" << key_len << '\n';
         size_t written_size{0};
         while (true) {
             std::pair<size_t, size_t> block_edge;
@@ -314,7 +307,7 @@ namespace nanobgzip
                 get_uncompressed_from_block(infile, block_edge, need_uncompressed_size)
             };
             if (uncompressed_data.empty()) break;
-            auto reads_positions{get_index_in_block(uncompressed_data, key_len)};
+            auto reads_positions{get_index_in_block(uncompressed_data)};
             outfile << "#" << written_size << '\t' << written_size + block_edge.first - 1 << '\n';
             written_size += block_edge.first;
             for (auto& read_position : reads_positions) {
@@ -326,8 +319,7 @@ namespace nanobgzip
 
     std::vector<uint8_t> get_uncompressed_from_block(
         std::ifstream& infile,
-        std::pair<size_t,
-                  size_t>& block_edge,
+        std::pair<size_t, size_t>& block_edge,
         unsigned need_uncompressed_size)
     {
         const bool specified_block{!(block_edge.first == 0 && block_edge.second == 0)};

@@ -105,14 +105,14 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[])
 
     static argparse::ArgumentParser index{"index"};
     index.add_description("index the input fastq. Never do it for short reads");
-    index.add_argument("-i", "--input")
+    index.add_argument("input")
          .help("the input fastq[.gz]")
          .required();
-    index.add_argument("-k", "--key_len")
-         .help(
-             "use the first N characters of readname to make index, it can be set zero or int in range (12, 100), if this value is zero or bigger than length of readname, then use the full readname as key")
-         .default_value(0)
-         .scan<'i', int>();
+    // index.add_argument("-k", "--key_len")
+    //      .help(
+    //          "use the first N characters of readname to make index, it can be set zero or int in range (12, 100), if this value is zero or bigger than length of readname, then use the full readname as key")
+    //      .default_value(0)
+    //      .scan<'i', int>();
     nanofq.add_subparser(index);
 
     static argparse::ArgumentParser find{"find"};
@@ -146,6 +146,10 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[])
     compress.add_argument("-o", "--output")
             .help("the output NanoBgzip fastq, must endswith .gz")
             .required();
+    compress.add_argument("-n", "--number")
+        .help("compress how many reads into each block")
+        .default_value(10)
+        .scan<'i', int>();
     nanofq.add_subparser(compress);
 
     static argparse::ArgumentParser trim{"trim"};

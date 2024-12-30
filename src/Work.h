@@ -46,10 +46,9 @@ public:
     void run_find(
         const std::string& input_reads,
         std::ostream& out,
-        bool use_index,
-        unsigned key_length) const;
+        bool use_index) const;
 
-    void run_index(unsigned key_length, bool force_index) const;
+    void run_index(bool force_index) const;
 
     void run_trim(
         std::atomic<size_t>& counter,
