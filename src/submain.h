@@ -18,7 +18,7 @@ int sub_main(int argc, char* argv[])
     if (nanofq.is_subcommand_used("stats")) {
         argparse::ArgumentParser& stats{nanofq.at<argparse::ArgumentParser>("stats")};
         std::string input{stats.get("--input")};
-        std::string output{stats.get("--output")};
+        std::string output{stats.get("--output")}; // output should not be stdout
         std::string summary{stats.get("--summary")};
         int n{stats.get<int>("--firstN")};
         check_number_in_range("--firstN", n, 1, 1000, stats, true);
@@ -42,10 +42,14 @@ int sub_main(int argc, char* argv[])
             std::ranges::sort(lengths, std::greater<>());
         }
         bool make_plot{false};
+        bool plot_mean_length{false};
+        bool plot_n50{false};
         std::string plot_prefix;
         if (stats.is_used("--plot")) {
             make_plot = true;
             plot_prefix = stats.get("--plot");
+            plot_mean_length = stats.get<bool>("--plot_mean_length");
+            plot_n50 = stats.get<bool>("--plot_n50");
         }
         int threads{stats.get<int>("--threads")};
         check_number_in_range("--threads", threads, 1, 16, stats, true);
@@ -68,7 +72,21 @@ int sub_main(int argc, char* argv[])
         Work work{fq, tp};
         std::vector<read_stats_result> stats_result{};
         work.run_stats(stats_result, output != "-" ? out : std::cout, gc);
-        work.save_summary(n, quals, lengths, stats_result, summary);
+        std::tuple<float, int, float, float> summary_info_tuple = work.save_summary(
+            n, quals, lengths, stats_result, summary);
+        if (make_plot) {
+            auto [mean_len, n50, mean_quality, std] = summary_info_tuple;
+            work.plot(std::string{argv[0]},
+                      output,
+                      plot_prefix,
+                      plot_mean_length,
+                      mean_len,
+                      plot_n50,
+                      n50,
+                      std,
+                      format,
+                      mean_quality);
+        }
         if (out.is_open()) { out.close(); }
     } else if (nanofq.is_subcommand_used("filter")) {
         argparse::ArgumentParser& filter{nanofq.at<argparse::ArgumentParser>("filter")};
@@ -113,15 +131,6 @@ int sub_main(int argc, char* argv[])
     } else if (nanofq.is_subcommand_used("index")) {
         argparse::ArgumentParser& index{nanofq.at<argparse::ArgumentParser>("index")};
         std::string input{index.get("input")};
-        // int key_len{index.get<int>("--key_len")};
-        // if (index.is_used("--key_len")) {
-        //     if (key_len < 12 || key_len > 100) {
-        //         std::cerr << REDS << "if --key_len was set, it must be int in range (12, 100)" << COLOR_END <<
-        //             std::endl;
-        //         std::cerr << index << std::endl;
-        //         exit(1);
-        //     }
-        // }
         FastqReader fq{input, 20000};
         ThreadPool tp{1};
         Work work{fq, tp};
@@ -132,15 +141,6 @@ int sub_main(int argc, char* argv[])
         std::string output{find.get("--output")};
         std::string reads{find.get("--reads")};
         bool use_index{find.get<bool>("--use_index")};
-        int key_len;
-        if (!use_index) {
-            if (find.is_used("--key_len")) {
-                cerr << WARNS + "if --use_index is not set, ignore --key_len" + COLOR_END << endl;
-            }
-        } else {
-            key_len = find.get<int>("--key_len");
-            check_number_in_range("--key_len", key_len, 8, 100, find, true);
-        }
         FastqReader fq{input, 5000};
         std::ofstream out;
         if (output != "-") {
@@ -331,8 +331,8 @@ int sub_main(int argc, char* argv[])
         if (out.is_open()) out.close();
     } else if (nanofq.is_subcommand_used("compress")) {
         argparse::ArgumentParser& compress{nanofq.at<argparse::ArgumentParser>("compress")};
-        std::string input{compress.get("--input")};
-        std::string output{compress.get("--output")};
+        std::string input{compress.get("input")};
+        std::string output{compress.get("output")};
         int reads_number{compress.get<int>("--number")};
         check_number_in_range("--number", reads_number, 5, 50, compress, true);
         nanobgzip::nano_compress(input, output, fmt::format("{}.index", output), reads_number);

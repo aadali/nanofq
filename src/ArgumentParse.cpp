@@ -8,8 +8,7 @@ using std::cerr;
 using std::endl;
 
 
-argparse::ArgumentParser& get_arguments(int argc, char* argv[])
-{
+argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
     static argparse::ArgumentParser nanofq{"nanofq", "1.0"};
     nanofq.add_description("A tool for stats, filter, index, find, trim nanopore fastq reads");
     nanofq.add_epilog("Contact aadali@gmail.com");
@@ -20,8 +19,8 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[])
          .help("the input fastq[.gz]")
          .required();
     stats.add_argument("-o", "--output")
-         .help("the stats output file name, default print all results to stdout")
-         .default_value("-");
+         .help("the stats output file path")
+         .required();
     stats.add_argument("-s", "--summary")
          .help("output the stats summary into this file")
          .default_value("./summary.txt");
@@ -43,9 +42,16 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[])
     stats.add_argument("-p", "--plot")
          .help("whether plot the stats result, if it's set, the value will be the figure file name prefix");
     stats.add_argument("-f", "--format")
-         .help("what figure format you need, range {pdf, jpg, png}")
+         .help("what figure format you need, range {pdf, jpg, png}, only used when --plot used")
          .default_value<std::vector<std::string>>({"pdf"})
          .append();
+    stats.add_argument("--plot_mean_length")
+         .help("whether plot the mean length in plot, only used when --plot used")
+         .flag();
+    stats.add_argument("--plot_n50")
+         .help("whether plot the n50 in plot, only used when --plot used")
+         .flag();
+
     stats.add_argument("-g", "--gc")
          .help("whether the stats gc content, if not set, all gc content will be set 0.0")
          .flag();
@@ -53,7 +59,8 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[])
          .help("threads number used, range (1, 16)").default_value(1)
          .scan<'i', int>();
     stats.add_argument("-c", "--chunk")
-         .help("chunk number used, more chunk more memory, range (10000, 100000)")
+         .help(
+             "chunk number used, more chunk more memory, range (10000, 100000), bigger chunk, more memory will be used")
          .default_value(20000)
          .scan<'i', int>();
     nanofq.add_subparser(stats);
@@ -98,7 +105,8 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[])
           .default_value(1)
           .scan<'i', int>();
     filter.add_argument("-c", "--chunk")
-          .help("chunk number used, more chunk more memory, range (10000, 100000)")
+          .help(
+              "chunk number used, more chunk more memory, range (10000, 100000), bigger chunk, more memory will be used")
           .default_value(20000)
           .scan<'i', int>();
     nanofq.add_subparser(filter);
@@ -108,11 +116,6 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[])
     index.add_argument("input")
          .help("the input fastq[.gz]")
          .required();
-    // index.add_argument("-k", "--key_len")
-    //      .help(
-    //          "use the first N characters of readname to make index, it can be set zero or int in range (12, 100), if this value is zero or bigger than length of readname, then use the full readname as key")
-    //      .default_value(0)
-    //      .scan<'i', int>();
     nanofq.add_subparser(index);
 
     static argparse::ArgumentParser find{"find"};
@@ -131,25 +134,20 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[])
         .help(
             "whether use index to find reads, if true and no index file exists, it will make index firstly. Index fastq may need take a while, but once the index had finished, searching reads will be very fast")
         .flag();
-    find.add_argument("-k", "--key_len")
-        .help(
-            "the first N of read name used to make index, if this value bigger than readname, use readname as key, range >=8")
-        .default_value(8)
-        .scan<'i', int>();
     nanofq.add_subparser(find);
 
     static argparse::ArgumentParser compress{"compress"};
     compress.add_description("Convert text fastq to NanoBgzip fastq and build an index at same time");
-    compress.add_argument("-i", "--input")
-            .help("the input text fastq, default -, means from stdin")
-            .default_value("-");
-    compress.add_argument("-o", "--output")
+    compress.add_argument("output")
             .help("the output NanoBgzip fastq, must endswith .gz")
             .required();
+    compress.add_argument("input")
+            .help("the input text fastq, default -, means from stdin")
+            .default_value("-");
     compress.add_argument("-n", "--number")
-        .help("compress how many reads into each block")
-        .default_value(10)
-        .scan<'i', int>();
+            .help("compress how many reads into each block")
+            .default_value(10)
+            .scan<'i', int>();
     nanofq.add_subparser(compress);
 
     static argparse::ArgumentParser trim{"trim"};
@@ -199,7 +197,8 @@ you can change this value by set specified parameter)");
         .default_value(1)
         .scan<'i', int>();
     trim.add_argument("-c", "--chunk")
-        .help("chunk number used, more chunk more memory, range (10000, 100000)")
+        .help(
+            "chunk number used, more chunk more memory, range (10000, 100000), bigger chunk, more memory will be used")
         .default_value(20000)
         .scan<'i', int>();
 
@@ -297,7 +296,7 @@ you can change this value by set specified parameter)");
         if (nanofq.is_subcommand_used("stats")) {
             cerr << stats << endl;
         } else if (nanofq.is_subcommand_used("trim")) {
-            cerr << trim << endl;
+            // cerr << trim << endl;
         } else if (nanofq.is_subcommand_used("find")) {
             cerr << find << endl;
         } else if (nanofq.is_subcommand_used("index")) {

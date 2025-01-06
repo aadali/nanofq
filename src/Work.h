@@ -12,8 +12,7 @@
 #define DEFAULT_FLOAT 3.14f
 using read_stats_result = std::tuple<std::string, unsigned, double, double>;
 
-class Work
-{
+class Work {
 private:
     FastqReader& m_fq;
     ThreadPool& m_threads_pool;
@@ -58,12 +57,24 @@ public:
         std::ostream& log_fstream,
         std::ostream& out) const;
 
-    void save_summary(
+    std::tuple<float, int, float, float> save_summary(
         int n,
         const std::vector<int>& read_quals,
         const std::vector<int>& read_length,
         std::vector<read_stats_result>& stats_result,
         const std::string& summary_file_path);
+
+    void plot(
+        const std::string& argv0,
+        const std::string& input,
+        const std::string& prefix,
+        bool plot_mean_length,
+        float mean_length,
+        bool plot_n50,
+        int n50,
+        float std,
+        const std::vector<std::string>& fmt,
+        float mean_quality);
 
     ~Work() = default;
 
@@ -76,7 +87,7 @@ private:
         std::ostream& out,
         bool gc);
 
-    std::string summary_stats_result(
+    std::tuple<std::string, float, int, float, float> summary_stats_result(
         int n,
         const std::vector<int>& read_quals,
         const std::vector<int>& read_lengths,

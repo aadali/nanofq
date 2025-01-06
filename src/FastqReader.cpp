@@ -177,7 +177,7 @@ void FastqReader::find_reads_in_gz(const std::string& input_reads, std::ostream&
                 nanobgzip::get_uncompressed_from_block(infile_text, block_edges[block_index],
                                                        read_end_index + 1)
             };
-            for (size_t idx{read_start_index}; idx< read_end_index+1; ++idx){
+            for (size_t idx{read_start_index}; idx < read_end_index + 1; ++idx) {
                 out << static_cast<char>(uncompressed_data[idx]);
             }
         }
@@ -336,13 +336,14 @@ void FastqReader::index_fastq_gz()
         std::cerr << REDS <<
             "Error: couldn't index common gzip file. \nYou can refer to the following command to convert it into a NanoBgzip file and build an index at the same time"
             << COLOR_END << std::endl;
-        std::cerr << "\nzcat input.fastq.gz | nanofq compress - output.fastq.gz\n\n";
+        auto idx = m_input_file.rfind(".gz");
+        std::cerr << fmt::format("\nzcat {} | nanofq compress - {}nanobgzip.gz\n\n", m_input_file,
+                                 m_input_file.substr(0, idx + 1));
+        // std::cerr << "\nzcat input.fastq.gz | nanofq compress - output.fastq.gz\n\n";
         std::cerr << REDS <<
-            "The above command will turn comman input.fastq.gz into NanoBgzip output.fastq.gz and create index file simultaneously\n";
-        std::cerr <<
-            "Or use bgzip to compress the text file and samtools fqidx to build index. Refer the following command:\n"
-            << COLOR_END << std::endl;
-        std::cerr << "zcat input.fastq.gz | bgzip -c > output.fastq.gz && samtools fqidx output.fastq.gz" << std::endl;
+            fmt::format(
+                "The above command will turn common {} into NanoBgzip file: {}.nanobgzip.gz and create index file simulaneusly\n",
+                m_input_file, m_input_file.substr(0, idx + 1));
         exit(1);
     }
     nanobgzip::build_index(std::string{m_input_file}, m_input_file_index);

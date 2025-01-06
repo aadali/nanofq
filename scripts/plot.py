@@ -8,27 +8,30 @@ import argparse
 def get_arguments():
     parser = argparse.ArgumentParser("plot long reads length and quality")
     parser.add_argument("-i", "--input", help="a dataframe file separated by tab", required=True)
-    parser.add_argument("-l", "--length", help="the length column index in dataframe, default 1", type=int, default=1)
-    parser.add_argument("-q", "--quality", help="the quality column index in dataframe, default 2", type=int, default=2)
+    parser.add_argument("-l", "--length_col", help="the length column index in dataframe, default 1", type=int, default=1)
+    parser.add_argument("-q", "--quality_col", help="the quality column index in dataframe, default 2", type=int, default=2)
     parser.add_argument("-p", "--prefix", help="prefix of output figure name prefix", default="./plot_output")
-    parser.add_argument("-f", "--format", help="what format do you need", action="append",
-                        choices=["png", "pdf", "jpg"])
-    parser.add_argument("-m", "--mean", help="the mean of length, if not set, will calculate", type=float)
-    parser.add_argument("-s", "--std", help="the standard deviation of length, if not set, will calculate. "
-                                            "values that outside the range of three std will be ignored", type=float)
-    parser.add_argument("-Q", "--mean_quality", help="the mean of read Q value",  type=float, default=0.0)
-    parser.add_argument("-n", "--n50", help="plot the line at the N_number position, if set this value with zero, don't plot the N50 line", type=int, default=0)
+    parser.add_argument("-f", "--format", help="what format do you need", action="append", choices=["png", "pdf", "jpg"])
+    parser.add_argument("-m", "--plot_mean_length", help="whether plot the mean length", action="store_true")
+    parser.add_argument("-M", "--mean_length", help="the mean of length, if not set, will calculate from --input file", type=float)
+    parser.add_argument("-n", "--plot_n50", help="whether plot the N50 length", action="store_true")
+    parser.add_argument("-N", "--n50", help="the N50 value, if not set, don't plot this line", type=float)
+    parser.add_argument("-s", "--std", help="the standard deviation of length, if not set , will calculate from --input file. "
+                                            "Values that outside the range of three std will be ignored", type=float)
+    parser.add_argument("-Q", "--mean_quality", help="the mean of read Q value, if not set, don't plot this line", type=float)
     parser.add_argument("--header", help="if set, treat the first row as header", action="store_true")
     return parser.parse_args()
 
 
-def plot(df: pd.DataFrame, length_mean: float, nvalue: float, quality_mean: float, prefix: str, format: [str]):
+def plot(df: pd.DataFrame,plot_mlength: bool,  mean_length: float, plot_n50: bool, n50: float, mean_quality: float, prefix: str, format: [str]):
+    length_bins = 60
+    quality_bins = 50
     fig, axes = plt.subplots(2, 2, figsize=(10, 8), layout="constrained", sharex="col")
     ax00, ax01, ax10, ax11 = axes.flatten()
-    ax00.hist(df['length'], bins=80, weights=df['length'], rwidth=1)
-    ax10.hist(df['length'], bins=80, rwidth=1)
-    ax01.hist(df['quality'], bins=50, weights=df['length'], rwidth=1)
-    ax11.hist(df['quality'], bins=50, rwidth=1)
+    ax00.hist(df['length'], bins=length_bins, weights=df['length'], rwidth=1)
+    ax10.hist(df['length'], bins=length_bins, rwidth=1)
+    ax01.hist(df['quality'], bins=quality_bins, weights=df['length'], rwidth=1)
+    ax11.hist(df['quality'], bins=quality_bins, rwidth=1)
     for each_ax in [ax00, ax10, ax01, ax11]:
         ymin, ymax = each_ax.get_ylim()
         each_ax.set_ylim((ymin - ymax) * 0.02, ymax)
@@ -47,19 +50,26 @@ def plot(df: pd.DataFrame, length_mean: float, nvalue: float, quality_mean: floa
     ax10.set_xlabel("Read length")
     ax11.set_xlabel("Read quality")
     for ax in [ax00, ax10]:
-        ax.axvline(length_mean, 0, 1, color="black", linewidth=0.8, linestyle="dashed")
-        if nvalue != 0:
-            ax.axvline(nvalue, 0, 1, color="red", linewidth=1, linestyle="dashed")
-    for ax in [ax01, ax11]:
-        if int(quality_mean) != 0:
-            ax.axvline(quality_mean, 0, 1, color="black", linewidth=1, linestyle="dashed")
+        if plot_mlength and mean_length > 0:
+            ax.axvline(mean_length, 0, 1, color="black", linewidth=0.8, linestyle="dashed")  # always plot the of mean_length vline
+            if ax == ax00:
+                # just annotate the mean_length of ax00
+                ax00.annotate(f"MeanLen={int(mean_length)}", xy=(mean_length, 1), xycoords=('data', 'axes fraction'),
+                              ha='left', va='bottom', rotation=30, color='red', fontsize="xx-small")
+        if plot_n50 and n50 is not None:
+            ax.axvline(n50, 0, 1, color="red", linewidth=1, linestyle="dashed")  # if set the n50 value, so plot N50 vline
+            if ax == ax00:
+                ax00.annotate(f"N50={int(n50)}", xy=(n50, 1), xycoords=('data', 'axes fraction'), ha='left',
+                              va='bottom', rotation=30, color="red", fontsize="xx-small")
 
-    if nvalue != 0:
-        ax00.annotate(f"N50={round(nvalue)}", xy=(nvalue, 1), xycoords=('data', 'axes fraction'), ha='left',
-                      va='bottom', rotation=45, color="red")
-    if int(quality_mean != 0):
-        ax01.annotate(f"MeanQ={round(quality_mean, 2)}", xy=(quality_mean, 1), xycoords=('data', 'axes fraction'),
-                      ha='left', va='bottom', rotation=45, color="red")
+    for ax in [ax01, ax11]:
+        if mean_quality is not None:
+            ax.axvline(mean_quality, 0, 1, color="black", linewidth=1, linestyle="dashed")  # if set the mean_quality, so plot mean quality vline
+            if ax == ax01:
+                ax01.annotate(f"MeanQ={round(mean_quality, 2)}", xy=(mean_quality, 1), xycoords=('data', 'axes fraction'),
+                              ha='left', va='bottom', rotation=30, color="red", fontsize="xx-small")
+
+
     fig.suptitle("Read length and quality distribution")
     for f in format:
         fig.savefig(f"{prefix}__ReadLengthAndQualityDistribution.{f}")
@@ -73,12 +83,12 @@ def plot(df: pd.DataFrame, length_mean: float, nvalue: float, quality_mean: floa
     ax_quality = fig.add_subplot(gs[1, 1])
     ax.scatter(df['length'], df['quality'], s=1)
     ax.set_xticklabels([f"{x / 1000}k" for x in ax.get_xticks()])
-    ax.set_ylim(5, 40)
-    ax_quality.set_ylim(5, 40)
-    ax_length.hist(df['length'], bins=80, rwidth=1)
+    ax.set_ylim(5, 30)
+    ax_quality.set_ylim(5, 30)
+    ax_length.hist(df['length'], bins=length_bins, rwidth=1)
     ymin, ymax = ax_length.get_ylim()
     ax_length.set_ylim((ymin - ymax) * 0.02, ymax)
-    ax_quality.hist(df['quality'], bins=50, rwidth=1, orientation='horizontal')
+    ax_quality.hist(df['quality'], bins=quality_bins, rwidth=1, orientation='horizontal')
     ax_quality.set_xticklabels([f"{x / 1000}k" for x in ax_quality.get_xticks()])
     ax_quality.set_yticklabels([])
     ax_length.set_xticklabels([])
@@ -94,21 +104,35 @@ def plot(df: pd.DataFrame, length_mean: float, nvalue: float, quality_mean: floa
 
 if __name__ == '__main__':
     args = get_arguments()
-    df = pd.read_csv(args.input, sep="\t", header=0 if args.header else None, usecols=[args.length, args.quality])
+    df = pd.read_csv(args.input, sep="\t", header=0 if args.header else None, usecols=[args.length_col, args.quality_col])
     df.columns = ['length', 'quality']
-    if args.mean is None:
+
+    if args.mean_length is None:
         length_mean = np.mean(df['length'])
+        # print("calculate mean length")
     else:
-        length_mean = args.mean
+        length_mean = args.mean_length
+
+    if args.plot_n50:
+        if args.n50 is None:
+            sorted_len = np.sort(df['length'])
+            n50 = sorted_len[np.where(np.cumsum(sorted_len) >= 0.5 * np.sum(sorted_len))[0][0]]
+            # print("calculate n50")
+        else:
+            n50 = args.n50
+    else:
+        n50 = None
 
     if args.std is None:
         std = np.std(df['length'])
+        # print("calculate std")
     else:
         std = args.std
+
+
     fs = args.format if args.format else ["pdf"]
     min = length_mean - 3 * std
     max = length_mean + 3 * std
     df = df.query("@min <= length <= @max")
     mean_quality = args.mean_quality
-    n50 = args.n50
-    plot(df, length_mean, n50, mean_quality, args.prefix, fs)
+    plot(df, args.plot_mean_length, length_mean,  args.plot_n50, n50, mean_quality, args.prefix, fs)

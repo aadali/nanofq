@@ -23,7 +23,7 @@ add_executable(nanofq
         src/SequenceInfo.cpp
         src/ArgumentParse.cpp
         src/ArgumentParse.h
-#        src/submain.h
+        src/submain.h
         src/ThreadPool.h
         src/NanoBgzip.cpp
         src/NanoBgzip.h
@@ -34,3 +34,5 @@ target_link_libraries(nanofq z)
 include_directories(./src)
 add_subdirectory(fmt)
 target_link_libraries(nanofq fmt::fmt)
+#file(COPY ./scripts/plot.py ${CMAKE_BUILD_PATH})
+message(${CMAKE_BINARY_DIR})

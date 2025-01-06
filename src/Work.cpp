@@ -19,8 +19,7 @@ Work::Work(
     m_fq(fq),
     m_threads_pool(threads_pool) {}
 
-std::vector<std::pair<unsigned, unsigned>> Work::get_edges(int size) const
-{
+std::vector<std::pair<unsigned, unsigned>> Work::get_edges(int size) const {
     std::vector<std::pair<unsigned, unsigned>> idx_ranges;
     const int step{size / m_threads_pool.threads_number()};
     int start{0}, stop{0};
@@ -40,8 +39,7 @@ std::vector<std::pair<unsigned, unsigned>> Work::get_edges(int size) const
 void Work::run_stats(
     std::vector<read_stats_result>& stats_result,
     std::ostream& out,
-    bool gc)
-{
+    bool gc) {
     if (m_threads_pool.threads_number() == 1) {
         if (!stats_result.empty()) {
             cerr << "When used one thread, the parameter stats_result must be empty" << endl;
@@ -82,8 +80,7 @@ void Work::run_filter(
     float min_quality,
     float min_gc,
     float max_gc,
-    std::ostream& out) const
-{
+    std::ostream& out) const {
     if (m_threads_pool.threads_number() == 1) {
         while (true) {
             Read read{m_fq.read_one_fastq()};
@@ -117,31 +114,29 @@ void Work::run_filter(
 void Work::run_find(
     const std::string& input_reads,
     std::ostream& out,
-    bool use_index) const
-{
+    bool use_index) const {
     m_fq.find(input_reads, out, use_index);
 }
 
 
-void Work::save_summary(
+std::tuple<float, int, float, float> Work::save_summary(
     int n,
     const std::vector<int>& read_quals,
     const std::vector<int>& read_lengths,
     std::vector<read_stats_result>& stats_result,
-    const std::string& summary_file_path)
-{
-    std::string summary_info{summary_stats_result(n, read_quals, read_lengths, stats_result)};
+    const std::string& summary_file_path) {
+    auto summary_info{summary_stats_result(n, read_quals, read_lengths, stats_result)};
     std::ofstream summary_file{summary_file_path, std::ios::out};
     if (summary_file) {
-        summary_file << summary_info;
-        summary_info.clear();
+        summary_file << std::get<0>(summary_info);
+        summary_file.close();
     } else {
         std::cerr << WARNS + "Failed when opening " + summary_file_path + ". Try write the summary into ~/SumMarY.txt" +
             COLOR_END
             << std::endl;
-        std::ofstream try_summary_file{summary_file_path, std::ios::out};
+        std::ofstream try_summary_file{"./SumMarY.txt", std::ios::out};
         try {
-            try_summary_file << summary_info;
+            try_summary_file << std::get<0>(summary_info);
             try_summary_file.close();
         }
         catch (const std::exception& e) {
@@ -149,10 +144,50 @@ void Work::save_summary(
             exit(1);
         }
     }
+    std::tuple<float, int, float, float> res{
+        std::get<1>(summary_info),
+        std::get<2>(summary_info),
+        std::get<3>(summary_info),
+        std::get<4>(summary_info)
+    };
+    return res;
 }
 
-void Work::run_index(bool force_index) const
-{
+void Work::plot(
+    const std::string& argv0,
+    const std::string& input,
+    const std::string& prefix,
+    bool plot_mean_length,
+    float mean_length,
+    bool plot_n50,
+    int n50,
+    float std,
+    const std::vector<std::string>& fmt,
+    float mean_quality) {
+    auto bin_dir = std::filesystem::path(argv0.data()).parent_path();
+    auto script = std::string{bin_dir.append("plot.py")};
+    std::string cmd{fmt::format("python {} -i {} -p {} ", script, input, prefix)};
+    if (plot_mean_length) {
+        cmd.append(fmt::format("--plot_mean_length -M {} ", mean_length));
+    }
+
+    if (plot_n50) {
+        cmd.append(fmt::format("--plot_n50 -N {} ", n50));
+    }
+
+    for (const std::string& f : fmt) {
+        cmd.append(fmt::format("-f {} ", f));
+    }
+    cmd.append(fmt::format("-Q {} -s {} ", mean_quality, std));
+    // cout << cmd << endl;
+    int res = std::system(cmd.data());
+    if (res != 0) {
+        std::cerr << WARNS << "Error found when making plot, you can plot using " << script << " manually" << COLOR_END
+            << std::endl;
+    }
+}
+
+void Work::run_index(bool force_index) const {
     m_fq.index(force_index);
 }
 
@@ -162,8 +197,7 @@ void Work::run_trim(
     const trim_direction& td,
     std::vector<AlignmentConfig>& align_configs,
     std::ostream& log_fstream,
-    std::ostream& out) const
-{
+    std::ostream& out) const {
     if (m_threads_pool.threads_number() == 1) {
         while (true) {
             Read read{m_fq.read_one_fastq()};
@@ -200,8 +234,7 @@ void Work::stats(
     std::shared_ptr<std::vector<Read>> reads_ptr,
     std::vector<read_stats_result>& stats_results,
     std::ostream& out,
-    bool gc)
-{
+    bool gc) {
     for (int idx{start}; idx < end; idx++) {
         const Read& read = (*reads_ptr)[idx];
         std::string name{read.get_id()};
@@ -216,20 +249,13 @@ void Work::stats(
     }
 }
 
-std::string Work::summary_stats_result(
+std::tuple<std::string, float, int, float, float> Work::summary_stats_result(
     int n,
     const std::vector<int>& read_quals,
     const std::vector<int>& read_lengths,
-    std::vector<read_stats_result>& stats_result)
-{
+    std::vector<read_stats_result>& stats_result) {
+    std::tuple<std::string, float, int, float, float> summary_tuple;
     std::stringstream summary_stream;
-    // for (int i{1}; i < m_stats_result.size(); i++) {
-    //     for (read_stats_result& item : m_stats_result[i]) {
-    //         m_stats_result[0].push_back(std::move(item));
-    //     }
-    // }
-    // std::vector<read_stats_result>& stats_result = m_stats_result[0];
-    // std::span<read_stats_result> stats_result_span{m_stats_result[0]};
     ulong total_bases_number{
         std::accumulate(stats_result.begin(),
                         stats_result.end(),
@@ -395,15 +421,15 @@ std::string Work::summary_stats_result(
                                       fmt::format("{:.2f}", std::get<2>(stats_result[i])),
                                       fmt::format("{:.2f}", std::get<3>(stats_result[i])));
     }
-    return summary_stream.str();
+    summary_tuple = std::make_tuple(summary_stream.str(), mean_read_len, read_len_quantile50, mean_quality, std);
+    return summary_tuple;
 }
 
 void Work::stats_one_thread(
     const Read& read,
     std::vector<read_stats_result>& stats_result,
     std::ostream& out,
-    bool gc)
-{
+    bool gc) {
     unsigned len{read.get_length()};
     float quality{read.calculate_read_quality()};
     float gc_content{gc ? read.get_gc_content() : 0.0f};
@@ -427,8 +453,7 @@ void Work::filter(
     float min_quality,
     float min_gc,
     float max_gc,
-    std::ostream& out)
-{
+    std::ostream& out) {
     for (int idx{start}; idx < end; idx++) {
         const Read& read = (*reads_ptr)[idx];
         unsigned len{read.get_length()};
@@ -456,8 +481,7 @@ void Work::filter_one_thread(
     float min_quality,
     float min_gc,
     float max_gc,
-    std::ostream& out)
-{
+    std::ostream& out) {
     unsigned len{read.get_length()};
     float quality{read.calculate_read_quality()};
     if (gc) {
@@ -485,8 +509,7 @@ void Work::trim(
     const trim_direction& td,
     AlignmentConfig& align_config,
     std::ostream& log_fstream,
-    std::ostream& out)
-{
+    std::ostream& out) {
     for (int idx{start}; idx < end; idx++) {
         (*reads_ptr)[idx].trim(seq_info, td, align_config, log_fstream);
         std::osyncstream{out} << (*reads_ptr)[idx];
@@ -500,8 +523,7 @@ void Work::trim_one_thread(
     const trim_direction& td,
     AlignmentConfig& alignment_config,
     std::ostream& log_fstream,
-    std::ostream& out)
-{
+    std::ostream& out) {
     read.trim(seq_info, td, alignment_config, log_fstream);
     out << read;
 }
