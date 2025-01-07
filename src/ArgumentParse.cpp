@@ -16,7 +16,7 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
     stats.add_description("stats nanopore fastq");
 
     stats.add_argument("-i", "--input")
-         .help("the input fastq[.gz]")
+         .help("the input fastq[.gz] or directory containing some fastq[.gz]")
          .required();
     stats.add_argument("-o", "--output")
          .help("the stats output file path")
@@ -65,10 +65,29 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
          .scan<'i', int>();
     nanofq.add_subparser(stats);
 
+    static argparse::ArgumentParser sample{"sample"};
+    sample.add_argument("-i", "--input").help("the input fastq[.gz]").required();
+    sample.add_argument("-o", "--output").help("the output fastq").required();
+    sample.add_argument("-n", "--base_number").help(
+              "how many bases you need when sample from --input, format can be like 5G/1.2g/5m/4.21G/3.12M. If the total data that meet the filter condition is less than this value, then use all the passed data")
+          .required();
+    sample.add_argument("-s", "--stats").help(
+        "the stats result file from subcommand stats, if not set, will use subcommand stats to generate");
+    sample.add_argument("-q", "--quality").help("min read quality you need when sample from --input")
+          .default_value(8)
+          .scan<'i', int>();
+    sample.add_argument("-l", "--min_len").help("min read length you need when sample from --input")
+          .default_value(MINL)
+          .scan<'i', int>();
+    sample.add_argument("-L", "--max_len").help("max read length you need when sample from --input")
+          .default_value(MAXL)
+          .scan<'i', int>();
+    nanofq.add_subparser(sample);
+
     static argparse::ArgumentParser filter{"filter"};
     filter.add_description("filter the input fastq[.gz]");
     filter.add_argument("-i", "--input")
-          .help("the input fastq[.gz]")
+          .help("the input fastq[.gz] or directory containing some fastq[.gz]")
           .required();
     filter.add_argument("-o", "--output")
           .help("the stats output file name, default print all results to stdout")
@@ -152,13 +171,19 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
 
     static argparse::ArgumentParser trim{"trim"};
     trim.add_description("Use local alignment to find possible adapter, barcode, primers in reads and trim them");
-    trim.add_argument("-i", "--input").help("the input fastq[.gz]").required();
-    trim.add_argument("-o", "--output").help("the output file").default_value("-");
-    trim.add_argument("-l", "--log").help("the log output file").default_value("./log.txt");
+    trim.add_argument("-i", "--input")
+        .help("the input fastq[.gz] or directory containing some fastq[.gz]")
+        .required();
+    trim.add_argument("-o", "--output")
+        .help("the output file")
+        .default_value("-");
+    trim.add_argument("-l", "--log")
+        .help("the log output file")
+        .default_value("./log.txt");
     auto& group = trim.add_mutually_exclusive_group(true);
     group.add_argument("-k", "--kit")
-         .help(R"(the sequence kit name, used with --barcode if the sequence kit is barcoded.
-Each kit has it's own search parameter, but can be changed by [search parameter])")
+         .help(
+             R"(the sequence kit name, used with --barcode if the sequence kit is barcoded. Each kit has it's own search parameter, but can be changed by [search parameter])")
          .choices("SQK-LSK114",
                   "SQK-RAD114",
                   "SQK-ULK114",

@@ -8,6 +8,7 @@
 #include <vector>
 #include <fmt/core.h>
 
+#include "fmt/std.h"
 #include "fmt/xchar.h"
 
 using std::cout;
@@ -71,6 +72,23 @@ void Work::run_stats(
     }
 }
 
+void Work::run_stats_multi_fqs_in_multi_threads(
+    const std::vector<std::filesystem::path>& paths,
+    std::vector<read_stats_result>& stats_result,
+    std::ostream& out,
+    bool gc) {
+    auto bins{get_edges(paths.size())};
+    std::vector<std::thread> threads;
+    for (auto [start, end] : bins) {
+        threads.emplace_back([start, end, gc, &stats_result, &paths, &out, this]{
+            stats_multi_fqs_in_one_thread(paths, start, end, stats_result, out, gc);
+        });
+    }
+    for (std::thread& t : threads) {
+        t.join();
+    }
+}
+
 
 void Work::run_filter(
     std::atomic<size_t>& counter,
@@ -108,6 +126,27 @@ void Work::run_filter(
     }
     while (total_reads != counter) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
+
+void Work::run_filter_multi_fqs_in_multi_threads(
+    const std::vector<std::filesystem::path>& paths,
+    bool gc,
+    unsigned min_len,
+    unsigned max_len,
+    float min_quality,
+    float min_gc,
+    float max_gc,
+    std::ostream& out) const {
+    auto bins{get_edges(paths.size())};
+    std::vector<std::thread> threads;
+    for (auto [start, end] : bins) {
+        threads.emplace_back([this, &paths, start, end, gc, min_len, max_len, min_quality, min_gc, max_gc, &out]{
+            filter_multi_fqs_int_one_thread(paths, start, end, gc, min_len, max_len, min_quality, min_gc, max_gc, out);
+        });
+    }
+    for (std::thread& t : threads) {
+        t.join();
     }
 }
 
@@ -225,6 +264,26 @@ void Work::run_trim(
     }
     while (total_reads != counter) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
+
+void Work::run_trim_multi_fqs_in_multi_threads(
+    const std::vector<std::filesystem::path>& paths,
+    const SequenceInfo& seq_info,
+    const trim_direction& td,
+    std::vector<AlignmentConfig>& align_configs,
+    std::ostream& log_fstream,
+    std::ostream& out) const {
+    auto bins{get_edges(paths.size())};
+    std::vector<std::thread> threads;
+    for (int i{0}; i < bins.size(); ++i) {
+        auto [start, end] = bins[i];
+        threads.emplace_back([this, start, end, &paths, &seq_info, &td, &align_configs, &log_fstream, &out, i]{
+            trim_multi_fqs_in_one_thread(paths, start, end, seq_info, td, align_configs[i], log_fstream, out);
+        });
+    }
+    for (std::thread& t : threads) {
+        t.join();
     }
 }
 
@@ -442,6 +501,38 @@ void Work::stats_one_thread(
     out << line;
 }
 
+void Work::stats_multi_fqs_in_one_thread(
+    const std::vector<std::filesystem::path>& paths,
+    size_t start,
+    size_t end,
+    std::vector<read_stats_result>& stats_result,
+    std::ostream& out,
+    bool gc) {
+    for (size_t i{start}; i < end; i++) {
+        int l;
+        gzFile file = gzopen(paths[i].c_str(), "rb");
+        kseq_t* seq = kseq_init(file);
+        while (true) {
+            l = kseq_read(seq);
+            Read read{FastqReader::fastq_record_ok(l, seq, paths[i].c_str())};
+            if (read.get_id() == finished_read_name) {
+                break;
+            }
+            std::string name{read.get_id()};
+            unsigned length{read.get_length()};
+            float quality{read.calculate_read_quality()};
+            float gc_content{gc ? read.get_gc_content() : 0.0f};
+            std::osyncstream{out} << fmt::format("{}\t{}\t{}\t{}\n", name, length, quality, gc_content);
+            {
+                std::unique_lock lock{m_mtx};
+                stats_result.emplace_back(name, length, quality, gc_content);
+            }
+        }
+        kseq_destroy(seq);
+        gzclose(file);
+    }
+}
+
 void Work::filter(
     int start,
     int end,
@@ -500,6 +591,49 @@ void Work::filter_one_thread(
     }
 }
 
+void Work::filter_multi_fqs_int_one_thread(
+    const std::vector<std::filesystem::path>& paths,
+    size_t start,
+    size_t end,
+    bool gc,
+    unsigned min_len,
+    unsigned max_len,
+    float min_quality,
+    float min_gc,
+    float max_gc,
+    std::ostream& out) {
+    for (size_t i{start}; i < end; ++i) {
+        int l;
+        gzFile file = gzopen(paths[i].c_str(), "rb");
+        kseq_t* seq = kseq_init(file);
+        while (true) {
+            l = kseq_read(seq);
+            Read read{FastqReader::fastq_record_ok(l, seq, paths[i].c_str())};
+            if (read.get_id() == finished_read_name) {
+                break;
+            }
+            unsigned len{read.get_length()};
+            float quality{read.calculate_read_quality()};
+            if (gc) {
+                if (float gc_content{read.get_gc_content()};
+                    len >= min_len &&
+                    len <= max_len &&
+                    quality > min_quality &&
+                    gc_content > min_gc &&
+                    gc_content < max_gc) {
+                    std::osyncstream{out} << read.get_record();
+                } else {
+                    if (len >= min_len && len <= max_len && quality > min_quality) {
+                        std::osyncstream{out} << read.get_record();
+                    }
+                }
+            }
+        }
+        kseq_destroy(seq);
+        gzclose(file);
+    }
+}
+
 void Work::trim(
     int start,
     int end,
@@ -526,4 +660,31 @@ void Work::trim_one_thread(
     std::ostream& out) {
     read.trim(seq_info, td, alignment_config, log_fstream);
     out << read;
+}
+
+void Work::trim_multi_fqs_in_one_thread(
+    const std::vector<std::filesystem::path>& paths,
+    size_t start,
+    size_t end,
+    const SequenceInfo& seq_info,
+    const trim_direction& td,
+    AlignmentConfig& alignment_config,
+    std::ostream& log_fstream,
+    std::ostream& out) {
+    for (size_t i{start}; i < end; i++) {
+        int l;
+        gzFile file = gzopen(paths[i].c_str(), "rb");
+        kseq_t* seq = kseq_init(file);
+        while (true) {
+            l = kseq_read(seq);
+            Read read{FastqReader::fastq_record_ok(l, seq, paths[i].c_str())};
+            if (read.get_id() == finished_read_name) {
+                break;
+            }
+            read.trim(seq_info, td, alignment_config, log_fstream);
+            std::osyncstream{out} << read;
+        }
+        kseq_destroy(seq);
+        gzclose(file);
+    }
 }

@@ -32,8 +32,24 @@ public:
         std::ostream& out,
         bool gc);
 
+    void run_stats_multi_fqs_in_multi_threads(
+        const std::vector<std::filesystem::path>& paths,
+        std::vector<read_stats_result>& stats_result,
+        std::ostream& out,
+        bool gc);
+
     void run_filter(
         std::atomic<size_t>& counter,
+        bool gc,
+        unsigned min_len,
+        unsigned max_len,
+        float min_quality,
+        float min_gc,
+        float max_gc,
+        std::ostream& out) const;
+
+    void run_filter_multi_fqs_in_multi_threads(
+        const std::vector<std::filesystem::path>& paths,
         bool gc,
         unsigned min_len,
         unsigned max_len,
@@ -51,6 +67,14 @@ public:
 
     void run_trim(
         std::atomic<size_t>& counter,
+        const SequenceInfo& seq_info,
+        const trim_direction& td,
+        std::vector<AlignmentConfig>& align_configs,
+        std::ostream& log_fstream,
+        std::ostream& out) const;
+
+    void run_trim_multi_fqs_in_multi_threads(
+        const std::vector<std::filesystem::path>& paths,
         const SequenceInfo& seq_info,
         const trim_direction& td,
         std::vector<AlignmentConfig>& align_configs,
@@ -99,6 +123,14 @@ private:
         std::ostream& out,
         bool gc);
 
+    void stats_multi_fqs_in_one_thread(
+        const std::vector<std::filesystem::path>& paths,
+        size_t start,
+        size_t end,
+        std::vector<read_stats_result>& stats_result,
+        std::ostream& out,
+        bool gc);
+
     static void filter(
         int start,
         int end,
@@ -122,6 +154,18 @@ private:
         float max_gc,
         std::ostream& out);
 
+    static void filter_multi_fqs_int_one_thread(
+        const std::vector<std::filesystem::path>&paths,
+        size_t start,
+        size_t end,
+        bool gc,
+        unsigned min_len,
+        unsigned max_len,
+        float min_quality,
+        float min_gc,
+        float max_gc,
+        std::ostream& out);
+
     static void trim(
         int start,
         int end,
@@ -137,6 +181,16 @@ private:
         Read& read,
         const SequenceInfo& seq_info,
         const trim_direction& td,
+        AlignmentConfig& alignment_config,
+        std::ostream& log_fstream,
+        std::ostream& out);
+
+    static void trim_multi_fqs_in_one_thread(
+        const std::vector<std::filesystem::path>& paths,
+        size_t start,
+        size_t end,
+        const SequenceInfo& seq_info,
+        const trim_direction&td,
         AlignmentConfig& alignment_config,
         std::ostream& log_fstream,
         std::ostream& out);

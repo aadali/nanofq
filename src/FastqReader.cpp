@@ -7,8 +7,7 @@ using std::filesystem::last_write_time;
 FastqReader::FastqReader(const std::string& input_file, int chunk)
     : m_input_file(input_file),
       m_input_file_index(std::filesystem::path{input_file}.concat(".index").c_str()),
-      m_chunk_size(chunk)
-{
+      m_chunk_size(chunk) {
     m_buffer = new char[FASTQ_BUFFER_SIZE];
     m_infile_gz = gzopen(input_file.data(), "rb");
     if (!m_infile_gz) {
@@ -18,8 +17,7 @@ FastqReader::FastqReader(const std::string& input_file, int chunk)
     m_seq = kseq_init(m_infile_gz);
 }
 
-FastqReader::~FastqReader()
-{
+FastqReader::~FastqReader() {
     if (m_infile_gz) gzclose(m_infile_gz);
     if (m_buffer) {
         delete[] m_buffer;
@@ -30,8 +28,7 @@ FastqReader::~FastqReader()
     }
 }
 
-Read FastqReader::read_one_fastq()
-{
+Read FastqReader::read_one_fastq() {
     int l;
     l = kseq_read(m_seq);
     if (l == -1) {
@@ -41,14 +38,14 @@ Read FastqReader::read_one_fastq()
         return read;
     }
     if (l == -2) {
-        std::cerr << REDS + fmt::format("Error: bad FASTQ format for read {}", m_seq->name.s) + COLOR_END << std::endl;;
+        std::cerr << REDS + fmt::format("Error: bad FASTQ format for read {}", m_seq->name.s) + COLOR_END << std::endl;
         exit(1);
     }
     if (l == -3) {
-        std::cerr << REDS + fmt::format("Error reading {}", m_input_file) + COLOR_END << std::endl;;
+        std::cerr << REDS + fmt::format("Error reading {}", m_input_file) + COLOR_END << std::endl;
         exit(1);
     }
-    bool fastq_format{m_seq->qual.l > 0 && m_seq->seq.l > 0 && m_seq->seq.l == m_seq->qual.l};
+    bool fastq_format{ m_seq->seq.l == m_seq->qual.l && m_seq->seq.l > 0};
     if (!fastq_format) {
         std::cerr << REDS + fmt::format("\n\nError: could not parse input read \nproblem occurred at read {}",
                                         m_seq->name.s) + COLOR_END << std::endl;;
@@ -59,8 +56,23 @@ Read FastqReader::read_one_fastq()
 }
 
 
-std::shared_ptr<std::vector<Read>> FastqReader::read_chunk_fastq()
-{
+
+std::optional<std::vector<std::filesystem::path>> FastqReader::get_fastqs() const {
+    std::vector<std::filesystem::path> fastqs_paths;
+    auto input_path{std::filesystem::path{m_input_file}};
+    if (!std::filesystem::is_directory(input_path)) return {};
+    for (const auto&p: std::filesystem::directory_iterator(input_path)){
+        if (std::filesystem::is_directory(input_path)){
+            std::cerr << REDS << "Input is directory, file and directory found simultaneously, but only files allowed in directory" << COLOR_END << std::endl;
+            exit(1);
+        }
+        fastqs_paths.push_back(p);
+    }
+    return fastqs_paths;
+}
+
+
+std::shared_ptr<std::vector<Read>> FastqReader::read_chunk_fastq() {
     std::shared_ptr<std::vector<Read>> reads_ptr = std::make_shared<std::vector<Read>>();
     reads_ptr->reserve(m_chunk_size);
     while (true) {
@@ -78,8 +90,7 @@ std::shared_ptr<std::vector<Read>> FastqReader::read_chunk_fastq()
 }
 
 
-std::unordered_set<std::string> FastqReader::get_searching_read_names(const std::string& input_reads)
-{
+std::unordered_set<std::string> FastqReader::get_searching_read_names(const std::string& input_reads) {
     std::unordered_set<std::string> read_names;
     constexpr unsigned read_name_buf{256};
     if (exists(std::filesystem::path{input_reads.data()})) {
@@ -115,8 +126,7 @@ std::unordered_set<std::string> FastqReader::get_searching_read_names(const std:
     return read_names;
 }
 
-void FastqReader::find_reads(const std::string& input_reads, std::ostream& out, bool use_index)
-{
+void FastqReader::find_reads(const std::string& input_reads, std::ostream& out, bool use_index) {
     std::ifstream infile_text{m_input_file, std::ios::in};
     std::unordered_set<std::string> read_names{get_searching_read_names(input_reads)};
     if (use_index) {
@@ -153,8 +163,7 @@ void FastqReader::find_reads(const std::string& input_reads, std::ostream& out, 
     search_read_one_by_one(read_names, out);
 }
 
-void FastqReader::find_reads_in_gz(const std::string& input_reads, std::ostream& out, bool use_index)
-{
+void FastqReader::find_reads_in_gz(const std::string& input_reads, std::ostream& out, bool use_index) {
     std::ifstream infile_text{m_input_file, std::ios::binary};
     std::unordered_set<std::string> read_names{get_searching_read_names(input_reads)};
     if (use_index) {
@@ -192,8 +201,7 @@ void FastqReader::find_reads_in_gz(const std::string& input_reads, std::ostream&
 }
 
 
-void FastqReader::search_read_one_by_one(std::unordered_set<std::string>& read_names, std::ostream& out)
-{
+void FastqReader::search_read_one_by_one(std::unordered_set<std::string>& read_names, std::ostream& out) {
     while (true) {
         // iteration searching
         int l;
@@ -235,8 +243,7 @@ void FastqReader::search_read_one_by_one(std::unordered_set<std::string>& read_n
     }
 }
 
-void FastqReader::index(bool force_index)
-{
+void FastqReader::index(bool force_index) {
     std::filesystem::path input_file{m_input_file};
     std::filesystem::path input_file_idx{m_input_file_index};
     if (force_index) {
@@ -255,8 +262,7 @@ void FastqReader::index(bool force_index)
     }
 }
 
-void FastqReader::find(const std::string& input_reads, std::ostream& out, bool use_index)
-{
+void FastqReader::find(const std::string& input_reads, std::ostream& out, bool use_index) {
     if (m_input_file.ends_with(".gz")) {
         this->find_reads_in_gz(input_reads, out, use_index);
     } else {
@@ -264,8 +270,30 @@ void FastqReader::find(const std::string& input_reads, std::ostream& out, bool u
     }
 }
 
-void FastqReader::index_fastq()
-{
+Read FastqReader::fastq_record_ok(int l, kseq_t* seq, const char* file) {
+    if (l == -1){
+        std::string id = finished_read_name, qual = id, seq1 = id, desc =id;
+        Read read{id, desc, seq1, qual};
+        return read;
+    }
+    if (l == -2){
+        std::cerr << REDS + fmt::format("Error: bad FASTQ format for read {}", seq->name.s) + COLOR_END << std::endl;
+        exit(1);
+    }
+    if (l == -3) {
+        std::cerr <<  REDS + fmt::format("Error reading {}", file) + COLOR_END << std::endl;
+        exit(1);
+    }
+    bool fastq_format {seq->seq.l == seq->qual.l && seq->seq.l > 0};
+    if (!fastq_format){
+        std::cerr << REDS + fmt::format("\n\nError: could not parse input read \nproblem occurred at read {}", seq->name.s) + COLOR_END << std::endl;
+        exit(1);
+    }
+    Read read{seq->name.s, seq->comment.s, seq->seq.s, seq->qual.s};
+    return read;
+}
+
+void FastqReader::index_fastq() {
     std::ifstream infile_text{m_input_file.data(), std::ios::in};
     std::ofstream output_index_stream{m_input_file_index, std::ios::out};
     if (!output_index_stream) {
@@ -324,8 +352,7 @@ void FastqReader::index_fastq()
     infile_text.close();
 }
 
-void FastqReader::index_fastq_gz()
-{
+void FastqReader::index_fastq_gz() {
     if (!m_input_file.ends_with(".gz")) {
         std::cerr << REDS + fmt::format("Error: input file path {} must ends with .gz when use index_fastq_gz",
                                         m_input_file) + COLOR_END << std::endl;
@@ -349,8 +376,7 @@ void FastqReader::index_fastq_gz()
     nanobgzip::build_index(std::string{m_input_file}, m_input_file_index);
 }
 
-std::unordered_map<std::string, std::pair<size_t, size_t>> FastqReader::read_index() const
-{
+std::unordered_map<std::string, std::pair<size_t, size_t>> FastqReader::read_index() const {
     auto index_path{std::filesystem::path{m_input_file_index}};
     if (!exists(index_path)) {
         std::cerr << "No such index file: " << index_path << endl;
@@ -382,8 +408,7 @@ std::unordered_map<std::string, std::pair<size_t, size_t>> FastqReader::read_ind
     return reads_index;
 }
 
-nanobgzip_reads_index FastqReader::read_gz_index() const
-{
+nanobgzip_reads_index FastqReader::read_gz_index() const {
     if (auto index_path{std::filesystem::path{m_input_file_index}}; !exists(index_path)) {
         std::cerr << "No such file: " << index_path << endl;
         exit(1);

@@ -2,10 +2,8 @@
 #include "SequenceInfo.h"
 #include "Adapter.h"
 
-namespace myutility
-{
-    std::string rev_com(const std::string& seq)
-    {
+namespace myutility {
+    std::string rev_com(const std::string& seq) {
         std::string sequence{seq};
         std::ranges::transform(sequence,
                                std::begin(sequence),
@@ -32,8 +30,7 @@ namespace myutility
 
     [[nodiscard]] std::vector<std::string_view> split(
         std::string_view str,
-        std::string_view delim)
-    {
+        std::string_view delim) {
         std::vector<std::string_view> result;
         size_t pos = 0;
         while ((pos = str.find(delim)) != std::string::npos) {
@@ -48,8 +45,7 @@ namespace myutility
 
     std::string_view get_read_name_prefix(
         std::string_view header,
-        unsigned key_length)
-    {
+        unsigned key_length) {
         size_t space_idx{header.find(' ')};
         if (space_idx == std::string::npos) {
             return header.size() < key_length + 1 ? header.substr(1) : header.substr(1, key_length);
@@ -57,12 +53,28 @@ namespace myutility
         return space_idx <= key_length ? header.substr(1, space_idx - 1) : header.substr(1, key_length);
     }
 
+    std::optional<std::vector<std::filesystem::path>> get_fastqs(
+        const std::string& input_path) {
+        std::vector<std::filesystem::path> fqs;
+        auto input{std::filesystem::path{input_path}};
+        if (!std::filesystem::is_directory(input)) {
+            return {};
+        }
+        for (const auto& p : std::filesystem::directory_iterator(input)) {
+            if (std::filesystem::is_directory(p)){
+                std::cerr << REDS << "Error: if --input is directory, all contents in it should be file. But directory found in it" << COLOR_END << std::endl;
+                exit(1);
+            }
+            fqs.push_back(p);
+        }
+        return fqs;
+    }
+
     void smith_waterman(
         std::string_view target_seq,
         std::string_view query_seq,
         AlignmentConfig& config,
-        AlignmentResult& result)
-    {
+        AlignmentResult& result) {
         if (!result.is_empty()) {
             std::cerr << REDS + "AlignmentResult should be empty" + COLOR_END << std::endl;;
             exit(1);
@@ -169,8 +181,7 @@ namespace myutility
         float bot5end_identity,
         int bot3end_len,
         float bot3end_percent,
-        float bot3end_identity)
-    {
+        float bot3end_identity) {
         /*
          * parameter: *len, *percent, *identity should be checked at the stage of parsing argument from CLI
          * all of them couldn't be negative
@@ -222,8 +233,7 @@ namespace myutility
         }
     }
 
-    trim_direction how_trim(const SequenceInfo& seq_info)
-    {
+    trim_direction how_trim(const SequenceInfo& seq_info) {
         trim_direction td;
         if (!seq_info.m_top5end_query.empty() && get<0>(seq_info.m_top5end) > 0) {
             td.trim_top5end = true;
@@ -240,8 +250,7 @@ namespace myutility
         return td;
     }
 
-    std::string get_all_seq_info()
-    {
+    std::string get_all_seq_info() {
         std::stringstream info;
         std::unordered_map<std::string, SequenceInfo> all_trim_info = barcode_info::get_trim_info();
         for (std::string kit : std::vector{"SQK-LSK114", "SQK-ULK114", "SQK-RAD114", "SQK-PCS114"}) {

@@ -9,10 +9,12 @@
 #include <filesystem>
 #include <cstdio>
 #include <charconv>
+#include <optional>
 #include "fmt/core.h"
 #include "Read.h"
 #include "NanoBgzip.h"
 #include "kseq.h"
+#include "fmt/chrono.h"
 const std::string finished_read_name{"FINISHED FINISHED FINISHED"};
 KSEQ_INIT(gzFile, gzread)
 using shared_vec_reads = std::shared_ptr<std::vector<std::shared_ptr<Read>>>;
@@ -27,13 +29,13 @@ private:
     std::string m_input_file;
     std::string m_input_file_index;
     gzFile m_infile_gz{nullptr};
-    kseq_t* m_seq;
+    kseq_t* m_seq{nullptr};
     int m_chunk_size;
     char* m_buffer;
     bool m_finish{false};
 
 public:
-    FastqReader() = delete;
+    FastqReader() = default;
 
     FastqReader(const std::string& input_file, int chunk);
 
@@ -51,6 +53,8 @@ public:
 
     Read read_one_fastq();
 
+    std::optional<std::vector<std::filesystem::path>> get_fastqs() const;
+
     inline bool read_finish() const { return m_finish; };
 
     void index(bool force_index);
@@ -59,6 +63,8 @@ public:
         const std::string& input_reads,
         std::ostream& out,
         bool use_index);
+
+    static Read fastq_record_ok(int l, kseq_t* seq, const char* file);
 
 private:
     static std::unordered_set<std::string> get_searching_read_names(const std::string& input_reads);

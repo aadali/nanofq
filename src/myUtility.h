@@ -2,6 +2,8 @@
 #define NANOFQ_UTILITY_H
 
 #include <string>
+#include <optional>
+#include <filesystem>
 #include <string_view>
 #include <vector>
 #include <iostream>
@@ -16,16 +18,14 @@ const std::string REDS = "\033[1;31m";
 const std::string COLOR_END = "\033[0m";
 const std::string WARNS = "\033[1;33m";
 
-struct trim_direction
-{
+struct trim_direction {
     bool trim_top5end{false};
     bool trim_top3end{false};
     bool trim_bot5end{false};
     bool trim_bot3end{false};
 };
 
-namespace myutility
-{
+namespace myutility {
     std::string rev_com(const std::string& seq);
 
     [[nodiscard]] std::vector<std::string_view> split(
@@ -35,6 +35,9 @@ namespace myutility
     std::string_view get_read_name_prefix(
         std::string_view header,
         unsigned key_length);
+
+    std::optional<std::vector<std::filesystem::path>> get_fastqs(
+        const std::string& input_path);
 
     void smith_waterman(
         std::string_view target_seq,

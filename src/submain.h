@@ -12,8 +12,7 @@
 #include "Adapter.h"
 #include "ArgumentParse.h"
 
-int sub_main(int argc, char* argv[])
-{
+int sub_main(int argc, char* argv[]) {
     argparse::ArgumentParser& nanofq{get_arguments(argc, argv)};
     if (nanofq.is_subcommand_used("stats")) {
         argparse::ArgumentParser& stats{nanofq.at<argparse::ArgumentParser>("stats")};
@@ -24,7 +23,6 @@ int sub_main(int argc, char* argv[])
         check_number_in_range("--firstN", n, 1, 1000, stats, true);
         std::vector<int> quals;
         if (!stats.is_used("--quality")) {
-            // quals = {9, 12, 15, 18, 20, 25};
             quals = {25, 20, 18, 15, 12, 10};
         } else {
             quals = {stats.get<std::vector<int>>("--quality")};
@@ -59,7 +57,6 @@ int sub_main(int argc, char* argv[])
         std::vector<std::string> format{stats.get<std::vector<std::string>>("--format")};
         std::vector<std::string> allowed_choices{"pdf", "jpg", "png"};
         check_choices<std::string>("--format", format, allowed_choices, stats);
-        FastqReader fq{input, chunk};
         std::ofstream out;
         if (output != "-") {
             out.open(output.data(), std::ios::out);
@@ -69,8 +66,34 @@ int sub_main(int argc, char* argv[])
             }
         }
         ThreadPool tp{threads};
-        Work work{fq, tp};
         std::vector<read_stats_result> stats_result{};
+        auto fqs{myutility::get_fastqs(input)};
+        if (fqs.has_value()) {
+            // stats multi fastqs in a directory
+            FastqReader fq;
+            Work work{fq, tp};
+            work.run_stats_multi_fqs_in_multi_threads(fqs.value(), stats_result, out, gc);
+            std::tuple<float, int, float, float> summary_info_tuple = work.save_summary(
+                n, quals, lengths, stats_result, summary);
+            if (make_plot) {
+                auto [mean_len, n50, mean_quality, std] = summary_info_tuple;
+                work.plot(std::string{argv[0]},
+                          output,
+                          plot_prefix,
+                          plot_mean_length,
+                          mean_len,
+                          plot_n50,
+                          n50,
+                          std,
+                          format,
+                          mean_quality);
+            }
+            if (out.is_open()) { out.close(); }
+            return 0;
+        }
+        // stats one fastq[.gz] file
+        FastqReader fq{input, chunk};
+        Work work{fq, tp};
         work.run_stats(stats_result, output != "-" ? out : std::cout, gc);
         std::tuple<float, int, float, float> summary_info_tuple = work.save_summary(
             n, quals, lengths, stats_result, summary);
@@ -107,8 +130,6 @@ int sub_main(int argc, char* argv[])
         check_number_in_range("--threads", threads, 1, 16, filter, true);
         int chunk{filter.get<int>("--chunk")};
         check_number_in_range("--chunk", chunk, MINC, MAXC, filter, true);
-        FastqReader fq{input, chunk};
-        ThreadPool tp{threads};
         std::ofstream out;
         if (output != "-") {
             out = std::ofstream{output.data(), std::ios::out};
@@ -117,13 +138,32 @@ int sub_main(int argc, char* argv[])
                 exit(1);
             }
         }
+        ThreadPool tp{threads};
+        auto fqs{myutility::get_fastqs(input)};
+        if (fqs.has_value()) {
+            // filter multi fastqs that in a directory
+            FastqReader fq;
+            Work work(fq, tp);
+            work.run_filter_multi_fqs_in_multi_threads(
+                fqs.value(),
+                gc,
+                min_length,
+                max_length,
+                min_quality,
+                min_gc,
+                max_gc,
+                output != "-" ? out : std::cout);
+            if (out.is_open()) out.close();
+            return 0;
+        }
+        FastqReader fq{input, chunk};
         Work work{fq, tp};
         std::atomic<size_t> counter{0};
         work.run_filter(counter,
                         gc,
                         min_length,
                         max_length,
-                        static_cast<float>(min_quality),
+                        min_quality,
                         min_gc,
                         max_gc,
                         output != "-" ? out : std::cout);
@@ -288,7 +328,6 @@ int sub_main(int argc, char* argv[])
         }
         // INIT WORKFLOW
         auto trim_info{barcode_info::get_trim_info()};
-        FastqReader fq{input, chunk};
         SequenceInfo sequence_info = !kit.empty() ? trim_info.find(kit)->second : SequenceInfo{forward, reversed};
         sequence_info.update_sequence_info(
             end5_len,
@@ -313,7 +352,6 @@ int sub_main(int argc, char* argv[])
             }
         }
         ThreadPool tp{threads};
-        Work work{fq, tp};
         trim_direction td{myutility::how_trim(sequence_info)};
         AlignmentConfig align_config{match, mismatch, gap_open, gap_extend};
         std::vector<AlignmentConfig> align_configs;
@@ -326,6 +364,23 @@ int sub_main(int argc, char* argv[])
             exit(1);
         }
         logfile << sequence_info.seq_info() << '\n';
+        auto fqs = myutility::get_fastqs(input);
+        if (fqs.has_value()){
+            // trim multi fastqs that in a directory
+            FastqReader fq;
+            Work work{fq, tp};
+            work.run_trim_multi_fqs_in_multi_threads(
+            fqs.value(),
+            sequence_info,
+            td,
+            align_configs,
+            logfile,
+            output != "-" ? out : std::cout);
+            if (out.is_open()) out.close();
+            return 0;
+        }
+        FastqReader fq{input, chunk};
+        Work work{fq, tp};
         std::atomic<size_t> counter;
         work.run_trim(counter, sequence_info, td, align_configs, logfile, output != "-" ? out : std::cout);
         if (out.is_open()) out.close();

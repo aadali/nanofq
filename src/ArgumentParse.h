@@ -10,7 +10,7 @@
 const int MINT = 1;
 const int MAXT = 16;
 const int MINC = 10000;
-const int MAXC = 100000000;
+const int MAXC = 1000000;
 const int MINL = 1;
 const int MAXL = std::numeric_limits<int>::max();
 const float MIN_PERCENT = 0.0f;
