@@ -194,7 +194,7 @@ void FastqReader::find_reads_in_gz(const std::string& input_reads, std::ostream&
     }
     std::filesystem::path index_file{m_input_file_index};
     if (exists(index_file) && last_write_time(index_file) > last_write_time(std::filesystem::path{m_input_file})) {
-        find_reads(input_reads, out, true);
+        find_reads_in_gz(input_reads, out, true);
         return;
     }
     search_read_one_by_one(read_names, out);
@@ -364,13 +364,13 @@ void FastqReader::index_fastq_gz() {
             "Error: couldn't index common gzip file. \nYou can refer to the following command to convert it into a NanoBgzip file and build an index at the same time"
             << COLOR_END << std::endl;
         auto idx = m_input_file.rfind(".gz");
-        std::cerr << fmt::format("\nzcat {} | nanofq compress - {}nanobgzip.gz\n\n", m_input_file,
+        std::cerr << fmt::format("\nzcat {} | nanofq compress {}nanobgzip.gz\n\n", m_input_file,
                                  m_input_file.substr(0, idx + 1));
         // std::cerr << "\nzcat input.fastq.gz | nanofq compress - output.fastq.gz\n\n";
         std::cerr << REDS <<
             fmt::format(
-                "The above command will turn common {} into NanoBgzip file: {}.nanobgzip.gz and create index file simulaneusly\n",
-                m_input_file, m_input_file.substr(0, idx + 1));
+                "The above command will turn common {} into NanoBgzip file: {}nanobgzip.gz and create index file simultaneously\n",
+                m_input_file, m_input_file.substr(0, idx + 1)) <<COLOR_END <<std::endl;;
         exit(1);
     }
     nanobgzip::build_index(std::string{m_input_file}, m_input_file_index);
@@ -383,7 +383,7 @@ std::unordered_map<std::string, std::pair<size_t, size_t>> FastqReader::read_ind
         exit(1);
     }
     if (m_input_file_index.ends_with(".gz.index")) {
-        std::cerr << "You are using gz.index file and text fastq that is not suitable" << endl;
+        std::cerr << REDS << "You are using gz.index file and text fastq that is not suitable" << COLOR_END << std::endl;;
         exit(1);
     }
     std::unordered_map<std::string, std::pair<size_t, size_t>> reads_index;

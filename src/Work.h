@@ -11,6 +11,9 @@
 #define DEFAULT_INT std::numeric_limits<int>::max()
 #define DEFAULT_FLOAT 3.14f
 using read_stats_result = std::tuple<std::string, unsigned, double, double>;
+using main_read_stats_result = std::pair<std::string,
+                                         std::pair<std::tuple<unsigned, double, double>,
+                                                   std::optional<std::tuple<unsigned, double, double>>>>;
 
 class Work {
 private:
@@ -31,6 +34,25 @@ public:
         std::vector<read_stats_result>& stats_result,
         std::ostream& out,
         bool gc);
+
+    void run_main(
+        std::vector<main_read_stats_result>& main_stats_result,
+        bool gc,
+        unsigned min_len,
+        unsigned max_len,
+        float min_quality,
+        float min_gc,
+        float max_gc,
+        bool do_trim,
+        const SequenceInfo& seq_info,
+        const trim_direction& td,
+        std::vector<AlignmentConfig>& align_configs,
+        std::ofstream& out_ofstream,
+        std::ofstream& stats_ofstream,
+        std::ofstream& trim_log_ofstream,
+        bool retain_failed,
+        std::ofstream& failed_ofstream
+    );
 
     void run_stats_multi_fqs_in_multi_threads(
         const std::vector<std::filesystem::path>& paths,
@@ -155,7 +177,7 @@ private:
         std::ostream& out);
 
     static void filter_multi_fqs_int_one_thread(
-        const std::vector<std::filesystem::path>&paths,
+        const std::vector<std::filesystem::path>& paths,
         size_t start,
         size_t end,
         bool gc,
@@ -190,10 +212,94 @@ private:
         size_t start,
         size_t end,
         const SequenceInfo& seq_info,
-        const trim_direction&td,
+        const trim_direction& td,
         AlignmentConfig& alignment_config,
         std::ostream& log_fstream,
         std::ostream& out);
+
+    void main(
+        int start,
+        int end,
+        std::shared_ptr<std::vector<Read>> reads_ptr,
+        std::vector<main_read_stats_result>& main_stats_result,
+        bool gc,
+        unsigned min_len,
+        unsigned max_len,
+        float min_quality,
+        float min_gc,
+        float max_gc,
+        bool do_trim,
+        const SequenceInfo& seq_info,
+        const trim_direction& td,
+        AlignmentConfig& alignment_config,
+        std::ofstream& out_ofstream,
+        std::ofstream& trim_log_ofstream,
+        std::ofstream& stats_ofstream,
+        bool retain_failed,
+        std::ofstream& failed_ofstream
+    );
+
+    void main_one_thread(
+        Read& read,
+        std::vector<main_read_stats_result>& main_stats_result,
+        bool gc,
+        unsigned min_len,
+        unsigned max_len,
+        float min_quality,
+        float min_gc,
+        float max_gc,
+        bool do_trim,
+        const SequenceInfo& seq_info,
+        const trim_direction& td,
+        AlignmentConfig& alignment_config,
+        std::ofstream& out_ofstream,
+        std::ofstream& trim_log_ofstream,
+        std::ofstream& stats_ofstream,
+        bool retain_failed,
+        std::ofstream& failed_ofstream
+    );
+
+     void main_multi_fqs_in_one_thread(
+        const std::vector<std::filesystem::path>& paths,
+        size_t start,
+        size_t end,
+        std::vector<main_read_stats_result>& main_stats_result,
+        bool gc,
+        unsigned min_len,
+        unsigned max_len,
+        float min_quality,
+        float min_gc,
+        float max_gc,
+        bool do_trim,
+        const SequenceInfo& seq_info,
+        const trim_direction& td,
+        AlignmentConfig& alignment_config,
+        std::ofstream& out_ofstream,
+        std::ofstream& trim_log_ofstream,
+        std::ofstream& stats_ofstream,
+        bool retain_failed,
+        std::ofstream& failed_ofstream
+    );
+
+    void main_core(
+        Read& read,
+        std::vector<main_read_stats_result>& main_stats_result,
+        bool gc,
+        unsigned min_len,
+        unsigned max_len,
+        float min_quality,
+        float min_gc,
+        float max_gc,
+        bool do_trim,
+        const SequenceInfo& seq_info,
+        const trim_direction& td,
+        AlignmentConfig& alignment_config,
+        std::ofstream& out_ofstream,
+        std::ofstream& stats_ofstream,
+        std::ofstream& trim_log_ofstream,
+        bool retain_failed,
+        std::ofstream& failed_ofstream,
+        bool sync);
 };
 
 #endif // WORK_H
