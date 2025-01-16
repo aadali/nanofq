@@ -7,14 +7,14 @@
 
 class AlignmentConfig {
 public:
-    const int m_match;
-    const int m_mismatch;
-    const int m_gap_open;
-    const int m_gap_extend;
+    int m_match;
+    int m_mismatch;
+    int m_gap_open;
+    int m_gap_extend;
     enum class Direction {Diag = 0, Left =1, Up=2 };
 private:
-    std::array<std::array<int, MAX_TARGET_LEN + 1>, MAX_QUERY_LEN + 1> m_score_matrix;
-    std::array<std::array<Direction, MAX_TARGET_LEN + 1>, MAX_QUERY_LEN + 1> m_direction_matrix;
+    std::array<std::array<int, MAX_TARGET_LEN + 1>, MAX_QUERY_LEN + 1> m_score_matrix{};
+    std::array<std::array<Direction, MAX_TARGET_LEN + 1>, MAX_QUERY_LEN + 1> m_direction_matrix{};
 public:
     AlignmentConfig(int match, int mismatch, int gap_open, int gap_extend);
 
@@ -22,7 +22,7 @@ public:
 
     AlignmentConfig(AlignmentConfig &&) = delete;
 
-    AlignmentConfig(const AlignmentConfig &) = default;
+    AlignmentConfig(const AlignmentConfig &);
 
     AlignmentConfig &operator=(AlignmentConfig &&) = delete;
 

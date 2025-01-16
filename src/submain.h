@@ -12,9 +12,354 @@
 #include "Adapter.h"
 #include "ArgumentParse.h"
 
-int sub_main(int argc, char* argv[]) {
+std::pair<std::vector<read_stats_result>, std::vector<read_stats_result>> get_all_and_passed_read_stats_result(
+    std::vector<main_read_stats_result>& main_stats_result)
+{
+    auto all_and_passed_stats_result{
+        std::make_pair(std::vector<read_stats_result>{},
+                       std::vector<read_stats_result>{})
+    };
+    all_and_passed_stats_result.first.reserve(main_stats_result.size());
+    all_and_passed_stats_result.second.reserve(main_stats_result.size());
+    for (int i{0}; i < main_stats_result.size(); ++i) {
+        auto read_stats{main_stats_result[i]};
+        auto [raw_len,raw_quality,raw_gc]{read_stats.second.first};
+        all_and_passed_stats_result.first.emplace_back(read_stats.first, raw_len, raw_quality, raw_gc);
+        if (read_stats.second.second.has_value()) {
+            auto [clean_len, clean_quality, clean_gc]{read_stats.second.second.value()};
+            all_and_passed_stats_result.second.emplace_back(read_stats.first, clean_len, clean_quality, clean_gc);
+        }
+    }
+    return all_and_passed_stats_result;
+}
+
+// std::tuple<SequenceInfo, trim_direction, AlignmentConfig> parse_trim_arguments(
+std::pair<std::shared_ptr<SequenceInfo>, std::shared_ptr<AlignmentConfig>> parse_trim_arguments(
+    argparse::ArgumentParser& parser, bool require_trim)
+{
+    std::string kit;
+    std::string forward;
+    std::string reversed;
+    int barcode;
+    bool kit_used{parser.is_used("--kit")};
+    bool barcode_used{parser.is_used("--barcode")};
+    bool primers_used{parser.is_used("--primers")};
+    if (kit_used && primers_used) {
+        std::cerr << "Argument '-p/--primers VAR' not allowed with '-k/--kit VAR'" << std::endl;
+        exit(1);
+    }
+    if (require_trim) {
+        if (!kit_used && !primers_used) {
+            std::cerr << "One of the arguments '-k/--kit VAR' or '-p/--primers VAR' is required" << std::endl;
+            exit(1);
+        }
+    }
+    if (kit_used) {
+        kit = parser.get("--kit");
+        if (kit.ends_with(".24") || kit.ends_with(".96")) {
+            if (!parser.is_used("--barcode")) {
+                std::cerr << REDS + "If kit with barcodes used, --barcode must be set" + COLOR_END << std::endl;
+                exit(1);
+            }
+        }
+        if (barcode_used) {
+            barcode = parser.get<int>("--barcode");
+            if (kit.ends_with(".24")) {
+                if (barcode < MINB || barcode > MAX24B) {
+                    std::cerr << REDS +
+                        "If kit with 24 barcodes used, --barcode should be a integer and  in range (1, 24)" +
+                        COLOR_END << std::endl;
+                    exit(1);
+                }
+                kit = fmt::format("{}-{}", kit, barcode);
+            } else if (kit.ends_with(".96")) {
+                if (barcode < MINB || barcode > MAX96B) {
+                    std::cerr << REDS +
+                        "If kit with 96 barcodes used, --barcode should be a integer and  in range (1, 96)" +
+                        COLOR_END << std::endl;
+                    exit(1);
+                }
+                kit = fmt::format("{}-{}", kit, barcode);
+            } else {
+                std::cerr << WARNS + "If kit with no barcode used, ignore --barcode" + COLOR_END << std::endl;
+            }
+        }
+    } else if (primers_used) {
+        std::string primers{parser.get("--primers")};
+        if (std::filesystem::exists(std::filesystem::path{primers.data()})) {
+            std::ifstream primers_file{primers, std::ios::in};
+            std::getline(primers_file, forward);
+            std::getline(primers_file, reversed);
+            primers_file.close();
+        } else {
+            auto primers_vec{myutility::split(primers, ",")};
+            if (primers_vec.size() != 2) {
+                std::cerr << REDS + "if --primer is not file, it should be a pair of primers separated by one comma"
+                    + COLOR_END << std::endl;
+                exit(1);
+            }
+            forward = std::string{primers_vec[0]};
+            reversed = std::string{primers[1]};
+        }
+    } else {
+        // NO TRIM
+    }
+    int match{parser.get<int>("--match")};
+    check_number_in_range<int>("--match", match, 1, 100, parser, true);
+    int mismatch{parser.get<int>("--mismatch")};
+    check_number_in_range<int>("--mismatch", mismatch, -100, 0, parser, true);
+    int gap_open{parser.get<int>("--gap_open")};
+    check_number_in_range<int>("--gap_open", gap_open, -100, 0, parser, true);
+    int gap_extend{parser.get<int>("--gap_extend")};
+    check_number_in_range<int>("--gap_extend", gap_extend, -100, 0, parser, true);
+    int end5_len = DEFAULT_INT, end3_len = DEFAULT_INT, end5_len_rc = DEFAULT_INT, end3_len_rc = DEFAULT_INT;
+    float end5_align_percent = DEFAULT_FLOAT, end5_align_identity = DEFAULT_FLOAT;
+    float end3_align_percent = DEFAULT_FLOAT, end3_align_identity = DEFAULT_FLOAT;
+    float end5_align_percent_rc = DEFAULT_FLOAT, end5_align_identity_rc = DEFAULT_FLOAT;
+    float end3_align_percent_rc = DEFAULT_FLOAT, end3_align_identity_rc = DEFAULT_FLOAT;
+    if (parser.is_used("--5end_len")) {
+        end5_len = parser.get<int>("--5end_len");
+        check_number_in_range("--end5_len", end5_len, MIN_TARGET, MAX_TARGET, parser, true);
+    }
+    if (parser.is_used("--5end_align_percent")) {
+        end5_align_percent = parser.get<float>("--5end_align_percent");
+        check_number_in_range("--5end_align_percent", end5_align_percent, MIN_PERCENT, MAX_PERCENT, parser, false);
+    }
+    if (parser.is_used("--5end_align_identity")) {
+        end5_align_identity = parser.get<float>("--5end_align_identity");
+        check_number_in_range("--5end_align_identity", end5_align_identity, MIN_PERCENT, MAX_PERCENT, parser, false);
+    }
+    if (parser.is_used("--3end_len")) {
+        end3_len = parser.get<int>("--3end_len");
+        check_number_in_range("--3end_len", end3_len, MIN_TARGET, MAX_TARGET, parser, true);
+    }
+    if (parser.is_used("--3end_align_percent")) {
+        end3_align_percent = parser.get<float>("--3end_align_percent");
+        check_number_in_range("--3end_align_percent", end3_align_percent, MIN_PERCENT, MAX_PERCENT, parser, false);
+    }
+    if (parser.is_used("--3end_align_identity")) {
+        end3_align_identity = parser.get<float>("--3end_align_identity");
+        check_number_in_range("--3end_align_identity", end3_align_identity, MIN_PERCENT, MAX_PERCENT, parser, false);
+    }
+    if (parser.is_used("--5end_len_rc")) {
+        end5_len_rc = parser.get<int>("--5end_len_rc");
+        check_number_in_range("--5end_len_rc", end5_len_rc, MIN_TARGET, MAX_TARGET, parser, true);
+    }
+    if (parser.is_used("--5end_align_percent_rc")) {
+        end5_align_percent_rc = parser.get<float>("--5end_align_percent_rc");
+        check_number_in_range("--5end_align_percent_rc", end5_align_percent_rc, MIN_PERCENT, MAX_PERCENT, parser,
+                              false);
+    }
+    if (parser.is_used("--5end_align_identity_rc")) {
+        end5_align_identity_rc = parser.get<float>("--5end_align_identity_rc");
+        check_number_in_range("--5end_align_identity_rc", end5_align_identity_rc, MIN_PERCENT, MAX_PERCENT, parser,
+                              false);
+    }
+    if (parser.is_used("--3end_len_rc")) {
+        end3_len_rc = parser.get<int>("--3end_len_rc");
+        check_number_in_range("--3end_len_rc", end3_len_rc, MIN_TARGET, MAX_TARGET, parser, true);
+    }
+    if (parser.is_used("--3end_align_percent_rc")) {
+        end3_align_percent_rc = parser.get<float>("--3end_align_percent_rc");
+        check_number_in_range("--3end_align_percent_rc", end3_align_percent_rc, MIN_PERCENT, MAX_PERCENT, parser,
+                              false);
+    }
+    if (parser.is_used("--3end_align_identity_rc")) {
+        end3_align_identity_rc = parser.get<float>("--3end_align_identity_rc");
+        check_number_in_range("--3end_align_identity_rc", end3_align_identity_rc, MIN_PERCENT, MAX_PERCENT, parser,
+                              false);
+    }
+    auto parser_info{barcode_info::get_trim_info()};
+    SequenceInfo sequence_info {!kit_used && !primers_used ? parser_info.find("SQK-LSK114")->second : !kit.empty() ? parser_info.find(kit)->second : SequenceInfo{forward, reversed}};
+    sequence_info.update_sequence_info(
+        end5_len,
+        end5_align_percent,
+        end5_align_identity,
+        end3_len,
+        end3_align_percent,
+        end3_align_identity,
+        end5_len_rc,
+        end5_align_percent_rc,
+        end5_align_identity_rc,
+        end3_len_rc,
+        end3_align_percent_rc,
+        end3_align_identity_rc
+    );
+     AlignmentConfig align_config{match, mismatch, gap_open, gap_extend};
+    return std::make_pair(std::make_shared<SequenceInfo>(sequence_info), std::make_shared<AlignmentConfig>(align_config));
+}
+
+int sub_main(int argc, char* argv[])
+{
     argparse::ArgumentParser& nanofq{get_arguments(argc, argv)};
-    if (nanofq.is_subcommand_used("stats")) {
+    if (nanofq.is_subcommand_used("main")) {
+        argparse::ArgumentParser& main{nanofq.at<argparse::ArgumentParser>("main")};
+        std::string input{main.get("--input")};
+        std::string output{main.get("--output")};
+        std::string prefix{main.get("--prefix")};
+        bool retain_failed{main.get<bool>("--retain_failed")};
+        int n{main.get<int>("--firstN")};
+        check_number_in_range("--firstN", n, 1, 1000, main, true);
+        std::vector<int> quals;
+        if (!main.is_used("--quality")) {
+            quals = {25, 20, 18, 15, 12, 10};
+        } else {
+            quals = {main.get<std::vector<int>>("--quality")};
+            for (int i : quals) {
+                check_number_in_range<size_t>("--quality", i, 1, 50, main, true);
+            }
+            std::ranges::sort(quals, std::greater<>());
+        }
+        std::vector<int> lengths;
+        if (main.is_used("--length")) {
+            lengths = main.get<std::vector<int>>("--length");
+            for (int i : lengths) {
+                check_number_in_range<size_t>("--length", i, MINL, MAXL, main, true);
+            }
+        }
+        bool make_plot{main.get<bool>("--plot")};
+        std::vector<std::string> format{main.get<std::vector<std::string>>("--format")};
+        std::vector<std::string> allowed_choices{"pdf", "jpg", "png"};
+        check_choices("--format", format, allowed_choices, main);
+        bool plot_mean_length{main.get<bool>("--plot_mean_length")};
+        bool plot_n50{main.get<bool>("--plot_n50")};
+        bool gc{main.get<bool>("--gc")};
+        int min_len{main.get<int>("--min_len")};
+        check_number_in_range<size_t>("--min_len", static_cast<size_t>(min_len), MINL, MAXL, main, true);
+        int max_len{main.get<int>("--max_len")};
+        check_number_in_range<size_t>("--max_len", max_len, MINL, MAXL, main, true);
+        float min_quality{main.get<float>("--min_quality")};
+        check_number_in_range("--min_quality", min_quality, MIN_PERCENT, MAX_PERCENT, main, false);
+        float min_gc{main.get<float>("--max_gc")};
+        float max_gc{main.get<float>("--max_gc")};
+        check_number_in_range("--min_gc", min_gc, MIN_PERCENT, MAX_PERCENT, main, false);
+        check_number_in_range("--max_gc", max_gc, MIN_PERCENT, MAX_PERCENT, main, false);
+        int threads{main.get<int>("--threads")};
+        check_number_in_range("--threads", threads, 1, 16, main, true);
+        int chunk{main.get<int>("--chunk")};
+        check_number_in_range("--chunk", chunk, MINC, MAXC, main, true);
+        bool do_trim{false};
+        if (main.is_used("--kit") || main.is_used("--primers")) {
+            do_trim = true;
+        }
+        auto [sequence_info, align_config]{parse_trim_arguments(main, do_trim)};
+        trim_direction td{myutility::how_trim(*sequence_info)};
+        ThreadPool tp{threads};
+        auto fqs{myutility::get_fastqs(input)};
+        std::vector<main_read_stats_result> main_stats_result{};
+        std::vector<AlignmentConfig> align_configs;
+        for (int i{0}; i < threads; ++i) {
+            align_configs.push_back(*align_config);
+        }
+        std::filesystem::path prefix_path{prefix};
+        std::filesystem::path out_path{output};
+        std::filesystem::path stats_path{prefix_path.concat(".stats.txt")};
+        std::filesystem::path summary_all_path{prefix_path.concat(".all.summary.txt")};
+        std::filesystem::path summary_passed_path{prefix_path.concat(".passed.summary.txt")};
+        std::filesystem::path trim_log_path{prefix_path.concat(".trim_log.txt")};
+        std::filesystem::path failed_path{prefix_path.concat(".failed.fastq")};
+        std::ofstream out_ofstream{output, std::ios::out};
+        if (!out_ofstream) {
+            std::cerr << REDS + "Error happened when opening " + output + COLOR_END << std::endl;
+            exit(1);
+        }
+        std::ofstream stats_ofstream{stats_path, std::ios::out};
+        if (!stats_ofstream) {
+            std::cerr << REDS + "Error happened when opening " << stats_path << COLOR_END << std::endl;
+            exit(1);
+        }
+        std::ofstream summary_all_ofstream{summary_all_path, std::ios::out};
+        if (!summary_all_ofstream) {
+            std::cerr << REDS + "Error happened when opening " << summary_all_path << COLOR_END << std::endl;
+            exit(1);
+        }
+        std::ofstream summary_passed_ofstream{summary_passed_path, std::ios::out};
+        if (!summary_passed_ofstream) {
+            std::cerr << REDS + "Error happened when opening " << summary_passed_path << COLOR_END << std::endl;
+            exit(1);
+        }
+        std::ofstream trim_log_ofstream;
+        if (main.is_used("--kit") || main.is_used("--primers")) {
+            trim_log_ofstream.open(trim_log_path, std::ios::out);
+            if (!trim_log_ofstream) {
+                std::cerr << REDS + "Error happened when opening " << summary_all_path << COLOR_END << std::endl;
+                exit(1);
+            }
+        }
+        std::ofstream failed_ofstream;
+        if (retain_failed) {
+            failed_ofstream.open(failed_path, std::ios::out);
+            if (!failed_ofstream) {
+                std::cerr << REDS + "Error happened when opening " << summary_all_path << COLOR_END << std::endl;
+                exit(1);
+            }
+        }
+        bool is_directory {fqs.has_value()};
+        FastqReader fq {input, chunk, is_directory};
+        Work work {fq, tp};
+        if (is_directory) {
+            work.run_main_multi_fqs_in_multi_threads(fqs.value(), main_stats_result, gc, min_len, max_len, min_quality,
+                                                     min_gc, max_gc, do_trim, *sequence_info, td,
+                                                     align_configs, out_ofstream, stats_ofstream, trim_log_ofstream,
+                                                     retain_failed, failed_ofstream);
+        } else {
+            work.run_main(main_stats_result, gc, min_len, max_len, min_quality, min_gc, max_gc, do_trim, *sequence_info,
+                          td, align_configs, out_ofstream, stats_ofstream, trim_log_ofstream, retain_failed,
+                          failed_ofstream);
+        }
+        auto [all_reads_stats, passed_reads_stats]{get_all_and_passed_read_stats_result(main_stats_result)};
+            std::vector<std::thread> summary_threads;
+            std::tuple<float, int, float, float> all_summary_info_tuple;
+            std::tuple<float, int, float, float> passed_summary_info_tuple;
+            summary_threads.emplace_back([&]{
+                work.save_summary(n, quals, lengths, all_reads_stats, summary_all_path.c_str());
+            });
+            summary_threads.emplace_back([&]{
+                work.save_summary(n, quals, lengths, passed_reads_stats, summary_passed_path.c_str());
+            });
+
+            for (auto& t : summary_threads) {
+                t.join();
+            }
+            if (make_plot) {
+                auto [all_mean_len, all_n50, all_mean_quality, all_std]{all_summary_info_tuple};
+                auto [passed_mean_len, passed_n50, passed_mean_quality, passed_std]{passed_summary_info_tuple};
+                std::vector<std::thread> plot_threads;
+                auto bin_path{std::string{argv[0]}};
+                plot_threads.emplace_back([&all_mean_quality, &format, &work, plot_mean_length, prefix, stats_path, bin_path, all_mean_len, plot_n50, all_n50, all_std]{
+                    work.plot(bin_path,
+                              stats_path.c_str(),
+                              prefix + ".all",
+                              plot_mean_length,
+                              all_mean_len,
+                              plot_n50,
+                              all_n50,
+                              all_std,
+                              format,
+                              all_mean_quality);
+                });
+                plot_threads.emplace_back([&passed_mean_quality, &format, &work, plot_mean_length, prefix, stats_path, bin_path, all_mean_len, plot_n50, all_n50, all_std]{
+                    work.plot(bin_path,
+                              stats_path.c_str(),
+                              prefix + ".passed",
+                              plot_mean_length,
+                              all_mean_len,
+                              plot_n50,
+                              all_n50,
+                              all_std,
+                              format,
+                              passed_mean_quality);
+                });
+                for (auto& t : plot_threads) t.join();
+            }
+            if (out_ofstream.is_open()) out_ofstream.close();
+            if (stats_ofstream.is_open()) stats_ofstream.close();
+            if (summary_all_ofstream.is_open()) summary_all_ofstream.close();
+            if (summary_passed_ofstream.is_open()) summary_passed_ofstream.close();
+            if (trim_log_ofstream.is_open()) trim_log_ofstream.close();
+            if (failed_ofstream.is_open()) failed_ofstream.close();
+
+    } else if (nanofq.is_subcommand_used("stats")) {
         argparse::ArgumentParser& stats{nanofq.at<argparse::ArgumentParser>("stats")};
         std::string input{stats.get("--input")};
         std::string output{stats.get("--output")}; // output should not be stdout
@@ -68,35 +413,15 @@ int sub_main(int argc, char* argv[]) {
         ThreadPool tp{threads};
         std::vector<read_stats_result> stats_result{};
         auto fqs{myutility::get_fastqs(input)};
-        if (fqs.has_value()) {
-            // stats multi fastqs in a directory
-            FastqReader fq;
-            Work work{fq, tp};
-            work.run_stats_multi_fqs_in_multi_threads(fqs.value(), stats_result, out, gc);
-            std::tuple<float, int, float, float> summary_info_tuple = work.save_summary(
-                n, quals, lengths, stats_result, summary);
-            if (make_plot) {
-                auto [mean_len, n50, mean_quality, std] = summary_info_tuple;
-                work.plot(std::string{argv[0]},
-                          output,
-                          plot_prefix,
-                          plot_mean_length,
-                          mean_len,
-                          plot_n50,
-                          n50,
-                          std,
-                          format,
-                          mean_quality);
-            }
-            if (out.is_open()) { out.close(); }
-            return 0;
-        }
-        // stats one fastq[.gz] file
-        FastqReader fq{input, chunk};
+        FastqReader fq {input, chunk, fqs.has_value()};
         Work work{fq, tp};
-        work.run_stats(stats_result, output != "-" ? out : std::cout, gc);
+        if (fqs.has_value()) {
+            work.run_stats_multi_fqs_in_multi_threads(fqs.value(), stats_result, out, gc);
+        } else {
+            work.run_stats(stats_result, output != "-" ? out : std::cout, gc);
+        }
         std::tuple<float, int, float, float> summary_info_tuple = work.save_summary(
-            n, quals, lengths, stats_result, summary);
+                n, quals, lengths, stats_result, summary);
         if (make_plot) {
             auto [mean_len, n50, mean_quality, std] = summary_info_tuple;
             work.plot(std::string{argv[0]},
@@ -140,38 +465,34 @@ int sub_main(int argc, char* argv[]) {
         }
         ThreadPool tp{threads};
         auto fqs{myutility::get_fastqs(input)};
-        if (fqs.has_value()) {
-            // filter multi fastqs that in a directory
-            FastqReader fq;
-            Work work(fq, tp);
-            work.run_filter_multi_fqs_in_multi_threads(
-                fqs.value(),
-                gc,
-                min_length,
-                max_length,
-                min_quality,
-                min_gc,
-                max_gc,
-                output != "-" ? out : std::cout);
-            if (out.is_open()) out.close();
-            return 0;
-        }
-        FastqReader fq{input, chunk};
+        FastqReader fq {input, chunk, fqs.has_value()};
         Work work{fq, tp};
-        std::atomic<size_t> counter{0};
-        work.run_filter(counter,
-                        gc,
-                        min_length,
-                        max_length,
-                        min_quality,
-                        min_gc,
-                        max_gc,
-                        output != "-" ? out : std::cout);
+        if (fqs.has_value()) {
+            work.run_filter_multi_fqs_in_multi_threads(
+                   fqs.value(),
+                   gc,
+                   min_length,
+                   max_length,
+                   min_quality,
+                   min_gc,
+                   max_gc,
+                   output != "-" ? out : std::cout);
+        } else {
+            std::atomic<size_t> counter{0};
+            work.run_filter(counter,
+                            gc,
+                            min_length,
+                            max_length,
+                            min_quality,
+                            min_gc,
+                            max_gc,
+                            output != "-" ? out : std::cout);
+        }
         if (out.is_open()) out.close();
     } else if (nanofq.is_subcommand_used("index")) {
         argparse::ArgumentParser& index{nanofq.at<argparse::ArgumentParser>("index")};
         std::string input{index.get("input")};
-        FastqReader fq{input, 20000};
+        FastqReader fq{input, 20000, false};
         ThreadPool tp{1};
         Work work{fq, tp};
         work.run_index(true);
@@ -181,7 +502,7 @@ int sub_main(int argc, char* argv[]) {
         std::string output{find.get("--output")};
         std::string reads{find.get("--reads")};
         bool use_index{find.get<bool>("--use_index")};
-        FastqReader fq{input, 5000};
+        FastqReader fq{input, 5000, false};
         std::ofstream out;
         if (output != "-") {
             out.open(output, std::ios::out);
@@ -203,146 +524,7 @@ int sub_main(int argc, char* argv[]) {
         check_number_in_range("--threads", threads, MINT, MAXT, trim, true);
         auto chunk{trim.get<int>("--chunk")};
         check_number_in_range("--chunk", chunk, MINC, MAXC, trim, true);
-        std::string kit;
-        std::string forward;
-        std::string reversed;
-        int barcode;
-        if (trim.is_used("--kit")) {
-            kit = trim.get("--kit");
-            if (kit.ends_with(".24") || kit.ends_with(".96")) {
-                if (!trim.is_used("--barcode")) {
-                    cerr << REDS + "If kit with barcodes used, --barcode must be set" + COLOR_END << endl;
-                    cerr << trim << endl;
-                    exit(1);
-                }
-            }
-            if (trim.is_used("--barcode")) {
-                barcode = trim.get<int>("--barcode");
-                if (kit.ends_with(".24")) {
-                    if (barcode < MINB || barcode > MAX24B) {
-                        cerr << REDS +
-                            "If kit with 24 barcodes used, --barcode should be a integer and  in range (1, 24)" +
-                            COLOR_END <<
-                            endl;
-                        cerr << trim << endl;
-                        exit(1);
-                    }
-                    kit = fmt::format("{}-{}", kit, barcode);
-                } else if (kit.ends_with(".96")) {
-                    if (barcode < MINB || barcode > MAX96B) {
-                        cerr << REDS +
-                            "If kit with 96 barcodes used, --barcode should be a integer and  in range (1, 96)" +
-                            COLOR_END <<
-                            endl;
-                        cerr << trim << endl;
-                        exit(1);
-                    }
-                    kit = fmt::format("{}-{}", kit, barcode);
-                } else {
-                    cerr << WARNS + "If kit with no barcode used, ignore --barcode" + COLOR_END << endl;
-                }
-            }
-        } else {
-            std::string primers = trim.get("--primers");
-            if (exists(std::filesystem::path{primers.data()})) {
-                std::ifstream primers_file{primers, std::ios::in};
-                std::getline(primers_file, forward);
-                std::getline(primers_file, reversed);
-                primers_file.close();
-            } else {
-                auto primers_vec = myutility::split(primers, ",");
-                if (primers_vec.size() != 2) {
-                    cerr << REDS + "if --primer is not file, it should be a pair of primers separated by one comma" +
-                        COLOR_END << endl;
-                    cerr << trim << endl;
-                    exit(1);
-                }
-                forward = std::string{primers_vec[0]};
-                reversed = std::string{primers_vec[1]};
-            }
-        }
-        int match{trim.get<int>("--match")};
-        check_number_in_range<int>("--match", match, 1, 100, trim, true);
-        int mismatch{trim.get<int>("--mismatch")};
-        check_number_in_range<int>("--mismatch", mismatch, -100, 0, trim, true);
-        int gap_open{trim.get<int>("--gap_open")};
-        check_number_in_range<int>("--gap_open", gap_open, -100, 0, trim, true);
-        int gap_extend{trim.get<int>("--gap_extend")};
-        check_number_in_range<int>("--gap_extend", gap_extend, -100, 0, trim, true);
-        int end5_len = DEFAULT_INT, end3_len = DEFAULT_INT, end5_len_rc = DEFAULT_INT, end3_len_rc = DEFAULT_INT;
-        float end5_align_percent = DEFAULT_FLOAT, end5_align_identity = DEFAULT_FLOAT;
-        float end3_align_percent = DEFAULT_FLOAT, end3_align_identity = DEFAULT_FLOAT;
-        float end5_align_percent_rc = DEFAULT_FLOAT, end5_align_identity_rc = DEFAULT_FLOAT;
-        float end3_align_percent_rc = DEFAULT_FLOAT, end3_align_identity_rc = DEFAULT_FLOAT;
-        if (trim.is_used("--5end_len")) {
-            end5_len = trim.get<int>("--5end_len");
-            check_number_in_range("--end5_len", end5_len, MIN_TARGET, MAX_TARGET, trim, true);
-        }
-        if (trim.is_used("--5end_align_percent")) {
-            end5_align_percent = trim.get<float>("--5end_align_percent");
-            check_number_in_range("--5end_align_percent", end5_align_percent, MIN_PERCENT, MAX_PERCENT, trim, false);
-        }
-        if (trim.is_used("--5end_align_identity")) {
-            end5_align_identity = trim.get<float>("--5end_align_identity");
-            check_number_in_range("--5end_align_identity", end5_align_identity, MIN_PERCENT, MAX_PERCENT, trim, false);
-        }
-        if (trim.is_used("--3end_len")) {
-            end3_len = trim.get<int>("--3end_len");
-            check_number_in_range("--3end_len", end3_len, MIN_TARGET, MAX_TARGET, trim, true);
-        }
-        if (trim.is_used("--3end_align_percent")) {
-            end3_align_percent = trim.get<float>("--3end_align_percent");
-            check_number_in_range("--3end_align_percent", end3_align_percent, MIN_PERCENT, MAX_PERCENT, trim, false);
-        }
-        if (trim.is_used("--3end_align_identity")) {
-            end3_align_identity = trim.get<float>("--3end_align_identity");
-            check_number_in_range("--3end_align_identity", end3_align_identity, MIN_PERCENT, MAX_PERCENT, trim, false);
-        }
-        if (trim.is_used("--5end_len_rc")) {
-            end5_len_rc = trim.get<int>("--5end_len_rc");
-            check_number_in_range("--5end_len_rc", end5_len_rc, MIN_TARGET, MAX_TARGET, trim, true);
-        }
-        if (trim.is_used("--5end_align_percent_rc")) {
-            end5_align_percent_rc = trim.get<float>("--5end_align_percent_rc");
-            check_number_in_range("--5end_align_percent_rc", end5_align_percent_rc, MIN_PERCENT, MAX_PERCENT, trim,
-                                  false);
-        }
-        if (trim.is_used("--5end_align_identity_rc")) {
-            end5_align_identity_rc = trim.get<float>("--5end_align_identity_rc");
-            check_number_in_range("--5end_align_identity_rc", end5_align_identity_rc, MIN_PERCENT, MAX_PERCENT, trim,
-                                  false);
-        }
-        if (trim.is_used("--3end_len_rc")) {
-            end3_len_rc = trim.get<int>("--3end_len_rc");
-            check_number_in_range("--3end_len_rc", end3_len_rc, MIN_TARGET, MAX_TARGET, trim, true);
-        }
-        if (trim.is_used("--3end_align_percent_rc")) {
-            end3_align_percent_rc = trim.get<float>("--3end_align_percent_rc");
-            check_number_in_range("--3end_align_percent_rc", end3_align_percent_rc, MIN_PERCENT, MAX_PERCENT, trim,
-                                  false);
-        }
-        if (trim.is_used("--3end_align_identity_rc")) {
-            end3_align_identity_rc = trim.get<float>("--3end_align_identity_rc");
-            check_number_in_range("--3end_align_identity_rc", end3_align_identity_rc, MIN_PERCENT, MAX_PERCENT, trim,
-                                  false);
-        }
-        // INIT WORKFLOW
-        auto trim_info{barcode_info::get_trim_info()};
-        SequenceInfo sequence_info = !kit.empty() ? trim_info.find(kit)->second : SequenceInfo{forward, reversed};
-        sequence_info.update_sequence_info(
-            end5_len,
-            end5_align_percent,
-            end5_align_percent,
-            end3_len,
-            end3_align_percent,
-            end3_align_identity,
-            end5_len_rc,
-            end5_align_percent_rc,
-            end5_align_percent_rc,
-            end3_len_rc,
-            end3_align_percent_rc,
-            end3_align_identity_rc
-        );
+
         std::ofstream out;
         if (output != "-") {
             out.open(output, std::ios::out);
@@ -351,39 +533,40 @@ int sub_main(int argc, char* argv[]) {
                 exit(1);
             }
         }
+         auto [sequence_info, align_config]{parse_trim_arguments(trim, true)};
+        // SequenceInfo sequence_info {barcode_info::get_trim_info().find("SQK-LSK114")->second};
+
         ThreadPool tp{threads};
-        trim_direction td{myutility::how_trim(sequence_info)};
-        AlignmentConfig align_config{match, mismatch, gap_open, gap_extend};
+        // SequenceInfo sequence_info{std::get<0>(trim_config)};
+        trim_direction td{myutility::how_trim(*sequence_info)};
+        // AlignmentConfig align_config{std::get<2>(trim_config)};
         std::vector<AlignmentConfig> align_configs;
         for (int i{0}; i < threads; i++) {
-            align_configs.push_back(align_config);
+            align_configs.push_back(*align_config);
         }
         std::fstream logfile{log, std::ios::out};
         if (!logfile) {
             cerr << REDS + "Failed opening log" + COLOR_END << endl;
             exit(1);
         }
-        logfile << sequence_info.seq_info() << '\n';
+        logfile << (*sequence_info).seq_info() << '\n';
         auto fqs = myutility::get_fastqs(input);
-        if (fqs.has_value()){
-            // trim multi fastqs that in a directory
-            FastqReader fq;
-            Work work{fq, tp};
-            work.run_trim_multi_fqs_in_multi_threads(
-            fqs.value(),
-            sequence_info,
-            td,
-            align_configs,
-            logfile,
-            output != "-" ? out : std::cout);
-            if (out.is_open()) out.close();
-            return 0;
-        }
-        FastqReader fq{input, chunk};
+        FastqReader fq{input, chunk, fqs.has_value()};
         Work work{fq, tp};
-        std::atomic<size_t> counter;
-        work.run_trim(counter, sequence_info, td, align_configs, logfile, output != "-" ? out : std::cout);
+        if (fqs.has_value()) {
+            work.run_trim_multi_fqs_in_multi_threads(
+                fqs.value(),
+                *sequence_info,
+                td,
+                align_configs,
+                logfile,
+                output != "-" ? out : std::cout);
+        } else {
+            std::atomic<size_t> counter;
+            work.run_trim(counter, *sequence_info, td, align_configs, logfile, output != "-" ? out : std::cout);
+        }
         if (out.is_open()) out.close();
+
     } else if (nanofq.is_subcommand_used("compress")) {
         argparse::ArgumentParser& compress{nanofq.at<argparse::ArgumentParser>("compress")};
         std::string input{compress.get("input")};

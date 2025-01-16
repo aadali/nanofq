@@ -16,3 +16,10 @@ AlignmentConfig::AlignmentConfig(int match, int mismatch, int gap_open, int gap_
         m_direction_matrix[row][0] = Direction::Up; // the first col of direction matrix inited by 2, two means from up
     }
 }
+
+AlignmentConfig::AlignmentConfig(const AlignmentConfig&src) {
+    m_match = src.m_match;
+    m_mismatch = src.m_mismatch;
+    m_gap_open = src.m_gap_open;
+    m_gap_extend = src.m_gap_extend;
+}

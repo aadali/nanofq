@@ -33,11 +33,12 @@ private:
     int m_chunk_size;
     char* m_buffer;
     bool m_finish{false};
+    bool m_is_directory{false};
 
 public:
     FastqReader() = default;
 
-    FastqReader(const std::string& input_file, int chunk);
+    FastqReader(const std::string& input_file, int chunk, bool is_directory);
 
     FastqReader(const FastqReader&) = delete;
 

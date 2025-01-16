@@ -123,27 +123,68 @@ void Work::run_main(
                 failed_ofstream
             );
         }
-        size_t total_reads{0};
-        while (true) {
-            auto reads_ptr{m_fq.read_chunk_fastq()};
-            total_reads += reads_ptr->size();
-            auto bins{get_edges(reads_ptr->size())};
-            for (int i{0}; i < bins.size(); ++i) {
-                auto [start, end] = bins[i];
-                m_threads_pool.enqueue(
-                    [i, this, start, end, reads_ptr, &main_stats_result, gc, min_len,max_len, min_quality, min_gc,
-                        max_gc, do_trim, &seq_info, &td, &align_configs, &out_ofstream, &trim_log_ofstream, &
-                        stats_ofstream, retain_failed, &failed_ofstream]{
-                        this->main(start, end, reads_ptr, main_stats_result, gc, min_len, max_len, min_quality, min_gc,
-                                   max_gc, do_trim, seq_info, td, align_configs[i], out_ofstream, trim_log_ofstream,
-                                   stats_ofstream, retain_failed, failed_ofstream);
-                    }
-                );
+    }
+    size_t total_reads{0};
+    while (true) {
+        auto reads_ptr{m_fq.read_chunk_fastq()};
+        total_reads += reads_ptr->size();
+        auto bins{get_edges(reads_ptr->size())};
+        for (int i{0}; i < bins.size(); ++i) {
+            auto [start, end] = bins[i];
+            m_threads_pool.enqueue(
+                [i, this, start, end, reads_ptr, &main_stats_result, gc, min_len,max_len, min_quality, min_gc,
+                    max_gc, do_trim, &seq_info, &td, &align_configs, &out_ofstream, &trim_log_ofstream, &
+                    stats_ofstream, retain_failed, &failed_ofstream]{
+                    this->main(start, end, reads_ptr, main_stats_result, gc, min_len, max_len, min_quality, min_gc,
+                               max_gc, do_trim, seq_info, td, align_configs[i], out_ofstream, trim_log_ofstream,
+                               stats_ofstream, retain_failed, failed_ofstream);
+                }
+            );
+        }
+        if (m_fq.read_finish()) break;
+    }
+    while (total_reads != main_stats_result.size()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
+
+void Work::run_main_multi_fqs_in_multi_threads(
+    const std::vector<std::filesystem::path>& paths,
+    std::vector<main_read_stats_result>& main_stats_result,
+    bool gc,
+    unsigned min_len,
+    unsigned max_len,
+    float min_quality,
+    float min_gc,
+    float max_gc,
+    bool do_trim,
+    const SequenceInfo& seq_info,
+    const trim_direction& td,
+    std::vector<AlignmentConfig>& align_configs,
+    std::ofstream& out_ofstream,
+    std::ofstream& stats_ofstream,
+    std::ofstream& trim_log_ofstream,
+    bool retain_failed,
+    std::ofstream& failed_ofstream)
+{
+    auto bins{get_edges(paths.size())};
+    std::vector<std::thread> threads;
+    for (auto [start, end] : bins) {
+        threads.emplace_back(
+            [this, &paths, start, end, &main_stats_result, gc, min_len, max_len, min_quality, min_gc, max_gc, do_trim,
+                &seq_info, &td, &align_configs, &out_ofstream, &trim_log_ofstream, &stats_ofstream, retain_failed, &
+                failed_ofstream
+            ]{
+                main_multi_fqs_in_one_thread(
+                    paths, start, end, main_stats_result, gc, min_len, max_len, min_quality,
+                    min_gc, max_gc, do_trim,
+                    seq_info, td, align_configs[0], out_ofstream, trim_log_ofstream,
+                    stats_ofstream, retain_failed, failed_ofstream);
             }
-        }
-        while (total_reads != main_stats_result.size()){
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
+        );
+    }
+    for (std::thread& t : threads) {
+        t.join();
     }
 }
 
@@ -220,7 +261,7 @@ void Work::run_filter_multi_fqs_in_multi_threads(
     std::vector<std::thread> threads;
     for (auto [start, end] : bins) {
         threads.emplace_back([this, &paths, start, end, gc, min_len, max_len, min_quality, min_gc, max_gc, &out]{
-            filter_multi_fqs_int_one_thread(paths, start, end, gc, min_len, max_len, min_quality, min_gc, max_gc, out);
+            filter_multi_fqs_in_one_thread(paths, start, end, gc, min_len, max_len, min_quality, min_gc, max_gc, out);
         });
     }
     for (std::thread& t : threads) {
@@ -682,7 +723,7 @@ void Work::filter_one_thread(
     }
 }
 
-void Work::filter_multi_fqs_int_one_thread(
+void Work::filter_multi_fqs_in_one_thread(
     const std::vector<std::filesystem::path>& paths,
     size_t start,
     size_t end,

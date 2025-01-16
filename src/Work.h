@@ -15,7 +15,8 @@ using main_read_stats_result = std::pair<std::string,
                                          std::pair<std::tuple<unsigned, double, double>,
                                                    std::optional<std::tuple<unsigned, double, double>>>>;
 
-class Work {
+class Work
+{
 private:
     FastqReader& m_fq;
     ThreadPool& m_threads_pool;
@@ -31,6 +32,12 @@ public:
     [[nodiscard]] std::vector<std::pair<unsigned, unsigned>> get_edges(int size) const;
 
     void run_stats(
+        std::vector<read_stats_result>& stats_result,
+        std::ostream& out,
+        bool gc);
+
+    void run_stats_multi_fqs_in_multi_threads(
+        const std::vector<std::filesystem::path>& paths,
         std::vector<read_stats_result>& stats_result,
         std::ostream& out,
         bool gc);
@@ -54,11 +61,25 @@ public:
         std::ofstream& failed_ofstream
     );
 
-    void run_stats_multi_fqs_in_multi_threads(
+    void run_main_multi_fqs_in_multi_threads(
         const std::vector<std::filesystem::path>& paths,
-        std::vector<read_stats_result>& stats_result,
-        std::ostream& out,
-        bool gc);
+        std::vector<main_read_stats_result>& main_stats_result,
+        bool gc,
+        unsigned min_len,
+        unsigned max_len,
+        float min_quality,
+        float min_gc,
+        float max_gc,
+        bool do_trim,
+        const SequenceInfo& seq_info,
+        const trim_direction& td,
+        std::vector<AlignmentConfig>& align_configs,
+        std::ofstream& out_ofstream,
+        std::ofstream& stats_ofstream,
+        std::ofstream& trim_log_ofstream,
+        bool retain_failed,
+        std::ofstream& failed_ofstream
+    );
 
     void run_filter(
         std::atomic<size_t>& counter,
@@ -176,7 +197,7 @@ private:
         float max_gc,
         std::ostream& out);
 
-    static void filter_multi_fqs_int_one_thread(
+    static void filter_multi_fqs_in_one_thread(
         const std::vector<std::filesystem::path>& paths,
         size_t start,
         size_t end,
@@ -259,7 +280,7 @@ private:
         std::ofstream& failed_ofstream
     );
 
-     void main_multi_fqs_in_one_thread(
+    void main_multi_fqs_in_one_thread(
         const std::vector<std::filesystem::path>& paths,
         size_t start,
         size_t end,
