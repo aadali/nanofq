@@ -34,5 +34,10 @@ target_link_libraries(nanofq z)
 include_directories(./src)
 add_subdirectory(fmt)
 target_link_libraries(nanofq fmt::fmt)
-#file(COPY ./scripts/plot.py ${CMAKE_BUILD_PATH})
-#message(${CMAKE_BINARY_DIR})
+
+add_custom_command(TARGET nanofq POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+        "${CMAKE_SOURCE_DIR}/scripts/plot.py"
+        "$<TARGET_FILE_DIR:nanofq>/plot.py"
+        COMMENT "Copying plot.py to the binary directory"
+)

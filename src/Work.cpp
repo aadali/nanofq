@@ -370,7 +370,7 @@ std::tuple<float, int, float, float> Work::save_summary(
             std::get<4>(summary_info)
         )
     };
-    return res;
+    return res; // mean_read_len, read_len_n50, mean_read_quality, read_len_std
 }
 
 void Work::plot(
@@ -387,7 +387,7 @@ void Work::plot(
 {
     auto bin_dir = std::filesystem::path(argv0.data()).parent_path();
     auto script = std::string{bin_dir.append("plot.py")};
-    std::string cmd{fmt::format("python {} -i {} -p {} ", script, input, prefix)};
+    std::string cmd{fmt::format("python3 {} -i {} -p {} ", script, input, prefix)};
     if (plot_mean_length) {
         cmd.append(fmt::format("--plot_mean_length -M {} ", mean_length));
     }
@@ -401,8 +401,8 @@ void Work::plot(
     }
     cmd.append(fmt::format("-Q {} -s {} ", mean_quality, std));
     // cout << cmd << endl;
-    int res = std::system(cmd.data());
-    if (res != 0) {
+    // int res = std::system(cmd.data());
+    if (int res{std::system(cmd.data())}; res != 0) {
         std::cerr << WARNS << "Error found when making plot, you can plot using " << script << " manually" << COLOR_END
             << std::endl;
     }

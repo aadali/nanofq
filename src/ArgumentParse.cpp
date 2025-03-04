@@ -47,10 +47,10 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
         .default_value<std::vector<std::string>>({"pdf"})
         .append();
     main.add_argument("--plot_mean_length")
-        .help("whether plot the filtered mean length in plot, only used when --plot used")
+        .help("whether plot the filtered mean length in plot, only used when --plot specified")
         .flag();
     main.add_argument("--plot_n50")
-        .help("whether plot the filtered n50 in plot, only used when --plot used")
+        .help("whether plot the filtered n50 in plot, only used when --plot specified")
         .flag();
     main.add_argument("-g", "--gc")
         .help("whether the stats gc content, if not set, all gc content will be set 0.0")
@@ -60,7 +60,7 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
         .default_value(MINL)
         .scan<'i', int>();
     main.add_argument("--max_len")
-        .help("read max length, range (" + std::to_string(MINL) + ", " + std::to_string(MAXL) + "0")
+        .help("read max length, range (" + std::to_string(MINL) + ", " + std::to_string(MAXL) + ")")
         .default_value(MAXL)
         .scan<'i', int>();
     main.add_argument("--min_quality")

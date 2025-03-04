@@ -169,8 +169,9 @@ std::pair<std::shared_ptr<SequenceInfo>, std::tuple<int, int, int, int>> parse_t
         end3_align_percent_rc,
         end3_align_identity_rc
     );
-    return std::make_pair<std::shared_ptr<SequenceInfo>, std::tuple<int, int, int, int>>(std::make_shared<SequenceInfo>(sequence_info),
-    std::make_tuple(match, mismatch, gap_open, gap_extend));
+    return std::make_pair<std::shared_ptr<SequenceInfo>, std::tuple<int, int, int, int>>(
+        std::make_shared<SequenceInfo>(sequence_info),
+        std::make_tuple(match, mismatch, gap_open, gap_extend));
 }
 
 int sub_main(int argc, char* argv[])
@@ -228,20 +229,24 @@ int sub_main(int argc, char* argv[])
         }
         // auto [sequence_info, align_config]{parse_trim_arguments(main, do_trim)};
         auto [sequence_info, align_arguments]{parse_trim_arguments(main, do_trim)};
-        int max_target_len {std::ranges::max(std::vector<int>{
-            std::get<0>(sequence_info->m_top5end),
-            std::get<0>(sequence_info->m_top3end),
-            std::get<0>(sequence_info->m_bot5end),
-            std::get<0>(sequence_info->m_bot3end)
-        })};
-        int max_query_len { std::ranges::max(std::vector<int>{
-            static_cast<int>(sequence_info->m_top5end_query.size()),
-            static_cast<int>(sequence_info->m_top5end_query.size()),
-            static_cast<int>(sequence_info->m_bot5end_query.size()),
-            static_cast<int>(sequence_info->m_bot3end_query.size()),
-        })};
+        int max_target_len{
+            std::ranges::max(std::vector<int>{
+                std::get<0>(sequence_info->m_top5end),
+                std::get<0>(sequence_info->m_top3end),
+                std::get<0>(sequence_info->m_bot5end),
+                std::get<0>(sequence_info->m_bot3end)
+            })
+        };
+        int max_query_len{
+            std::ranges::max(std::vector<int>{
+                static_cast<int>(sequence_info->m_top5end_query.size()),
+                static_cast<int>(sequence_info->m_top5end_query.size()),
+                static_cast<int>(sequence_info->m_bot5end_query.size()),
+                static_cast<int>(sequence_info->m_bot3end_query.size()),
+            })
+        };
         const trim_direction td{myutility::how_trim(*sequence_info)};
-        auto [match, mismatch, gap_open, gap_extend] {align_arguments};
+        auto [match, mismatch, gap_open, gap_extend]{align_arguments};
         ThreadPool tp{threads};
         std::barrier<> bar{threads};
         auto fqs{myutility::get_fastqs(input)};
@@ -252,9 +257,6 @@ int sub_main(int argc, char* argv[])
         for (int i{0}; i < threads; ++i) {
             align_configs.emplace_back(max_target_len, max_query_len, match, mismatch, gap_open, gap_extend);
             // align_configs.push_back(*align_config);
-        }
-        for (auto& x : align_configs) {
-            cout << &x << endl;
         }
         std::filesystem::path prefix_path{prefix};
         std::filesystem::path out_path{output};
@@ -359,8 +361,8 @@ int sub_main(int argc, char* argv[])
                           passed_mtx,
                           bar);
         }
-        cout << "all_stats_result: " << all_stats_result.size() << endl;
-        cout << "passed_stats_result: " << passed_stats_result.size() << endl;
+        // cout << "all_stats_result: " << all_stats_result.size() << endl;
+        // cout << "passed_stats_result: " << passed_stats_result.size() << endl;
         auto all_stats_info{work.save_summary(n, quals, lengths, all_stats_result, summary_all_path.c_str(), false)};
         auto passed_stats_info{
             work.save_summary(n, quals, lengths, passed_stats_result, summary_all_path.c_str(), true)
@@ -368,51 +370,68 @@ int sub_main(int argc, char* argv[])
 
         auto x = all_stats_info;
         auto y = passed_stats_info;
-        cout << "raw_mean_length: " << std::get<0>(x) << endl;
-        cout << "raw_n50 " << std::get<1>(x) << endl;
-        cout << "raw_mean_quality " << std::get<2>(x) << endl;
-        cout << "raw_len_std " << std::get<3>(x) << endl;
-        cout << "passed_mean_length " << std::get<0>(y) << endl;
-        cout << "passed_n50 " << std::get<1>(y) << endl;
-        cout << "passed_mean_quality " << std::get<2>(y) << endl;
-        cout << "passed_len_std " << std::get<3>(y) << endl;
-        // TODO rebuild plot.py
-        /*
-        auto [all_reads_stats, passed_reads_stats]{get_all_and_passed_read_stats_result(main_stats_result)};
-            auto all_summary_info_tuple{work.save_summary(n, quals, lengths, all_reads_stats, summary_all_path.c_str())};
-            auto passed_summary_info_tuple{work.save_summary(n, quals, lengths, passed_reads_stats, summary_passed_path.c_str())};
-            if (make_plot) {
-                auto [all_mean_len, all_n50, all_mean_quality, all_std]{all_summary_info_tuple};
-                auto [passed_mean_len, passed_n50, passed_mean_quality, passed_std]{passed_summary_info_tuple};
-                std::vector<std::thread> plot_threads;
-                auto bin_path{std::string{argv[0]}};
-                plot_threads.emplace_back([&all_mean_quality, &format, &work, plot_mean_length, prefix, stats_path, bin_path, all_mean_len, plot_n50, all_n50, all_std]{
-                    work.plot(bin_path,
-                              stats_path.c_str(),
-                              prefix + ".all",
-                              plot_mean_length,
-                              all_mean_len,
-                              plot_n50,
-                              all_n50,
-                              all_std,
-                              format,
-                              all_mean_quality);
-                });
-                plot_threads.emplace_back([&passed_mean_quality, &format, &work, plot_mean_length, prefix, stats_path, bin_path, all_mean_len, plot_n50, all_n50, all_std]{
-                    work.plot(bin_path,
-                              stats_path.c_str(),
-                              prefix + ".passed",
-                              plot_mean_length,
-                              all_mean_len,
-                              plot_n50,
-                              all_n50,
-                              all_std,
-                              format,
-                              passed_mean_quality);
-                });
-                for (auto& t : plot_threads) t.join();
-            }
-            */
+        if (make_plot) {
+            auto [all_mean_len, all_n50, all_mean_quality, all_std]{all_stats_info};
+            auto [passed_mean_len, passed_n50, passed_mean_quality, passed_std]{
+                passed_stats_info
+            };
+            auto bin_path{std::string{argv[0]}};
+            std::vector<std::thread> plot_threads;
+            plot_threads.emplace_back([&format,
+                &work,
+                plot_mean_length,
+                prefix,
+                all_stats_path,
+                bin_path,
+                all_mean_len,
+                plot_n50,
+                all_n50,
+                all_std,
+                all_mean_quality]{
+                work.plot(bin_path,
+                          all_stats_path.c_str(),
+                          prefix + ".raw",
+                          plot_mean_length,
+                          all_mean_len,
+                          plot_n50,
+                          all_n50,
+                          all_std,
+                          format,
+                          all_mean_quality);
+            });
+            plot_threads.emplace_back([&format,
+            &work,
+            plot_mean_length,
+            prefix,
+            passed_stats_path,
+            bin_path,
+            passed_mean_len,
+            plot_n50,
+            passed_n50,
+            passed_std,
+            passed_mean_quality ]{
+            work.plot(
+                bin_path,
+                passed_stats_path.c_str(),
+                prefix + ".passed",
+                plot_mean_length,
+                passed_mean_len,
+                plot_n50,
+                passed_n50,
+                passed_std,
+                format,
+                passed_mean_quality );
+            });
+            for (auto&t : plot_threads) t.join();
+        }
+        // cout << "raw_mean_length: " << std::get<0>(x) << endl;
+        // cout << "raw_n50 " << std::get<1>(x) << endl;
+        // cout << "raw_mean_quality " << std::get<2>(x) << endl;
+        // cout << "raw_len_std " << std::get<3>(x) << endl;
+        // cout << "passed_mean_length " << std::get<0>(y) << endl;
+        // cout << "passed_n50 " << std::get<1>(y) << endl;
+        // cout << "passed_mean_quality " << std::get<2>(y) << endl;
+        // cout << "passed_len_std " << std::get<3>(y) << endl;
         if (out_ofstream.is_open()) out_ofstream.close();
         if (all_stats_ofstream.is_open()) all_stats_ofstream.close();
         if (passed_stats_ofstream.is_open()) passed_stats_ofstream.close();
@@ -481,7 +500,7 @@ int sub_main(int argc, char* argv[])
         if (fqs.has_value()) {
             work.run_stats_multi_fqs_in_multi_threads(fqs.value(), stats_result, out, gc);
         } else {
-            work.run_stats(stats_result, output != "-" ? out : std::cout, gc );
+            work.run_stats(stats_result, output != "-" ? out : std::cout, gc);
         }
         auto summary_info_tuple{
             work.save_summary(
@@ -600,21 +619,25 @@ int sub_main(int argc, char* argv[])
             }
         }
         auto [sequence_info, align_arguments]{parse_trim_arguments(trim, true)};
-        int max_target_len {std::ranges::max(std::vector<int>{
-            std::get<0>(sequence_info->m_top5end),
-            std::get<0>(sequence_info->m_top3end),
-            std::get<0>(sequence_info->m_bot5end),
-            std::get<0>(sequence_info->m_bot3end)
-        })};
-        int max_query_len { std::ranges::max(std::vector<int>{
-            static_cast<int>(sequence_info->m_top5end_query.size()),
-            static_cast<int>(sequence_info->m_top5end_query.size()),
-            static_cast<int>(sequence_info->m_bot5end_query.size()),
-            static_cast<int>(sequence_info->m_bot3end_query.size()),
-        })};
+        int max_target_len{
+            std::ranges::max(std::vector<int>{
+                std::get<0>(sequence_info->m_top5end),
+                std::get<0>(sequence_info->m_top3end),
+                std::get<0>(sequence_info->m_bot5end),
+                std::get<0>(sequence_info->m_bot3end)
+            })
+        };
+        int max_query_len{
+            std::ranges::max(std::vector<int>{
+                static_cast<int>(sequence_info->m_top5end_query.size()),
+                static_cast<int>(sequence_info->m_top5end_query.size()),
+                static_cast<int>(sequence_info->m_bot5end_query.size()),
+                static_cast<int>(sequence_info->m_bot3end_query.size()),
+            })
+        };
         ThreadPool tp{threads};
         trim_direction td{myutility::how_trim(*sequence_info)};
-        auto [match, mismatch, gap_open, gap_extend] {align_arguments};
+        auto [match, mismatch, gap_open, gap_extend]{align_arguments};
         std::vector<AlignmentConfig> align_configs;
         align_configs.reserve(threads);
         for (int i{0}; i < threads; i++) {
