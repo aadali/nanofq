@@ -23,7 +23,7 @@ def get_arguments():
     return parser.parse_args()
 
 
-def plot(df: pd.DataFrame,plot_mlength: bool,  mean_length: float, plot_n50: bool, n50: float, mean_quality: float, prefix: str, format: [str]):
+def plot(df: pd.DataFrame,plot_mean_length: bool,  mean_length: float, plot_n50: bool, n50: float, mean_quality: float, prefix: str, format: [str]):
     length_bins = 60
     quality_bins = 50
     fig, axes = plt.subplots(2, 2, figsize=(10, 8), layout="constrained", sharex="col")
@@ -50,7 +50,7 @@ def plot(df: pd.DataFrame,plot_mlength: bool,  mean_length: float, plot_n50: boo
     ax10.set_xlabel("Read length")
     ax11.set_xlabel("Read quality")
     for ax in [ax00, ax10]:
-        if plot_mlength and mean_length > 0:
+        if plot_mean_length and mean_length > 0:
             ax.axvline(mean_length, 0, 1, color="black", linewidth=0.8, linestyle="dashed")  # always plot the of mean_length vline
             if ax == ax00:
                 # just annotate the mean_length of ax00
@@ -130,7 +130,7 @@ if __name__ == '__main__':
         std = args.std
 
 
-    fs = args.format if args.format else ["pdf"]
+    fs = args.format if args.format else ["png"]
     min = length_mean - 3 * std
     max = length_mean + 3 * std
     df = df.query("@min <= length <= @max")

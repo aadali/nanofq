@@ -40,10 +40,11 @@ namespace myutility {
         const std::string& input_path);
 
     void smith_waterman(
-        std::string_view target_seq,
-        std::string_view query_seq,
+        const std::string& target_seq,
+        const std::string& query_seq,
         AlignmentConfig& config,
-        AlignmentResult& result);
+        AlignmentResult& result
+    );
 
     void update_sequence_info(
         SequenceInfo& seq_info,

@@ -3,6 +3,9 @@
 #include <tuple>
 #include <string>
 #include <syncstream>
+#include <variant>
+#include <barrier>
+
 #include "ThreadPool.h"
 #include "myUtility.h"
 #include "FastqReader.h"
@@ -10,13 +13,10 @@
 
 #define DEFAULT_INT std::numeric_limits<int>::max()
 #define DEFAULT_FLOAT 3.14f
-using read_stats_result = std::tuple<std::string, unsigned, double, double>;
-using main_read_stats_result = std::pair<std::string,
-                                         std::pair<std::tuple<unsigned, double, double>,
-                                                   std::optional<std::tuple<unsigned, double, double>>>>;
+using read_stats_result = std::tuple<std::shared_ptr<std::string>, unsigned, double, double>;
+// using read_stats_result = std::tuple<std::shared_ptr<std::string>, unsigned, double, double, unsigned, double, double, bool>;
 
-class Work
-{
+class Work {
 private:
     FastqReader& m_fq;
     ThreadPool& m_threads_pool;
@@ -43,7 +43,8 @@ public:
         bool gc);
 
     void run_main(
-        std::vector<main_read_stats_result>& main_stats_result,
+        std::vector<read_stats_result>& all_reads_stats_result,
+        std::vector<read_stats_result>& passed_reads_stats_result,
         bool gc,
         unsigned min_len,
         unsigned max_len,
@@ -55,15 +56,21 @@ public:
         const trim_direction& td,
         std::vector<AlignmentConfig>& align_configs,
         std::ofstream& out_ofstream,
-        std::ofstream& stats_ofstream,
+        std::ofstream& all_stats_ofstream,
+        std::ofstream& passed_stats_ofstream,
+        std::ofstream& failed_stats_ofstream,
         std::ofstream& trim_log_ofstream,
         bool retain_failed,
-        std::ofstream& failed_ofstream
+        std::ofstream& failed_ofstream,
+        std::mutex& all_mtx,
+        std::mutex& passed_mtx,
+        std::barrier<>& bar
     );
 
     void run_main_multi_fqs_in_multi_threads(
         const std::vector<std::filesystem::path>& paths,
-        std::vector<main_read_stats_result>& main_stats_result,
+        std::vector<read_stats_result>& all_reads_stats_result,
+        std::vector<read_stats_result>& passed_reads_stats_result,
         bool gc,
         unsigned min_len,
         unsigned max_len,
@@ -75,10 +82,14 @@ public:
         const trim_direction& td,
         std::vector<AlignmentConfig>& align_configs,
         std::ofstream& out_ofstream,
-        std::ofstream& stats_ofstream,
+        std::ofstream& all_stats_ofstream,
+        std::ofstream& passed_stats_ofstream,
+        std::ofstream& failed_stats_ofstream,
         std::ofstream& trim_log_ofstream,
         bool retain_failed,
-        std::ofstream& failed_ofstream
+        std::ofstream& failed_ofstream,
+        std::mutex& all_mtx,
+        std::mutex& passed_mtx
     );
 
     void run_filter(
@@ -114,7 +125,7 @@ public:
         const trim_direction& td,
         std::vector<AlignmentConfig>& align_configs,
         std::ostream& log_fstream,
-        std::ostream& out) const;
+        std::ostream& out, std::barrier<>&bar) const;
 
     void run_trim_multi_fqs_in_multi_threads(
         const std::vector<std::filesystem::path>& paths,
@@ -128,8 +139,10 @@ public:
         int n,
         const std::vector<int>& read_quals,
         const std::vector<int>& read_length,
-        std::vector<read_stats_result>& stats_result,
-        const std::string& summary_file_path);
+        std::vector<read_stats_result>& reads_stats_result,
+        const std::string& summary_file_path,
+        bool is_passed
+        );
 
     void plot(
         const std::string& argv0,
@@ -152,13 +165,21 @@ private:
         std::shared_ptr<std::vector<Read>>,
         std::vector<read_stats_result>&,
         std::ostream& out,
-        bool gc);
+        bool gc );
 
     std::tuple<std::string, float, int, float, float> summary_stats_result(
         int n,
         const std::vector<int>& read_quals,
         const std::vector<int>& read_lengths,
-        std::vector<read_stats_result>& stats_result);
+        std::vector<read_stats_result>& stats_results_vec
+        );
+
+    // std::tuple<std::string, float, int, float, float> main_summary_stats_result(
+    //     int n,
+    //     const std::vector<int>& read_quals,
+    //     const std::vector<int>& read_lengths,
+    //     std::vector<read_stats_result>& stats_result_vec
+    // );
 
     static void stats_one_thread(
         const Read& read,
@@ -170,7 +191,7 @@ private:
         const std::vector<std::filesystem::path>& paths,
         size_t start,
         size_t end,
-        std::vector<read_stats_result>& stats_result,
+        std::vector<read_stats_result>* stats_result,
         std::ostream& out,
         bool gc);
 
@@ -185,7 +206,7 @@ private:
         float min_quality,
         float min_gc,
         float max_gc,
-        std::ostream& out);
+        std::ostream& out );
 
     static void filter_one_thread(
         const Read& read,
@@ -218,7 +239,9 @@ private:
         const trim_direction& td,
         AlignmentConfig& align_config,
         std::ostream& log_fstream,
-        std::ostream& out);
+        std::ostream& out,
+        std::barrier<>& bar
+        );
 
     static void trim_one_thread(
         Read& read,
@@ -242,7 +265,8 @@ private:
         int start,
         int end,
         std::shared_ptr<std::vector<Read>> reads_ptr,
-        std::vector<main_read_stats_result>& main_stats_result,
+        std::vector<read_stats_result>& all_reads_stats_result,
+        std::vector<read_stats_result>& passed_reads_stats_result,
         bool gc,
         unsigned min_len,
         unsigned max_len,
@@ -254,15 +278,21 @@ private:
         const trim_direction& td,
         AlignmentConfig& alignment_config,
         std::ofstream& out_ofstream,
+        std::ofstream& all_stats_ofstream,
+        std::ofstream& passed_stats_ofstream,
+        std::ofstream& failed_stats_ofstream,
         std::ofstream& trim_log_ofstream,
-        std::ofstream& stats_ofstream,
         bool retain_failed,
-        std::ofstream& failed_ofstream
+        std::ofstream& failed_ofstream,
+        std::mutex& all_mtx,
+        std::mutex& passed_mtx,
+        std::barrier<> &bar
     );
 
     void main_one_thread(
         Read& read,
-        std::vector<main_read_stats_result>& main_stats_result,
+        std::vector<read_stats_result>& all_reads_stats_result,
+        std::vector<read_stats_result>& passed_reads_stats_result,
         bool gc,
         unsigned min_len,
         unsigned max_len,
@@ -274,17 +304,22 @@ private:
         const trim_direction& td,
         AlignmentConfig& alignment_config,
         std::ofstream& out_ofstream,
+        std::ofstream& all_stats_ofstream,
+        std::ofstream& passed_stats_ofstream,
+        std::ofstream& failed_stats_ofstream,
         std::ofstream& trim_log_ofstream,
-        std::ofstream& stats_ofstream,
         bool retain_failed,
-        std::ofstream& failed_ofstream
+        std::ofstream& failed_ofstream,
+        std::mutex& all_mtx,
+        std::mutex& passed_mtx
     );
 
     void main_multi_fqs_in_one_thread(
         const std::vector<std::filesystem::path>& paths,
         size_t start,
         size_t end,
-        std::vector<main_read_stats_result>& main_stats_result,
+        std::vector<read_stats_result>& all_reads_stats_result,
+        std::vector<read_stats_result>& passed_reads_stats_result,
         bool gc,
         unsigned min_len,
         unsigned max_len,
@@ -296,15 +331,20 @@ private:
         const trim_direction& td,
         AlignmentConfig& alignment_config,
         std::ofstream& out_ofstream,
+        std::ofstream& all_stats_ofstream,
+        std::ofstream& passed_stats_ofstream,
+        std::ofstream& failed_stats_ofstream,
         std::ofstream& trim_log_ofstream,
-        std::ofstream& stats_ofstream,
         bool retain_failed,
-        std::ofstream& failed_ofstream
+        std::ofstream& failed_ofstream,
+        std::mutex& all_mtx,
+        std::mutex& passed_mtx
     );
 
     void main_core(
         Read& read,
-        std::vector<main_read_stats_result>& main_stats_result,
+        std::vector<read_stats_result>& all_reads_stats_result,
+        std::vector<read_stats_result>& passed_reads_stats_result,
         bool gc,
         unsigned min_len,
         unsigned max_len,
@@ -316,11 +356,16 @@ private:
         const trim_direction& td,
         AlignmentConfig& alignment_config,
         std::ofstream& out_ofstream,
-        std::ofstream& stats_ofstream,
+        std::ofstream& all_stats_ofstream,
+        std::ofstream& passed_stats_ofstream,
+        std::ofstream& failed_stats_ofstream,
         std::ofstream& trim_log_ofstream,
         bool retain_failed,
         std::ofstream& failed_ofstream,
-        bool sync);
+        bool sync,
+        std::mutex& all_mtx,
+        std::mutex& passed_mtx
+        );
 };
 
 #endif // WORK_H

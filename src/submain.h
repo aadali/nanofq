@@ -12,29 +12,7 @@
 #include "Adapter.h"
 #include "ArgumentParse.h"
 
-std::pair<std::vector<read_stats_result>, std::vector<read_stats_result>> get_all_and_passed_read_stats_result(
-    std::vector<main_read_stats_result>& main_stats_result)
-{
-    auto all_and_passed_stats_result{
-        std::make_pair(std::vector<read_stats_result>{},
-                       std::vector<read_stats_result>{})
-    };
-    all_and_passed_stats_result.first.reserve(main_stats_result.size());
-    all_and_passed_stats_result.second.reserve(main_stats_result.size());
-    for (int i{0}; i < main_stats_result.size(); ++i) {
-        auto read_stats{main_stats_result[i]};
-        auto [raw_len,raw_quality,raw_gc]{read_stats.second.first};
-        all_and_passed_stats_result.first.emplace_back(read_stats.first, raw_len, raw_quality, raw_gc);
-        if (read_stats.second.second.has_value()) {
-            auto [clean_len, clean_quality, clean_gc]{read_stats.second.second.value()};
-            all_and_passed_stats_result.second.emplace_back(read_stats.first, clean_len, clean_quality, clean_gc);
-        }
-    }
-    return all_and_passed_stats_result;
-}
-
-// std::tuple<SequenceInfo, trim_direction, AlignmentConfig> parse_trim_arguments(
-std::pair<std::shared_ptr<SequenceInfo>, std::shared_ptr<AlignmentConfig>> parse_trim_arguments(
+std::pair<std::shared_ptr<SequenceInfo>, std::tuple<int, int, int, int>> parse_trim_arguments(
     argparse::ArgumentParser& parser, bool require_trim)
 {
     std::string kit;
@@ -170,7 +148,13 @@ std::pair<std::shared_ptr<SequenceInfo>, std::shared_ptr<AlignmentConfig>> parse
                               false);
     }
     auto parser_info{barcode_info::get_trim_info()};
-    SequenceInfo sequence_info {!kit_used && !primers_used ? parser_info.find("SQK-LSK114")->second : !kit.empty() ? parser_info.find(kit)->second : SequenceInfo{forward, reversed}};
+    SequenceInfo sequence_info{
+        !kit_used && !primers_used
+            ? parser_info.find("SQK-LSK114")->second
+            : !kit.empty()
+            ? parser_info.find(kit)->second
+            : SequenceInfo{forward, reversed}
+    };
     sequence_info.update_sequence_info(
         end5_len,
         end5_align_percent,
@@ -185,8 +169,8 @@ std::pair<std::shared_ptr<SequenceInfo>, std::shared_ptr<AlignmentConfig>> parse
         end3_align_percent_rc,
         end3_align_identity_rc
     );
-     AlignmentConfig align_config{match, mismatch, gap_open, gap_extend};
-    return std::make_pair(std::make_shared<SequenceInfo>(sequence_info), std::make_shared<AlignmentConfig>(align_config));
+    return std::make_pair<std::shared_ptr<SequenceInfo>, std::tuple<int, int, int, int>>(std::make_shared<SequenceInfo>(sequence_info),
+    std::make_tuple(match, mismatch, gap_open, gap_extend));
 }
 
 int sub_main(int argc, char* argv[])
@@ -229,8 +213,8 @@ int sub_main(int argc, char* argv[])
         int max_len{main.get<int>("--max_len")};
         check_number_in_range<size_t>("--max_len", max_len, MINL, MAXL, main, true);
         float min_quality{main.get<float>("--min_quality")};
-        check_number_in_range("--min_quality", min_quality, MIN_PERCENT, MAX_PERCENT, main, false);
-        float min_gc{main.get<float>("--max_gc")};
+        check_number_in_range("--min_quality", min_quality, 0.0f, 100.0f, main, false);
+        float min_gc{main.get<float>("--min_gc")};
         float max_gc{main.get<float>("--max_gc")};
         check_number_in_range("--min_gc", min_gc, MIN_PERCENT, MAX_PERCENT, main, false);
         check_number_in_range("--max_gc", max_gc, MIN_PERCENT, MAX_PERCENT, main, false);
@@ -242,40 +226,68 @@ int sub_main(int argc, char* argv[])
         if (main.is_used("--kit") || main.is_used("--primers")) {
             do_trim = true;
         }
-        auto [sequence_info, align_config]{parse_trim_arguments(main, do_trim)};
-        trim_direction td{myutility::how_trim(*sequence_info)};
+        // auto [sequence_info, align_config]{parse_trim_arguments(main, do_trim)};
+        auto [sequence_info, align_arguments]{parse_trim_arguments(main, do_trim)};
+        int max_target_len {std::ranges::max(std::vector<int>{
+            std::get<0>(sequence_info->m_top5end),
+            std::get<0>(sequence_info->m_top3end),
+            std::get<0>(sequence_info->m_bot5end),
+            std::get<0>(sequence_info->m_bot3end)
+        })};
+        int max_query_len { std::ranges::max(std::vector<int>{
+            static_cast<int>(sequence_info->m_top5end_query.size()),
+            static_cast<int>(sequence_info->m_top5end_query.size()),
+            static_cast<int>(sequence_info->m_bot5end_query.size()),
+            static_cast<int>(sequence_info->m_bot3end_query.size()),
+        })};
+        const trim_direction td{myutility::how_trim(*sequence_info)};
+        auto [match, mismatch, gap_open, gap_extend] {align_arguments};
         ThreadPool tp{threads};
+        std::barrier<> bar{threads};
         auto fqs{myutility::get_fastqs(input)};
-        std::vector<main_read_stats_result> main_stats_result{};
+        std::vector<read_stats_result> all_stats_result{};
+        std::vector<read_stats_result> passed_stats_result{};
         std::vector<AlignmentConfig> align_configs;
+        align_configs.reserve(threads);
         for (int i{0}; i < threads; ++i) {
-            align_configs.push_back(*align_config);
+            align_configs.emplace_back(max_target_len, max_query_len, match, mismatch, gap_open, gap_extend);
+            // align_configs.push_back(*align_config);
+        }
+        for (auto& x : align_configs) {
+            cout << &x << endl;
         }
         std::filesystem::path prefix_path{prefix};
         std::filesystem::path out_path{output};
-        std::filesystem::path stats_path{prefix_path.concat(".stats.txt")};
-        std::filesystem::path summary_all_path{prefix_path.concat(".all.summary.txt")};
-        std::filesystem::path summary_passed_path{prefix_path.concat(".passed.summary.txt")};
-        std::filesystem::path trim_log_path{prefix_path.concat(".trim_log.txt")};
-        std::filesystem::path failed_path{prefix_path.concat(".failed.fastq")};
+        std::filesystem::path all_stats_path{prefix_path.string() + ".raw.stats.tsv"};
+        std::filesystem::path passed_stats_path{prefix_path.string() + ".passed.stats.tsv"};
+        std::filesystem::path failed_stats_path{prefix_path.string() + ".failed.stats.tsv"};
+        std::filesystem::path summary_all_path{prefix_path.string() + ".summary.txt"};
+        // std::filesystem::path summary_passed_path{prefix_path.string + ".passed.summary.txt"};
+        std::filesystem::path trim_log_path{prefix_path.string() + ".trim_log.txt"};
+        std::filesystem::path failed_path{prefix_path.string() + ".failed.fastq"};
         std::ofstream out_ofstream{output, std::ios::out};
         if (!out_ofstream) {
             std::cerr << REDS + "Error happened when opening " + output + COLOR_END << std::endl;
             exit(1);
         }
-        std::ofstream stats_ofstream{stats_path, std::ios::out};
-        if (!stats_ofstream) {
-            std::cerr << REDS + "Error happened when opening " << stats_path << COLOR_END << std::endl;
+        std::ofstream all_stats_ofstream{all_stats_path, std::ios::out};
+        if (!all_stats_ofstream) {
+            std::cerr << REDS + "Error happened when opening " << all_stats_path << COLOR_END << std::endl;
+            exit(1);
+        }
+        std::ofstream passed_stats_ofstream{passed_stats_path, std::ios::out};
+        if (!passed_stats_ofstream) {
+            std::cerr << REDS + "Error happened when opening " << passed_stats_path << COLOR_END << std::endl;
+            exit(1);
+        }
+        std::ofstream failed_stats_ofstream{failed_stats_path, std::ios::out};
+        if (!failed_stats_ofstream) {
+            std::cerr << REDS + "Error happened when opening " << failed_stats_path << COLOR_END << std::endl;
             exit(1);
         }
         std::ofstream summary_all_ofstream{summary_all_path, std::ios::out};
         if (!summary_all_ofstream) {
             std::cerr << REDS + "Error happened when opening " << summary_all_path << COLOR_END << std::endl;
-            exit(1);
-        }
-        std::ofstream summary_passed_ofstream{summary_passed_path, std::ios::out};
-        if (!summary_passed_ofstream) {
-            std::cerr << REDS + "Error happened when opening " << summary_passed_path << COLOR_END << std::endl;
             exit(1);
         }
         std::ofstream trim_log_ofstream;
@@ -285,6 +297,7 @@ int sub_main(int argc, char* argv[])
                 std::cerr << REDS + "Error happened when opening " << summary_all_path << COLOR_END << std::endl;
                 exit(1);
             }
+            trim_log_ofstream << sequence_info->seq_info() << '\n';
         }
         std::ofstream failed_ofstream;
         if (retain_failed) {
@@ -294,33 +307,80 @@ int sub_main(int argc, char* argv[])
                 exit(1);
             }
         }
-        bool is_directory {fqs.has_value()};
-        FastqReader fq {input, chunk, is_directory};
-        Work work {fq, tp};
+        bool is_directory{fqs.has_value()};
+        FastqReader fq{input, chunk, is_directory};
+        Work work{fq, tp};
+        std::mutex all_mtx;
+        std::mutex passed_mtx;
         if (is_directory) {
-            work.run_main_multi_fqs_in_multi_threads(fqs.value(), main_stats_result, gc, min_len, max_len, min_quality,
-                                                     min_gc, max_gc, do_trim, *sequence_info, td,
-                                                     align_configs, out_ofstream, stats_ofstream, trim_log_ofstream,
-                                                     retain_failed, failed_ofstream);
+            work.run_main_multi_fqs_in_multi_threads(fqs.value(),
+                                                     all_stats_result,
+                                                     passed_stats_result,
+                                                     gc,
+                                                     min_len,
+                                                     max_len,
+                                                     min_quality,
+                                                     min_gc,
+                                                     max_gc,
+                                                     do_trim,
+                                                     *sequence_info,
+                                                     td,
+                                                     align_configs,
+                                                     out_ofstream,
+                                                     all_stats_ofstream,
+                                                     passed_stats_ofstream,
+                                                     failed_stats_ofstream,
+                                                     trim_log_ofstream,
+                                                     retain_failed,
+                                                     failed_ofstream,
+                                                     all_mtx,
+                                                     passed_mtx);
         } else {
-            work.run_main(main_stats_result, gc, min_len, max_len, min_quality, min_gc, max_gc, do_trim, *sequence_info,
-                          td, align_configs, out_ofstream, stats_ofstream, trim_log_ofstream, retain_failed,
-                          failed_ofstream);
+            work.run_main(all_stats_result,
+                          passed_stats_result,
+                          gc,
+                          min_len,
+                          max_len,
+                          min_quality,
+                          min_gc,
+                          max_gc,
+                          do_trim,
+                          *sequence_info,
+                          td,
+                          align_configs,
+                          out_ofstream,
+                          all_stats_ofstream,
+                          passed_stats_ofstream,
+                          failed_stats_ofstream,
+                          trim_log_ofstream,
+                          retain_failed,
+                          failed_ofstream,
+                          all_mtx,
+                          passed_mtx,
+                          bar);
         }
-        auto [all_reads_stats, passed_reads_stats]{get_all_and_passed_read_stats_result(main_stats_result)};
-            std::vector<std::thread> summary_threads;
-            std::tuple<float, int, float, float> all_summary_info_tuple;
-            std::tuple<float, int, float, float> passed_summary_info_tuple;
-            summary_threads.emplace_back([&]{
-                work.save_summary(n, quals, lengths, all_reads_stats, summary_all_path.c_str());
-            });
-            summary_threads.emplace_back([&]{
-                work.save_summary(n, quals, lengths, passed_reads_stats, summary_passed_path.c_str());
-            });
+        cout << "all_stats_result: " << all_stats_result.size() << endl;
+        cout << "passed_stats_result: " << passed_stats_result.size() << endl;
+        auto all_stats_info{work.save_summary(n, quals, lengths, all_stats_result, summary_all_path.c_str(), false)};
+        auto passed_stats_info{
+            work.save_summary(n, quals, lengths, passed_stats_result, summary_all_path.c_str(), true)
+        };
 
-            for (auto& t : summary_threads) {
-                t.join();
-            }
+        auto x = all_stats_info;
+        auto y = passed_stats_info;
+        cout << "raw_mean_length: " << std::get<0>(x) << endl;
+        cout << "raw_n50 " << std::get<1>(x) << endl;
+        cout << "raw_mean_quality " << std::get<2>(x) << endl;
+        cout << "raw_len_std " << std::get<3>(x) << endl;
+        cout << "passed_mean_length " << std::get<0>(y) << endl;
+        cout << "passed_n50 " << std::get<1>(y) << endl;
+        cout << "passed_mean_quality " << std::get<2>(y) << endl;
+        cout << "passed_len_std " << std::get<3>(y) << endl;
+        // TODO rebuild plot.py
+        /*
+        auto [all_reads_stats, passed_reads_stats]{get_all_and_passed_read_stats_result(main_stats_result)};
+            auto all_summary_info_tuple{work.save_summary(n, quals, lengths, all_reads_stats, summary_all_path.c_str())};
+            auto passed_summary_info_tuple{work.save_summary(n, quals, lengths, passed_reads_stats, summary_passed_path.c_str())};
             if (make_plot) {
                 auto [all_mean_len, all_n50, all_mean_quality, all_std]{all_summary_info_tuple};
                 auto [passed_mean_len, passed_n50, passed_mean_quality, passed_std]{passed_summary_info_tuple};
@@ -352,13 +412,14 @@ int sub_main(int argc, char* argv[])
                 });
                 for (auto& t : plot_threads) t.join();
             }
-            if (out_ofstream.is_open()) out_ofstream.close();
-            if (stats_ofstream.is_open()) stats_ofstream.close();
-            if (summary_all_ofstream.is_open()) summary_all_ofstream.close();
-            if (summary_passed_ofstream.is_open()) summary_passed_ofstream.close();
-            if (trim_log_ofstream.is_open()) trim_log_ofstream.close();
-            if (failed_ofstream.is_open()) failed_ofstream.close();
-
+            */
+        if (out_ofstream.is_open()) out_ofstream.close();
+        if (all_stats_ofstream.is_open()) all_stats_ofstream.close();
+        if (passed_stats_ofstream.is_open()) passed_stats_ofstream.close();
+        if (summary_all_ofstream.is_open()) summary_all_ofstream.close();
+        // if (summary_passed_ofstream.is_open()) summary_passed_ofstream.close();
+        if (trim_log_ofstream.is_open()) trim_log_ofstream.close();
+        if (failed_ofstream.is_open()) failed_ofstream.close();
     } else if (nanofq.is_subcommand_used("stats")) {
         argparse::ArgumentParser& stats{nanofq.at<argparse::ArgumentParser>("stats")};
         std::string input{stats.get("--input")};
@@ -411,17 +472,21 @@ int sub_main(int argc, char* argv[])
             }
         }
         ThreadPool tp{threads};
+        std::barrier<> bar{threads};
         std::vector<read_stats_result> stats_result{};
+        // std::vector<main_read_stats_result> main_stats_result{};
         auto fqs{myutility::get_fastqs(input)};
-        FastqReader fq {input, chunk, fqs.has_value()};
+        FastqReader fq{input, chunk, fqs.has_value()};
         Work work{fq, tp};
         if (fqs.has_value()) {
             work.run_stats_multi_fqs_in_multi_threads(fqs.value(), stats_result, out, gc);
         } else {
-            work.run_stats(stats_result, output != "-" ? out : std::cout, gc);
+            work.run_stats(stats_result, output != "-" ? out : std::cout, gc );
         }
-        std::tuple<float, int, float, float> summary_info_tuple = work.save_summary(
-                n, quals, lengths, stats_result, summary);
+        auto summary_info_tuple{
+            work.save_summary(
+                n, quals, lengths, stats_result, summary, false)
+        };
         if (make_plot) {
             auto [mean_len, n50, mean_quality, std] = summary_info_tuple;
             work.plot(std::string{argv[0]},
@@ -464,19 +529,20 @@ int sub_main(int argc, char* argv[])
             }
         }
         ThreadPool tp{threads};
+        std::barrier<> bar{threads};
         auto fqs{myutility::get_fastqs(input)};
-        FastqReader fq {input, chunk, fqs.has_value()};
+        FastqReader fq{input, chunk, fqs.has_value()};
         Work work{fq, tp};
         if (fqs.has_value()) {
             work.run_filter_multi_fqs_in_multi_threads(
-                   fqs.value(),
-                   gc,
-                   min_length,
-                   max_length,
-                   min_quality,
-                   min_gc,
-                   max_gc,
-                   output != "-" ? out : std::cout);
+                fqs.value(),
+                gc,
+                min_length,
+                max_length,
+                min_quality,
+                min_gc,
+                max_gc,
+                output != "-" ? out : std::cout);
         } else {
             std::atomic<size_t> counter{0};
             work.run_filter(counter,
@@ -533,26 +599,37 @@ int sub_main(int argc, char* argv[])
                 exit(1);
             }
         }
-         auto [sequence_info, align_config]{parse_trim_arguments(trim, true)};
-        // SequenceInfo sequence_info {barcode_info::get_trim_info().find("SQK-LSK114")->second};
-
+        auto [sequence_info, align_arguments]{parse_trim_arguments(trim, true)};
+        int max_target_len {std::ranges::max(std::vector<int>{
+            std::get<0>(sequence_info->m_top5end),
+            std::get<0>(sequence_info->m_top3end),
+            std::get<0>(sequence_info->m_bot5end),
+            std::get<0>(sequence_info->m_bot3end)
+        })};
+        int max_query_len { std::ranges::max(std::vector<int>{
+            static_cast<int>(sequence_info->m_top5end_query.size()),
+            static_cast<int>(sequence_info->m_top5end_query.size()),
+            static_cast<int>(sequence_info->m_bot5end_query.size()),
+            static_cast<int>(sequence_info->m_bot3end_query.size()),
+        })};
         ThreadPool tp{threads};
-        // SequenceInfo sequence_info{std::get<0>(trim_config)};
         trim_direction td{myutility::how_trim(*sequence_info)};
-        // AlignmentConfig align_config{std::get<2>(trim_config)};
+        auto [match, mismatch, gap_open, gap_extend] {align_arguments};
         std::vector<AlignmentConfig> align_configs;
+        align_configs.reserve(threads);
         for (int i{0}; i < threads; i++) {
-            align_configs.push_back(*align_config);
+            align_configs.emplace_back(max_target_len, max_query_len, match, mismatch, gap_open, gap_extend);
         }
         std::fstream logfile{log, std::ios::out};
         if (!logfile) {
             cerr << REDS + "Failed opening log" + COLOR_END << endl;
             exit(1);
         }
-        logfile << (*sequence_info).seq_info() << '\n';
+        logfile << sequence_info->seq_info() << '\n';
         auto fqs = myutility::get_fastqs(input);
         FastqReader fq{input, chunk, fqs.has_value()};
         Work work{fq, tp};
+        std::barrier<> bar{threads};
         if (fqs.has_value()) {
             work.run_trim_multi_fqs_in_multi_threads(
                 fqs.value(),
@@ -563,10 +640,9 @@ int sub_main(int argc, char* argv[])
                 output != "-" ? out : std::cout);
         } else {
             std::atomic<size_t> counter;
-            work.run_trim(counter, *sequence_info, td, align_configs, logfile, output != "-" ? out : std::cout);
+            work.run_trim(counter, *sequence_info, td, align_configs, logfile, output != "-" ? out : std::cout, bar);
         }
         if (out.is_open()) out.close();
-
     } else if (nanofq.is_subcommand_used("compress")) {
         argparse::ArgumentParser& compress{nanofq.at<argparse::ArgumentParser>("compress")};
         std::string input{compress.get("input")};

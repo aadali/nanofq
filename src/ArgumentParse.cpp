@@ -39,7 +39,7 @@ argparse::ArgumentParser& get_arguments(int argc, char* argv[]) {
             "count the reads number that longer than this value, can be set multi times, no default value, range >= 1")
         .append()
         .scan<'i', int>();
-    main.add_argument("-p", "--plot")
+    main.add_argument("--plot")
         .help("whether plot the stats result")
         .flag();
     main.add_argument("-f", "--format")
@@ -109,7 +109,7 @@ if it's set, the following parameter will be set with default value
     3end_align_percent_rc = 0.8
     3end_align_identity_rc = 0.8
 you can change this value by set specified parameter)");
-    main.add_argument("-b", "barcode")
+    main.add_argument("-b", "--barcode")
         .help("which barcode used, for 24 barcode kits, range (1, 24); for 96 barcode kits, range (1, 96)")
         .scan<'i', int>();
     main.add_argument("--match")

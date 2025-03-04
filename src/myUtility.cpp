@@ -71,40 +71,53 @@ namespace myutility {
     }
 
     void smith_waterman(
-        std::string_view target_seq,
-        std::string_view query_seq,
+        const std::string& target_seq,
+        const std::string& query_seq,
         AlignmentConfig& config,
-        AlignmentResult& result) {
+        AlignmentResult& result
+    ) {
         if (!result.is_empty()) {
             std::cerr << REDS + "AlignmentResult should be empty" + COLOR_END << std::endl;;
             exit(1);
         }
-        if (target_seq.size() > MAX_TARGET_LEN) {
-            std::cerr << REDS + fmt::format("max length of target seq should less than {}", MAX_TARGET_LEN) + COLOR_END
-                <<
-                std::endl;;
-            exit(1);
-        }
-        if (query_seq.size() > MAX_QUERY_LEN) {
-            std::cerr << REDS + fmt::format("max length of query seq should less than {}", MAX_QUERY_LEN) + COLOR_END <<
-                std::endl;;
-            exit(1);
-        }
+        // if (target_seq.size() > MAX_TARGET_LEN) {
+        //     std::cerr << REDS + fmt::format("max length of target seq should less than {}", MAX_TARGET_LEN) + COLOR_END
+        //         <<
+        //         std::endl;;
+        //     exit(1);
+        // }
+        // if (query_seq.size() > MAX_QUERY_LEN) {
+        //     std::cerr << REDS + fmt::format("max length of query seq should less than {}", MAX_QUERY_LEN) + COLOR_END <<
+        //         std::endl;;
+        //     exit(1);
+        // }
         int diagonal_score{0}, up_score{0}, left_score{0};
-        for (int row{1}; row < query_seq.size(); row++) {
-            for (int col{1}; col < target_seq.size(); col++) {
+        // int begin_col_idx{1}, end_col_idx{config.m_max_target_len};
+        // if (!is_3end){
+        //     // for 5end, align from index 1 of read sequence to index min(read_sequence.size(), config.m_max_target_len)
+        //     // in most situation, read_sequence.size() will be bigger than config.m_max_target_len
+        //     end_col_idx=std::ranges::min(static_cast<int>(target_seq.size()), config.m_max_target_len);
+        // } else {
+        //     // for 3end, align the last min(config.m_max_target_len, read_sequence.size()) bases to full query
+        //     if (static_cast<int>(target_seq.size()) > config.m_max_target_len ){
+        //         begin_col_idx = target_seq.size() - config.m_max_target_len;
+        //         end_col_idx = target_seq.size();
+        //     } else {
+        //         begin_col_idx = 1;
+        //         end_col_idx = target_seq.size();
+        //     }
+        // }
+        int end_target_idx{target_seq.size() < config.m_max_target_len ? static_cast<int>(target_seq.size()) : config.m_max_target_len};
+        for (int row{1}; row <= config.m_max_query_len; row++) {
+            for (int col{1}; col <= end_target_idx; col++) {
                 /* calculate score from diagonal */
                 // int score{target_seq[col - 1] == query_seq[row - 1] ? config.m_match : config.m_mismatch};
                 int score{
                     target_seq[col - 1] == query_seq[row - 1] ||
                     (query_seq[row - 1] == 'V' && (target_seq[col - 1] == 'G' || target_seq[col - 1] == 'A' ||
-                        target_seq[
-                            col
-                            - 1] == 'C')) ||
+                        target_seq[ col - 1] == 'C')) ||
                     (query_seq[row - 1] == 'B' && (target_seq[col - 1] == 'G' || target_seq[col - 1] == 'T' ||
-                        target_seq[
-                            col
-                            - 1] == 'C'))
+                        target_seq[ col - 1] == 'C'))
                         ? config.m_match
                         : config.m_mismatch
                 };

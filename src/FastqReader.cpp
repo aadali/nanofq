@@ -19,7 +19,39 @@ FastqReader::FastqReader(const std::string& input_file, int chunk, bool is_direc
         }
         m_seq = kseq_init(m_infile_gz);
     }
-
+    // m_reads_seq = std::make_shared<std::unordered_map<std::string, std::string>>();
+    // m_reads_seq->reserve(200000);
+    // std::string a{"/home/a/main.test.fastq"};
+    // std::fstream trim_infile{a, std::ios::in};
+    // std::string read_name;
+    // std::string read_seq;
+    // char buffer[1000000];
+    // int line_number{1};
+    // while (trim_infile.getline(buffer, 999999, '\n')){
+    //     switch (line_number) {
+    //     case 1: {
+    //         std::string read_name_line{buffer};
+    //         read_name = read_name_line.substr(1, read_name_line.find(' ')-1);
+    //         ++line_number;
+    //         break;
+    //     }
+    //     case 2:{
+    //         read_seq = buffer;
+    //         m_reads_seq->try_emplace(read_name, read_seq);
+    //         ++line_number;
+    //         break;
+    //     }
+    //     case 3: {
+    //         ++line_number;
+    //         break;
+    //     }
+    //     case 4: {
+    //         line_number =1 ;
+    //         break;
+    //     }
+    //     default: {break;}
+    //     }
+    // }
 }
 
 FastqReader::~FastqReader()
@@ -91,13 +123,15 @@ std::shared_ptr<std::vector<Read>> FastqReader::read_chunk_fastq()
     reads_ptr->reserve(m_chunk_size);
     while (true) {
         reads_ptr->emplace_back(read_one_fastq());
-        if (reads_ptr->size() == m_chunk_size || reads_ptr->back().get_id() == finished_read_name) {
-            if (reads_ptr->back().get_id() == finished_read_name) {
+        bool is_full {reads_ptr->size() == m_chunk_size};
+        bool is_last {*reads_ptr->back().get_id() == finished_read_name};
+        if (is_full || is_last){
+            if (is_last) {
                 reads_ptr->pop_back();
                 m_finish = true;
             }
             break;
-        };
+        }
     }
     reads_ptr->shrink_to_fit();
     return reads_ptr;
@@ -289,7 +323,9 @@ void FastqReader::find(const std::string& input_reads, std::ostream& out, bool u
         this->find_reads(input_reads, out, use_index);
     }
 }
-
+/**
+ * @brief check read from fastq is ok
+ */
 Read FastqReader::fastq_record_ok(int l, kseq_t* seq, const char* file)
 {
     if (l == -1) {
@@ -324,7 +360,6 @@ void FastqReader::index_fastq()
             std::endl;
         exit(1);
     }
-    // std::unordered_map<std::string, std::pair<size_t, size_t>> reads_index{};
     infile_text.seekg(std::ios::beg);
     std::stringstream read_name;
     std::string id;
@@ -390,7 +425,6 @@ void FastqReader::index_fastq_gz()
         auto idx = m_input_file.rfind(".gz");
         std::cerr << fmt::format("\nzcat {} | nanofq compress {}nanobgzip.gz\n\n", m_input_file,
                                  m_input_file.substr(0, idx + 1));
-        // std::cerr << "\nzcat input.fastq.gz | nanofq compress - output.fastq.gz\n\n";
         std::cerr << REDS <<
             fmt::format(
                 "The above command will turn common {} into NanoBgzip file: {}nanobgzip.gz and create index file simultaneously\n",

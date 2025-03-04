@@ -34,6 +34,7 @@ private:
     char* m_buffer;
     bool m_finish{false};
     bool m_is_directory{false};
+    std::shared_ptr<std::unordered_map<std::string, std::string>> m_reads_seq;
 
 public:
     FastqReader() = default;

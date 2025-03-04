@@ -1,15 +1,9 @@
 #include "Work.h"
-#include <iosfwd>
-#include <iosfwd>
+
 #include <thread>
 #include <tuple>
-#include <tuple>
-#include <vector>
 #include <vector>
 #include <fmt/core.h>
-
-#include "fmt/std.h"
-#include "fmt/xchar.h"
 
 using std::cout;
 using std::endl;
@@ -39,21 +33,23 @@ std::vector<std::pair<unsigned, unsigned>> Work::get_edges(int size) const
 }
 
 void Work::run_stats(
-    std::vector<read_stats_result>& stats_result,
+    std::vector<read_stats_result>& stats_result_vec,
     std::ostream& out,
     bool gc)
 {
     if (m_threads_pool.threads_number() == 1) {
-        if (!stats_result.empty()) {
+        if (!stats_result_vec.empty()) {
             cerr << "When used one thread, the parameter stats_result must be empty" << endl;
             exit(1);
         }
         while (true) {
-            Read read{m_fq.read_one_fastq()};
-            if (read.get_id() == finished_read_name) {
+            Read read{m_fq.read_one_fastq()}; // get one fastq record from FastqReader
+            if (*read.get_id() == finished_read_name) {
+            // if get the last read, return.
+            // The readname of last record is "FINISHED FINISHED FINISHED"
                 return;
             }
-            stats_one_thread(read, stats_result, out, gc);
+            stats_one_thread(read, stats_result_vec, out, gc);
         }
     }
     size_t total_reads{0};
@@ -62,20 +58,22 @@ void Work::run_stats(
         total_reads += reads_ptr->size();
         auto bins = get_edges(reads_ptr->size());
         for (auto [start, end] : bins) {
-            m_threads_pool.enqueue([this, start, end, gc, &stats_result, &out, reads_ptr](){
-                stats(start, end, reads_ptr, stats_result, out, gc);
+            m_threads_pool.enqueue([this, start, end, gc, &stats_result_vec, &out, reads_ptr ](){
+                stats(start, end, reads_ptr, stats_result_vec, out, gc );
             });
         }
         if (m_fq.read_finish())
             break;
     }
-    while (total_reads != stats_result.size()) {
+    // wait for all reads statsed finished
+    while (total_reads != stats_result_vec.size()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 }
 
 void Work::run_main(
-    std::vector<main_read_stats_result>& main_stats_result,
+    std::vector<read_stats_result>& all_reads_stats_result,
+    std::vector<read_stats_result>& passed_reads_stats_result,
     bool gc,
     unsigned min_len,
     unsigned max_len,
@@ -87,25 +85,34 @@ void Work::run_main(
     const trim_direction& td,
     std::vector<AlignmentConfig>& align_configs,
     std::ofstream& out_ofstream,
-    std::ofstream& stats_ofstream,
+    std::ofstream& all_stats_ofstream,
+    std::ofstream& passed_stats_ofstream,
+    std::ofstream& failed_stats_ofstream,
     std::ofstream& trim_log_ofstream,
     bool retain_failed,
-    std::ofstream& failed_ofstream)
+    std::ofstream& failed_ofstream,
+    std::mutex& all_mtx,
+    std::mutex& passed_mtx,
+    std::barrier<>& bar
+)
 {
     if (m_threads_pool.threads_number() == 1) {
-        if (!main_stats_result.empty()) {
-            std::cerr << REDS << "When used one thread, the parameter main_stats_result must be empty" << COLOR_END <<
+        if (!all_reads_stats_result.empty() || !passed_reads_stats_result.empty()) {
+            std::cerr << REDS <<
+                "When used one thread, the parameter all_reads_stats_result/passed_reads_stats_result must be empty" <<
+                COLOR_END <<
                 std::endl;
             exit(1);
         }
         while (true) {
             Read read{m_fq.read_one_fastq()};
-            if (read.get_id() == finished_read_name) {
+            if (*read.get_id() == finished_read_name) {
                 return;
             }
             main_one_thread(
                 read,
-                main_stats_result,
+                all_reads_stats_result,
+                passed_reads_stats_result,
                 gc,
                 min_len,
                 max_len,
@@ -117,10 +124,14 @@ void Work::run_main(
                 td,
                 align_configs[0],
                 out_ofstream,
+                all_stats_ofstream,
+                passed_stats_ofstream,
+                failed_stats_ofstream,
                 trim_log_ofstream,
-                stats_ofstream,
                 retain_failed,
-                failed_ofstream
+                failed_ofstream,
+                all_mtx,
+                passed_mtx
             );
         }
     }
@@ -132,25 +143,50 @@ void Work::run_main(
         for (int i{0}; i < bins.size(); ++i) {
             auto [start, end] = bins[i];
             m_threads_pool.enqueue(
-                [i, this, start, end, reads_ptr, &main_stats_result, gc, min_len,max_len, min_quality, min_gc,
+                [i, this, start, end, reads_ptr, &all_reads_stats_result, &passed_reads_stats_result, gc, min_len,
+                    max_len, min_quality, min_gc,
                     max_gc, do_trim, &seq_info, &td, &align_configs, &out_ofstream, &trim_log_ofstream, &
-                    stats_ofstream, retain_failed, &failed_ofstream]{
-                    this->main(start, end, reads_ptr, main_stats_result, gc, min_len, max_len, min_quality, min_gc,
-                               max_gc, do_trim, seq_info, td, align_configs[i], out_ofstream, trim_log_ofstream,
-                               stats_ofstream, retain_failed, failed_ofstream);
+                    all_stats_ofstream, &passed_stats_ofstream, &failed_stats_ofstream, retain_failed, &failed_ofstream,
+                    &all_mtx, &passed_mtx, &bar]{
+                    this->main(start,
+                               end,
+                               reads_ptr,
+                               all_reads_stats_result,
+                               passed_reads_stats_result,
+                               gc,
+                               min_len,
+                               max_len,
+                               min_quality,
+                               min_gc,
+                               max_gc,
+                               do_trim,
+                               seq_info,
+                               td,
+                               align_configs[i],
+                               out_ofstream,
+                               all_stats_ofstream,
+                               passed_stats_ofstream,
+                               failed_stats_ofstream,
+                               trim_log_ofstream,
+                               retain_failed,
+                               failed_ofstream,
+                               all_mtx,
+                               passed_mtx,
+                               bar);
                 }
             );
         }
         if (m_fq.read_finish()) break;
     }
-    while (total_reads != main_stats_result.size()) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    while (total_reads != all_reads_stats_result.size()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
 
 void Work::run_main_multi_fqs_in_multi_threads(
     const std::vector<std::filesystem::path>& paths,
-    std::vector<main_read_stats_result>& main_stats_result,
+    std::vector<read_stats_result>& all_reads_stats_result,
+    std::vector<read_stats_result>& passed_reads_stats_result,
     bool gc,
     unsigned min_len,
     unsigned max_len,
@@ -162,24 +198,36 @@ void Work::run_main_multi_fqs_in_multi_threads(
     const trim_direction& td,
     std::vector<AlignmentConfig>& align_configs,
     std::ofstream& out_ofstream,
-    std::ofstream& stats_ofstream,
+    std::ofstream& all_stats_ofstream,
+    std::ofstream& passed_stats_ofstream,
+    std::ofstream& failed_stats_ofstream,
     std::ofstream& trim_log_ofstream,
     bool retain_failed,
-    std::ofstream& failed_ofstream)
+    std::ofstream& failed_ofstream,
+    std::mutex& all_mtx,
+    std::mutex& passed_mtx
+)
 {
     auto bins{get_edges(paths.size())};
+    cout << "fastq numbers: " << paths.size() << endl;
     std::vector<std::thread> threads;
-    for (auto [start, end] : bins) {
+    for (int i{0}; i < bins.size(); ++i) {
+        auto [start, end]{bins[i]};
+        cout << "start: " << start << "; end: " << end << std::endl;
         threads.emplace_back(
-            [this, &paths, start, end, &main_stats_result, gc, min_len, max_len, min_quality, min_gc, max_gc, do_trim,
-                &seq_info, &td, &align_configs, &out_ofstream, &trim_log_ofstream, &stats_ofstream, retain_failed, &
-                failed_ofstream
+            [this, i, &paths, start, end, &all_reads_stats_result, &passed_reads_stats_result,gc, min_len, max_len,
+                min_quality, min_gc, max_gc, do_trim,
+                &seq_info, &td, &align_configs, &out_ofstream, &trim_log_ofstream, &all_stats_ofstream, &
+                passed_stats_ofstream, &failed_stats_ofstream, retain_failed, &
+                failed_ofstream, &all_mtx, &passed_mtx
             ]{
                 main_multi_fqs_in_one_thread(
-                    paths, start, end, main_stats_result, gc, min_len, max_len, min_quality,
+                    paths, start, end, all_reads_stats_result, passed_reads_stats_result, gc, min_len, max_len,
+                    min_quality,
                     min_gc, max_gc, do_trim,
-                    seq_info, td, align_configs[0], out_ofstream, trim_log_ofstream,
-                    stats_ofstream, retain_failed, failed_ofstream);
+                    seq_info, td, align_configs[i], out_ofstream, trim_log_ofstream,
+                    all_stats_ofstream, passed_stats_ofstream, failed_stats_ofstream, retain_failed, failed_ofstream,
+                    all_mtx, passed_mtx);
             }
         );
     }
@@ -198,7 +246,7 @@ void Work::run_stats_multi_fqs_in_multi_threads(
     std::vector<std::thread> threads;
     for (auto [start, end] : bins) {
         threads.emplace_back([start, end, gc, &stats_result, &paths, &out, this]{
-            stats_multi_fqs_in_one_thread(paths, start, end, stats_result, out, gc);
+            stats_multi_fqs_in_one_thread(paths, start, end, &stats_result, out, gc);
         });
     }
     for (std::thread& t : threads) {
@@ -220,7 +268,7 @@ void Work::run_filter(
     if (m_threads_pool.threads_number() == 1) {
         while (true) {
             Read read{m_fq.read_one_fastq()};
-            if (read.get_id() == finished_read_name) {
+            if (*read.get_id() == finished_read_name) {
                 return;
             }
             filter_one_thread(read, gc, min_len, max_len, min_quality, min_gc, max_gc, out);
@@ -282,13 +330,23 @@ std::tuple<float, int, float, float> Work::save_summary(
     int n,
     const std::vector<int>& read_quals,
     const std::vector<int>& read_lengths,
-    std::vector<read_stats_result>& stats_result,
-    const std::string& summary_file_path)
+    std::vector<read_stats_result>& reads_stats_result,
+    const std::string& summary_file_path,
+    bool is_passed
+)
 {
-    auto summary_info{summary_stats_result(n, read_quals, read_lengths, stats_result)};
-    std::ofstream summary_file{summary_file_path, std::ios::out};
+    std::stringstream summary_content;
+    auto summary_info{summary_stats_result(n, read_quals, read_lengths, reads_stats_result)};
+    summary_content << std::get<0>(summary_info);
+    std::ofstream summary_file;
+    if (!is_passed) {
+        summary_file.open(summary_file_path, std::ios::out);
+    } else {
+        summary_file.open(summary_file_path, std::ios::app);
+    }
     if (summary_file) {
-        summary_file << std::get<0>(summary_info);
+        if (is_passed) summary_file << "### The following is information about passed reads\n";
+        summary_file << summary_content.str();
         summary_file.close();
     } else {
         std::cerr << WARNS + "Failed when opening " + summary_file_path + ". Try write the summary into ~/SumMarY.txt" +
@@ -296,7 +354,7 @@ std::tuple<float, int, float, float> Work::save_summary(
             << std::endl;
         std::ofstream try_summary_file{"./SumMarY.txt", std::ios::out};
         try {
-            try_summary_file << std::get<0>(summary_info);
+            try_summary_file << summary_content.str();
             try_summary_file.close();
         }
         catch (const std::exception& e) {
@@ -304,11 +362,13 @@ std::tuple<float, int, float, float> Work::save_summary(
             exit(1);
         }
     }
-    std::tuple<float, int, float, float> res{
-        std::get<1>(summary_info),
-        std::get<2>(summary_info),
-        std::get<3>(summary_info),
-        std::get<4>(summary_info)
+    auto res{
+        std::make_tuple(
+            std::get<1>(summary_info),
+            std::get<2>(summary_info),
+            std::get<3>(summary_info),
+            std::get<4>(summary_info)
+        )
     };
     return res;
 }
@@ -359,27 +419,30 @@ void Work::run_trim(
     const trim_direction& td,
     std::vector<AlignmentConfig>& align_configs,
     std::ostream& log_fstream,
-    std::ostream& out) const
+    std::ostream& out,
+    std::barrier<>& bar) const
 {
     if (m_threads_pool.threads_number() == 1) {
         while (true) {
             Read read{m_fq.read_one_fastq()};
-            if (read.get_id() == finished_read_name) {
+            if (*read.get_id() == finished_read_name) {
                 return;
             }
             trim_one_thread(read, seq_info, td, align_configs[0], log_fstream, out);
         }
     }
     size_t total_reads{0};
+    int a{0};
     while (true) {
         auto reads_ptr{m_fq.read_chunk_fastq()};
         total_reads += reads_ptr->size();
         auto bins = get_edges(reads_ptr->size());
         for (int i{0}; i < bins.size(); ++i) {
+            ++a;
             auto [start, end] = bins[i];
             m_threads_pool.enqueue(
-                [i, this, start, end, reads_ptr, &counter, &seq_info, &td, &align_configs, &log_fstream, &out]{
-                    trim(start, end, reads_ptr, counter, seq_info, td, align_configs[i], log_fstream, out);
+                [i, this, start, end, reads_ptr, &counter, &seq_info, &td, &align_configs,&log_fstream, &out, &bar]{
+                    trim(start, end, reads_ptr, counter, seq_info, td, align_configs[i], log_fstream, out, bar);
                 });
         }
         if (m_fq.read_finish()) {
@@ -416,20 +479,20 @@ void Work::stats(
     int start,
     int end,
     std::shared_ptr<std::vector<Read>> reads_ptr,
-    std::vector<read_stats_result>& stats_results,
+    std::vector<read_stats_result>& read_stats,
     std::ostream& out,
     bool gc)
 {
     for (int idx{start}; idx < end; idx++) {
         const Read& read = (*reads_ptr)[idx];
-        std::string name{read.get_id()};
+        auto name{read.get_id()};
         unsigned length{read.get_length()};
         float quality{read.calculate_read_quality()};
         float gc_content{gc ? read.get_gc_content() : 0.0f};
-        std::osyncstream{out} << fmt::format("{}\t{}\t{}\t{}\n", name, length, quality, gc_content);
+        std::osyncstream{out} << fmt::format("{}\t{}\t{}\t{}\n", *name, length, quality, gc_content);
         {
             std::unique_lock lock{m_mtx};
-            stats_results.emplace_back(name, length, quality, gc_content);
+            read_stats.emplace_back(name, length, quality, gc_content);
         }
     }
 }
@@ -439,6 +502,7 @@ std::tuple<std::string, float, int, float, float> Work::summary_stats_result(
     const std::vector<int>& read_quals,
     const std::vector<int>& read_lengths,
     std::vector<read_stats_result>& stats_result)
+// return std::tuple<read_name, mean_read_len, read_len_n50, mean_read_quality, read_len_std>
 {
     std::tuple<std::string, float, int, float, float> summary_tuple;
     std::stringstream summary_stream;
@@ -509,7 +573,7 @@ std::tuple<std::string, float, int, float, float> Work::summary_stats_result(
         longest_reads << fmt::format(
             "{}\t{}\t{}\t{}\t{}\n",
             i + 1,
-            std::get<0>(stats_result[i]),
+            *std::get<0>(stats_result[i]),
             std::get<1>(stats_result[i]),
             fmt::format("{:.2f}", std::get<2>(stats_result[i])),
             fmt::format("{:.2f}", std::get<3>(stats_result[i])));
@@ -602,39 +666,96 @@ std::tuple<std::string, float, int, float, float> Work::summary_stats_result(
         }
         summary_stream << fmt::format("{}\t{}\t{}\t{}\t{}\n",
                                       i + 1,
-                                      std::get<0>(stats_result[i]),
+                                      *std::get<0>(stats_result[i]),
                                       std::get<1>(stats_result[i]),
                                       fmt::format("{:.2f}", std::get<2>(stats_result[i])),
                                       fmt::format("{:.2f}", std::get<3>(stats_result[i])));
     }
-    summary_tuple = std::make_tuple(summary_stream.str(), mean_read_len, read_len_quantile50, mean_quality, std);
+    summary_tuple = std::make_tuple(summary_stream.str(), mean_read_len, n50, mean_quality, std);
     return summary_tuple;
 }
 
+// std::tuple<std::string, float, int, float, float> Work::main_summary_stats_result(
+//     int n,
+//     const std::vector<int>& read_quals,
+//     const std::vector<int>& read_lengths,
+//     std::vector<read_stats_result>& stats_result_vec
+// )
+// {
+//     std::vector<read_stats_result> stats_result;
+//     for (auto& element: stats_result_vec){
+//         stats_result.emplace_back(
+//             std::get<0>(element),
+//             std::get<1>(element),
+//             std::get<2>(element),
+//             std::get<3>(element)
+//         );
+//     }
+//     auto summary_tuple{summary_stats_result(n, reads,)}
+//     if (get_all) {
+//         for (auto& element : stats_result_vec) {
+//             stats_result.emplace_back(std::get<0>(element),
+//                                       std::get<1>(element),
+//                                       std::get<2>(element),
+//                                       std::get<3>(element));
+//         }
+//         auto summary_tuple{summary_stats_result(n, read_quals, read_lengths, stats_result)};
+//         return summary_tuple;
+//     }
+//     for (auto& element : stats_result_vec) {
+//         if (std::get<7>(element)) {
+//             stats_result.emplace_back(
+//                 std::get<0>(element),
+//                 std::get<4>(element),
+//                 std::get<5>(element),
+//                 std::get<6>(element)
+//             );
+//         }
+//     }
+//     auto summary_tuple{summary_stats_result(n, read_quals, read_lengths, stats_result)};
+//     return summary_tuple;
+// }
+
+/**
+ * @brief stats a Read object, store the stats result into a vector and output stats information for further using
+ * @param read a Rread object
+ * @param read_stats_vec vector to store stats result of each read
+ * @param out ostream or ofstream to output stats result for further use
+ * @return void
+ */
 void Work::stats_one_thread(
     const Read& read,
-    std::vector<read_stats_result>& stats_result,
+    std::vector<read_stats_result>& read_stats_vec,
     std::ostream& out,
     bool gc)
 {
     unsigned len{read.get_length()};
     float quality{read.calculate_read_quality()};
     float gc_content{gc ? read.get_gc_content() : 0.0f};
-    stats_result.emplace_back(read.get_id(), len, quality, gc_content);
+    read_stats_vec.emplace_back(read.get_id(), len, quality, gc_content);
     auto line = fmt::format("{}\t{}\t{}\t{}\n",
-                            read.get_id(),
+                            *read.get_id(),
                             len,
                             fmt::format("{:.{}f}", quality, 2),
                             fmt::format("{:.{}f}", gc_content, 2));
     out << line;
 }
 
-
+/**
+ * @brief Processes and stats multiple FASTQ files in a single thread, storing the results and outputting them for further use
+ * read and stats FASTQ file one by one
+ * @param paths A vector of FASTQ file paths to be processed
+ * @param start the start index of paths
+ * @param end  the end index of paths
+ * @param stats_result pointer to a vector to store the stats result of each read from the FASTQ files
+ * @param out An ostream or ofstream to output the stats result for further use
+ * @return void
+ */
 void Work::stats_multi_fqs_in_one_thread(
     const std::vector<std::filesystem::path>& paths,
     size_t start,
     size_t end,
-    std::vector<read_stats_result>& stats_result,
+    std::vector<read_stats_result>* stats_result,
     std::ostream& out,
     bool gc)
 {
@@ -645,17 +766,17 @@ void Work::stats_multi_fqs_in_one_thread(
         while (true) {
             l = kseq_read(seq);
             Read read{FastqReader::fastq_record_ok(l, seq, paths[i].c_str())};
-            if (read.get_id() == finished_read_name) {
+            if (*read.get_id() == finished_read_name) {
                 break;
             }
-            std::string name{read.get_id()};
+            auto shared_name{read.get_id()};
             unsigned length{read.get_length()};
             float quality{read.calculate_read_quality()};
             float gc_content{gc ? read.get_gc_content() : 0.0f};
-            std::osyncstream{out} << fmt::format("{}\t{}\t{}\t{}\n", name, length, quality, gc_content);
+            std::osyncstream{out} << fmt::format("{}\t{}\t{}\t{}\n", *shared_name, length, quality, gc_content);
             {
                 std::unique_lock lock{m_mtx};
-                stats_result.emplace_back(name, length, quality, gc_content);
+                stats_result->emplace_back(shared_name, length, quality, gc_content);
             }
         }
         kseq_destroy(seq);
@@ -742,7 +863,7 @@ void Work::filter_multi_fqs_in_one_thread(
         while (true) {
             l = kseq_read(seq);
             Read read{FastqReader::fastq_record_ok(l, seq, paths[i].c_str())};
-            if (read.get_id() == finished_read_name) {
+            if (*read.get_id() == finished_read_name) {
                 break;
             }
             unsigned len{read.get_length()};
@@ -776,13 +897,16 @@ void Work::trim(
     const trim_direction& td,
     AlignmentConfig& align_config,
     std::ostream& log_fstream,
-    std::ostream& out)
+    std::ostream& out,
+    std::barrier<>& bar
+    )
 {
     for (int idx{start}; idx < end; idx++) {
         (*reads_ptr)[idx].trim(seq_info, td, align_config, log_fstream);
         std::osyncstream{out} << (*reads_ptr)[idx];
         ++counter;
     }
+    bar.arrive_and_wait();
 }
 
 void Work::trim_one_thread(
@@ -814,7 +938,7 @@ void Work::trim_multi_fqs_in_one_thread(
         while (true) {
             l = kseq_read(seq);
             Read read{FastqReader::fastq_record_ok(l, seq, paths[i].c_str())};
-            if (read.get_id() == finished_read_name) {
+            if (*read.get_id() == finished_read_name) {
                 break;
             }
             read.trim(seq_info, td, alignment_config, log_fstream);
@@ -829,7 +953,8 @@ void Work::main(
     int start,
     int end,
     std::shared_ptr<std::vector<Read>> reads_ptr,
-    std::vector<main_read_stats_result>& main_stats_result,
+    std::vector<read_stats_result>& all_reads_stats_result,
+    std::vector<read_stats_result>& passed_reads_stats_result,
     bool gc,
     unsigned min_len,
     unsigned max_len,
@@ -841,16 +966,22 @@ void Work::main(
     const trim_direction& td,
     AlignmentConfig& alignment_config,
     std::ofstream& out_ofstream,
+    std::ofstream& all_stats_ofstream,
+    std::ofstream& passed_stats_ofstream,
+    std::ofstream& failed_stats_ofstream,
     std::ofstream& trim_log_ofstream,
-    std::ofstream& stats_ofstream,
     bool retain_failed,
-    std::ofstream& failed_ofstream)
+    std::ofstream& failed_ofstream,
+    std::mutex& all_mtx,
+    std::mutex& passed_mtx,
+    std::barrier<>& bar )
 {
     for (int idx{start}; idx < end; ++idx) {
         Read& read{(*reads_ptr)[idx]};
         main_core(
             read,
-            main_stats_result,
+            all_reads_stats_result,
+            passed_reads_stats_result,
             gc,
             min_len,
             max_len,
@@ -862,18 +993,25 @@ void Work::main(
             td,
             alignment_config,
             out_ofstream,
-            stats_ofstream,
+            all_stats_ofstream,
+            passed_stats_ofstream,
+            failed_stats_ofstream,
             trim_log_ofstream,
             retain_failed,
             failed_ofstream,
-            true);
+            true,
+            all_mtx,
+            passed_mtx
+        );
     }
+    bar.arrive_and_wait();
 }
 
 
 void Work::main_one_thread(
     Read& read,
-    std::vector<main_read_stats_result>& main_stats_result,
+    std::vector<read_stats_result>& all_reads_stats_result,
+    std::vector<read_stats_result>& passed_reads_stats_result,
     bool gc,
     unsigned min_len,
     unsigned max_len,
@@ -885,13 +1023,19 @@ void Work::main_one_thread(
     const trim_direction& td,
     AlignmentConfig& alignment_config,
     std::ofstream& out_ofstream,
+    std::ofstream& all_stats_ofstream,
+    std::ofstream& passed_stats_ofstream,
+    std::ofstream& failed_stats_ofstream,
     std::ofstream& trim_log_ofstream,
-    std::ofstream& stats_ofstream,
     bool retain_failed,
-    std::ofstream& failed_ofstream)
+    std::ofstream& failed_ofstream,
+    std::mutex& all_mtx,
+    std::mutex& passed_mtx
+)
 {
     main_core(read,
-              main_stats_result,
+              all_reads_stats_result,
+              passed_reads_stats_result,
               gc,
               min_len,
               max_len,
@@ -903,11 +1047,15 @@ void Work::main_one_thread(
               td,
               alignment_config,
               out_ofstream,
-              stats_ofstream,
+              all_stats_ofstream,
+              passed_stats_ofstream,
+              failed_stats_ofstream,
               trim_log_ofstream,
               retain_failed,
               failed_ofstream,
-              false
+              false,
+              all_mtx,
+              passed_mtx
     );
 }
 
@@ -915,7 +1063,8 @@ void Work::main_multi_fqs_in_one_thread(
     const std::vector<std::filesystem::path>& paths,
     size_t start,
     size_t end,
-    std::vector<main_read_stats_result>& main_stats_result,
+    std::vector<read_stats_result>& all_stats_result,
+    std::vector<read_stats_result>& passed_stats_result,
     bool gc,
     unsigned min_len,
     unsigned max_len,
@@ -928,9 +1077,14 @@ void Work::main_multi_fqs_in_one_thread(
     AlignmentConfig& alignment_config,
     std::ofstream& out_ofstream,
     std::ofstream& trim_log_ofstream,
-    std::ofstream& stats_ofstream,
+    std::ofstream& all_stats_ofstream,
+    std::ofstream& passed_stats_ofstream,
+    std::ofstream& failed_stats_ofstream,
     bool retain_failed,
-    std::ofstream& failed_ofstream)
+    std::ofstream& failed_ofstream,
+    std::mutex& all_mtx,
+    std::mutex& passed_mtx
+)
 {
     for (size_t i{start}; i < end; ++i) {
         int l;
@@ -939,11 +1093,12 @@ void Work::main_multi_fqs_in_one_thread(
         while (true) {
             l = kseq_read(seq);
             Read read{FastqReader::fastq_record_ok(l, seq, paths[i].c_str())};
-            if (read.get_id() == finished_read_name) {
+            if (*read.get_id() == finished_read_name) {
                 break;
             }
             main_core(read,
-                      main_stats_result,
+                      all_stats_result,
+                      passed_stats_result,
                       gc,
                       min_len,
                       max_len,
@@ -955,18 +1110,24 @@ void Work::main_multi_fqs_in_one_thread(
                       td,
                       alignment_config,
                       out_ofstream,
-                      stats_ofstream,
+                      all_stats_ofstream,
+                      passed_stats_ofstream,
+                      failed_stats_ofstream,
                       trim_log_ofstream,
                       retain_failed,
                       failed_ofstream,
-                      true);
+                      true,
+                      all_mtx,
+                      passed_mtx
+            );
         }
     }
 }
 
 void Work::main_core(
     Read& read,
-    std::vector<main_read_stats_result>& main_stats_result,
+    std::vector<read_stats_result>& all_reads_stats_result,
+    std::vector<read_stats_result>& passed_reads_stats_result,
     bool gc,
     unsigned min_len,
     unsigned max_len,
@@ -978,131 +1139,133 @@ void Work::main_core(
     const trim_direction& td,
     AlignmentConfig& alignment_config,
     std::ofstream& out_ofstream,
-    std::ofstream& stats_ofstream,
+    std::ofstream& all_stats_ofstream,
+    std::ofstream& passed_stats_ofstream,
+    std::ofstream& failed_stats_ofstream,
     std::ofstream& trim_log_ofstream,
     bool retain_failed,
     std::ofstream& failed_ofstream,
-    bool sync)
+    bool sync,
+    std::mutex& all_mtx,
+    std::mutex& passed_mtx
+)
 {
-    std::string name{read.get_id()};
+    auto name{read.get_id()};
     unsigned before_len{read.get_length()};
     float before_quality{read.calculate_read_quality()};
-    float before_gc_content{gc ? read.get_gc_content() : 0.0f};
+    float before_gc_content{gc ? read.get_gc_content() : 0.001f};
+    // using trimmed read to compare the threshold provided by user. if no need trim, using the raw read
     unsigned after_len{before_len};
     float after_quality{before_quality};
     float after_gc_content{before_gc_content};
     if (do_trim) {
-        read.trim(seq_info, td, alignment_config, trim_log_ofstream);
-        after_len = read.get_length();
-        after_quality = read.calculate_read_quality();
-        after_gc_content = gc ? read.get_gc_content() : 0.0f;
+        // std::osyncstream{cout} << std::this_thread::get_id() << ": " << &alignment_config << endl;
+        std::string read_name{*read.get_id()};
+        if (read_name == "0116d6a2-48f5-4cb5-b6a3-3c2058658c68" ||
+            read_name == "00880d01-b743-4fd3-8b1d-e7f11153e1ef"
+            ||
+            read_name == "0354fa18-c3e4-431c-b632-484e4479ae34" ||
+            read_name == "049e55d2-2b4d-47ba-97d3-6354fce7a723" ||
+            read_name == "06ce0f44-8850-41b5-95c1-ad8eea0ad2aa" ||
+            read_name == "0841876a-1c57-41ec-a6fe-8f0ff7c8e164" ||
+            read_name == "084ed772-573d-4f1f-abe7-6387829b292a" ||
+            read_name == "08f57dda-29cc-48f8-a7b8-94a58a4f0c20" ||
+            read_name == "099852b4-6c57-4d5c-9eb5-66ecb6566650" ||
+            read_name == "1102c8b6-e058-4792-b34d-405c872d4291" ||
+            read_name == "292a885c-2923-47a7-9080-b443f1e23c0c" ||
+            read_name == "86dbc28a-b26c-497c-b730-e568d6a7d0bd" ||
+            read_name == "c9196921-429a-4d1a-9956-f7044b91d344" ||
+            read_name == "fefc2f2f-2a2e-45a7-8ed7-157ad8496b22"
+        ) {
+            read.trim(seq_info, td, alignment_config, trim_log_ofstream);
+            after_len = read.get_length();
+            after_quality = read.calculate_read_quality();
+            after_gc_content = gc ? read.get_gc_content() : 0.001f;
+        } else {
+            read.trim(seq_info, td, alignment_config, trim_log_ofstream);
+            after_len = read.get_length();
+            after_quality = read.calculate_read_quality();
+            after_gc_content = gc ? read.get_gc_content() : 0.001f;
+        }
+        // read.trim(seq_info, td, alignment_config, trim_log_ofstream);
+        // after_len = read.get_length();
+        // after_quality = read.calculate_read_quality();
+        // after_gc_content = gc ? read.get_gc_content() : 0.001f;
     }
-    if (gc) {
-        if (after_len >= min_len &&
-            after_len <= max_len &&
-            after_quality > min_quality &&
-            after_gc_content > min_gc &&
-            after_gc_content < max_gc) {
-            if (sync) {
-                std::osyncstream{out_ofstream} << read;
-                {
-                    std::unique_lock lock{m_mtx};
-                    main_stats_result.emplace_back(
-                        name,
-                        std::make_pair(
-                            std::make_tuple(before_len, before_quality, before_gc_content),
-                            std::make_tuple(after_len, after_quality, after_gc_content)));
-                }
-            } else {
-                out_ofstream << read;
-                main_stats_result.emplace_back(
-                    name,
-                    std::make_pair(
-                        std::make_tuple(before_len, before_quality, before_gc_content),
-                        std::make_tuple(after_len, after_quality, after_gc_content)));
-            }
-        } else {
-            // when read is failed and gc was used
-            if (sync) {
-                {
-                    std::unique_lock lock{m_mtx};
-                    main_stats_result.emplace_back(
-                        name,
-                        std::make_pair(
-                            std::make_tuple(before_len, before_quality, before_gc_content),
-                            std::optional<std::tuple<unsigned, float, float>>{}));
-                }
-                if (retain_failed) std::osyncstream{failed_ofstream} << read;
-            } else {
-                main_stats_result.emplace_back(
-                    name,
-                    std::make_pair(
-                        std::make_tuple(before_len, before_quality, before_gc_content),
-                        std::optional<std::tuple<unsigned, float, float>>{}));
-                if (retain_failed) failed_ofstream << read;
-            }
-            after_len = 0;
-            after_quality = 0.0f;
-            after_gc_content = 0.f;
-        }
-    } else {
-        if (after_len >= min_len &&
-            after_len <= max_len &&
-            after_quality > min_quality) {
-            if (sync) {
-                std::osyncstream{out_ofstream} << read;
-                {
-                    std::unique_lock lock{m_mtx};
-                    main_stats_result.emplace_back(
-                        name,
-                        std::make_pair(
-                            std::make_tuple(before_len, before_quality, before_gc_content),
-                            std::make_tuple(after_len, after_quality, after_gc_content)));
-                }
-            } else {
-                out_ofstream << read;
-                main_stats_result.emplace_back(
-                    name,
-                    std::make_pair(
-                        std::make_tuple(before_len, before_quality, before_gc_content),
-                        std::make_tuple(after_len, after_quality, after_gc_content)));
-            }
-        } else {
-            // when failed and gc was not used
-            if (sync) {
-                {
-                    std::unique_lock lock{m_mtx};
-                    main_stats_result.emplace_back(
-                        name,
-                        std::make_pair(
-                            std::make_tuple(before_len, before_quality, before_gc_content),
-                            std::optional<std::tuple<unsigned, float, float>>{}));
-                }
-                if (retain_failed) std::osyncstream{failed_ofstream} << read;
-            } else {
-                main_stats_result.emplace_back(
-                    name,
-                    std::make_pair(
-                        std::make_tuple(before_len, before_quality, before_gc_content),
-                        std::optional<std::tuple<unsigned, float, float>>{}));
-                if (retain_failed) failed_ofstream << read;
-            }
-            after_len = 0;
-            after_quality = 0.0f;
-            after_gc_content = 0.f;
-        }
+    // {
+    //     std::unique_lock lock{m_mtx};
+    //     cout << *read.get_id() << "\t" << before_len << "\t" << after_len << '\n';
+    // }
+    bool passed{
+        after_len >= min_len &&
+        after_len <= max_len &&
+        after_quality > min_quality &&
+        after_gc_content > min_gc &&
+        after_gc_content < max_gc
+    };
+    if (!gc) {
+        after_gc_content = 0.0f;
+        before_gc_content = 0.0f;
     }
     if (sync) {
-        std::osyncstream{stats_ofstream} <<
-            fmt::format("{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
-                        name,
-                        before_len, before_quality, before_gc_content,
-                        after_len, after_quality, after_gc_content);
+        if (passed) {
+            {
+                // output passed reads stats info
+                std::unique_lock lock{passed_mtx};
+                out_ofstream << read; // output passed reads
+                passed_stats_ofstream << fmt::format("{}\t{}\t{}\t{}\n",
+                                                     *name,
+                                                     after_len,
+                                                     after_quality,
+                                                     after_gc_content); // output passed reads stats result
+                passed_reads_stats_result.emplace_back(
+                    name,
+                    after_len,
+                    after_quality,
+                    after_gc_content); // store passed reads stats result
+            }
+        } else {
+            std::osyncstream{failed_stats_ofstream} << fmt::format("{}\t{}\t{}\t{}\n",
+                                                                   *name, after_len, after_quality, after_gc_content);
+            if (retain_failed) { std::osyncstream{failed_ofstream} << read; }
+        }
+        {
+            std::unique_lock lock{all_mtx};
+            all_stats_ofstream << fmt::format(
+                "{}\t{}\t{}\t{}\n",
+                *name,
+                before_len,
+                before_quality,
+                before_gc_content); // output all reads stats result
+            all_reads_stats_result.emplace_back(
+                name,
+                before_len,
+                before_quality,
+                before_gc_content); // store all reads stats result
+        }
     } else {
-        stats_ofstream <<
-            fmt::format("{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
-                        name,
-                        before_len, before_quality, before_gc_content,
-                        after_len, after_quality, after_gc_content);
+        if (passed) {
+            out_ofstream << read;
+            passed_stats_ofstream << fmt::format(
+                "{}\t{}\t{}\t{}\n",
+                *name, after_len, after_quality, after_gc_content
+            );
+            passed_reads_stats_result.emplace_back(name, after_len, after_quality, after_gc_content);
+        } else {
+            failed_stats_ofstream << fmt::format("{}\t{}\t{}\t{}\n",
+                                                 *name, after_len, after_quality, after_gc_content);
+            if (retain_failed) { failed_ofstream << read; }
+        }
+        all_stats_ofstream << fmt::format(
+            "{}\t{}\t{}\t{}\n",
+            *name,
+            before_len,
+            before_quality,
+            before_gc_content); // output all reads stats result
+        all_reads_stats_result.emplace_back(
+            name,
+            before_len,
+            before_quality,
+            before_gc_content); // store all reads stats result
     }
 }
