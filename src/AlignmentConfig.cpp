@@ -31,6 +31,8 @@ AlignmentConfig::AlignmentConfig(int max_target_len, int max_query_len, int matc
 
 AlignmentConfig::AlignmentConfig(const AlignmentConfig& src)
 {
+    m_max_target_len = src.m_max_target_len;
+    m_max_query_len = src.m_max_query_len;
     m_match = src.m_match;
     m_mismatch = src.m_mismatch;
     m_gap_open = src.m_gap_open;

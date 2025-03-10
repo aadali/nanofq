@@ -1,5 +1,6 @@
 #include "Work.h"
 
+#include <limits>
 #include <thread>
 #include <tuple>
 #include <vector>
@@ -45,8 +46,8 @@ void Work::run_stats(
         while (true) {
             Read read{m_fq.read_one_fastq()}; // get one fastq record from FastqReader
             if (*read.get_id() == finished_read_name) {
-            // if get the last read, return.
-            // The readname of last record is "FINISHED FINISHED FINISHED"
+                // if get the last read, return.
+                // The readname of last record is "FINISHED FINISHED FINISHED"
                 return;
             }
             stats_one_thread(read, stats_result_vec, out, gc);
@@ -59,7 +60,7 @@ void Work::run_stats(
         auto bins = get_edges(reads_ptr->size());
         for (auto [start, end] : bins) {
             m_threads_pool.enqueue([this, start, end, gc, &stats_result_vec, &out, reads_ptr ](){
-                stats(start, end, reads_ptr, stats_result_vec, out, gc );
+                stats(start, end, reads_ptr, stats_result_vec, out, gc);
             });
         }
         if (m_fq.read_finish())
@@ -634,8 +635,23 @@ std::tuple<std::string, float, int, float, float> Work::summary_stats_result(
 
     auto stats_depend_quality{
         [&](int quality){
+            if (read_idx >= total_reads_number - 1) {
+                summary_stream << fmt::format(
+                    "ReadQuality > {}\t{}({});{}({})\n",
+                    quality,
+                    total_reads_number,
+                    fmt::format(
+                        "{:.2f}%",
+                        100 * static_cast<double>(total_reads_number) / total_reads_number),
+                    fmt::format("{:.6f}Mb", static_cast<double>(total_bases_number) / 1000000),
+                    fmt::format(
+                        "{:.2f}%",
+                        100 * static_cast<double>(total_bases_number) / total_bases_number));
+            }
             for (; read_idx < total_reads_number; read_idx++) {
-                if (std::get<2>(stats_result[read_idx]) < quality || read_idx == total_reads_number - 1) {
+                double this_read_quality{std::get<2>(stats_result[read_idx])};
+                // stats_result must be decreased by read quality
+                if (this_read_quality < quality) {
                     summary_stream << fmt::format(
                         "ReadQuality > {}\t{}({});{}({})\n",
                         quality,
@@ -649,12 +665,26 @@ std::tuple<std::string, float, int, float, float> Work::summary_stats_result(
                             100 * static_cast<double>(bases_count) / total_bases_number));
                     break;
                 }
-                reads_count += 1;
+                ++reads_count;
                 bases_count += std::get<1>(stats_result[read_idx]);
+                if (read_idx == total_reads_number - 1){
+                    summary_stream << fmt::format(
+                         "ReadQuality > {}\t{}({});{}({})\n",
+                         quality,
+                         reads_count,
+                         fmt::format(
+                             "{:.2f}%",
+                             100 * static_cast<double>(reads_count) / total_reads_number),
+                         fmt::format("{:.6f}Mb", static_cast<double>(bases_count) / 1000000),
+                         fmt::format(
+                             "{:.2f}%",
+                             100 * static_cast<double>(bases_count) / total_bases_number));
+                }
             }
         }
     };
     for (const int& quality : read_quals) {
+        std::cout << "calculate: "<< quality << std::endl;
         stats_depend_quality(quality);
     }
     summary_stream << lengths_info.str();
@@ -899,7 +929,7 @@ void Work::trim(
     std::ostream& log_fstream,
     std::ostream& out,
     std::barrier<>& bar
-    )
+)
 {
     for (int idx{start}; idx < end; idx++) {
         (*reads_ptr)[idx].trim(seq_info, td, align_config, log_fstream);
@@ -974,7 +1004,7 @@ void Work::main(
     std::ofstream& failed_ofstream,
     std::mutex& all_mtx,
     std::mutex& passed_mtx,
-    std::barrier<>& bar )
+    std::barrier<>& bar)
 {
     for (int idx{start}; idx < end; ++idx) {
         Read& read{(*reads_ptr)[idx]};

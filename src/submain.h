@@ -77,7 +77,7 @@ std::pair<std::shared_ptr<SequenceInfo>, std::tuple<int, int, int, int>> parse_t
                 exit(1);
             }
             forward = std::string{primers_vec[0]};
-            reversed = std::string{primers[1]};
+            reversed = std::string{primers_vec[1]};
         }
     } else {
         // NO TRIM
@@ -256,7 +256,6 @@ int sub_main(int argc, char* argv[])
         align_configs.reserve(threads);
         for (int i{0}; i < threads; ++i) {
             align_configs.emplace_back(max_target_len, max_query_len, match, mismatch, gap_open, gap_extend);
-            // align_configs.push_back(*align_config);
         }
         std::filesystem::path prefix_path{prefix};
         std::filesystem::path out_path{output};
@@ -361,6 +360,8 @@ int sub_main(int argc, char* argv[])
                           passed_mtx,
                           bar);
         }
+        cout << "all_stats_result: " << all_stats_result.size() << endl;
+        cout << "passed_stats_result: " << passed_stats_result.size() << endl;
         // cout << "all_stats_result: " << all_stats_result.size() << endl;
         // cout << "passed_stats_result: " << passed_stats_result.size() << endl;
         auto all_stats_info{work.save_summary(n, quals, lengths, all_stats_result, summary_all_path.c_str(), false)};
@@ -424,14 +425,6 @@ int sub_main(int argc, char* argv[])
             });
             for (auto&t : plot_threads) t.join();
         }
-        // cout << "raw_mean_length: " << std::get<0>(x) << endl;
-        // cout << "raw_n50 " << std::get<1>(x) << endl;
-        // cout << "raw_mean_quality " << std::get<2>(x) << endl;
-        // cout << "raw_len_std " << std::get<3>(x) << endl;
-        // cout << "passed_mean_length " << std::get<0>(y) << endl;
-        // cout << "passed_n50 " << std::get<1>(y) << endl;
-        // cout << "passed_mean_quality " << std::get<2>(y) << endl;
-        // cout << "passed_len_std " << std::get<3>(y) << endl;
         if (out_ofstream.is_open()) out_ofstream.close();
         if (all_stats_ofstream.is_open()) all_stats_ofstream.close();
         if (passed_stats_ofstream.is_open()) passed_stats_ofstream.close();
