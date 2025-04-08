@@ -360,10 +360,6 @@ int sub_main(int argc, char* argv[])
                           passed_mtx,
                           bar);
         }
-        cout << "all_stats_result: " << all_stats_result.size() << endl;
-        cout << "passed_stats_result: " << passed_stats_result.size() << endl;
-        // cout << "all_stats_result: " << all_stats_result.size() << endl;
-        // cout << "passed_stats_result: " << passed_stats_result.size() << endl;
         auto all_stats_info{work.save_summary(n, quals, lengths, all_stats_result, summary_all_path.c_str(), false)};
         auto passed_stats_info{
             work.save_summary(n, quals, lengths, passed_stats_result, summary_all_path.c_str(), true)
@@ -500,6 +496,7 @@ int sub_main(int argc, char* argv[])
                 n, quals, lengths, stats_result, summary, false)
         };
         if (make_plot) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
             auto [mean_len, n50, mean_quality, std] = summary_info_tuple;
             work.plot(std::string{argv[0]},
                       output,

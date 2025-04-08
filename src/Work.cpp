@@ -403,6 +403,7 @@ void Work::plot(
     cmd.append(fmt::format("-Q {} -s {} ", mean_quality, std));
     // cout << cmd << endl;
     // int res = std::system(cmd.data());
+    std::cout << cmd.data() << std::endl;
     if (int res{std::system(cmd.data())}; res != 0) {
         std::cerr << WARNS << "Error found when making plot, you can plot using " << script << " manually" << COLOR_END
             << std::endl;
@@ -585,26 +586,70 @@ std::tuple<std::string, float, int, float, float> Work::summary_stats_result(
     ulong bases_count = 0;
     auto stats_depend_length{
         [&](int length){
+            if (read_idx >= total_reads_number - 1) {
+                summary_stream << fmt::format(
+                    "ReadLength > {}\t{}({});{},({})\n",
+                    length, total_reads_number,
+                    fmt::format(
+                        "{:.2f}% ",
+                        100 * static_cast<double>(total_reads_number) / total_reads_number),
+                    fmt::format("{:.6f}Mb", static_cast<double>(total_bases_number) / 1000000),
+                    fmt::format("{:.2f}", 100 * static_cast<double>(total_bases_number) / total_bases_number));
+            }
             for (; read_idx < total_reads_number; read_idx++) {
-                if (std::get<1>(stats_result[read_idx]) < length || read_idx == total_reads_number - 1) {
-                    lengths_info << fmt::format(
+                unsigned this_read_length{std::get<1>(stats_result[read_idx])};
+                if (this_read_length < length) {
+                    summary_stream << fmt::format(
+                        "ReadLength > {}\t{}({});{}({})\n",
+                        length,
+                        reads_count,
+                        fmt::format("{:.2f}%",
+                                    100 * static_cast<double>(reads_count) / total_reads_number),
+                        fmt::format("{:6f}Mb", static_cast<double>(bases_count) / 1000000),
+                        fmt::format("{:2f}%", 100 * static_cast<double>(bases_count) / total_bases_number));
+                    break;
+                }
+                ++reads_count;
+                bases_count += std::get<1>(stats_result[read_idx]);
+                if (read_idx == total_reads_number - 1) {
+                    summary_stream << fmt::format(
                         "ReadLength > {}\t{}({});{}({})\n",
                         length,
                         reads_count,
                         fmt::format(
-                            "{:.2f}%",
-                            100 * static_cast<double>(reads_count) / total_reads_number),
-                        fmt::format("{:.6f}Mb", static_cast<double>(bases_count) / 1000000),
+                        "{:2f}%",
+                        100 * static_cast<double>(reads_count) / total_reads_number ),
+
+                        fmt::format("{:6f}Mb", static_cast<double>(bases_count) / 100000),
                         fmt::format(
                             "{:.2f}%",
                             100 * static_cast<double>(bases_count) / total_bases_number));
-                    break;
                 }
-                reads_count += 1;
-                bases_count += std::get<1>(stats_result[read_idx]);
             }
         }
     };
+    // auto stats_depend_length{
+    //     [&](int length){
+    //         for (; read_idx < total_reads_number; read_idx++) {
+    //             if (std::get<1>(stats_result[read_idx]) < length || read_idx == total_reads_number - 1) {
+    //                 lengths_info << fmt::format(
+    //                     "ReadLength > {}\t{}({});{}({})\n",
+    //                     length,
+    //                     reads_count,
+    //                     fmt::format(
+    //                         "{:.2f}%",
+    //                         100 * static_cast<double>(reads_count) / total_reads_number),
+    //                     fmt::format("{:.6f}Mb", static_cast<double>(bases_count) / 1000000),
+    //                     fmt::format(
+    //                         "{:.2f}%",
+    //                         100 * static_cast<double>(bases_count) / total_bases_number));
+    //                 break;
+    //             }
+    //             reads_count += 1;
+    //             bases_count += std::get<1>(stats_result[read_idx]);
+    //         }
+    //     }
+    // };
     if (!read_lengths.empty()) {
         for (const int& length : read_lengths) {
             stats_depend_length(length);
@@ -667,24 +712,23 @@ std::tuple<std::string, float, int, float, float> Work::summary_stats_result(
                 }
                 ++reads_count;
                 bases_count += std::get<1>(stats_result[read_idx]);
-                if (read_idx == total_reads_number - 1){
+                if (read_idx == total_reads_number - 1) {
                     summary_stream << fmt::format(
-                         "ReadQuality > {}\t{}({});{}({})\n",
-                         quality,
-                         reads_count,
-                         fmt::format(
-                             "{:.2f}%",
-                             100 * static_cast<double>(reads_count) / total_reads_number),
-                         fmt::format("{:.6f}Mb", static_cast<double>(bases_count) / 1000000),
-                         fmt::format(
-                             "{:.2f}%",
-                             100 * static_cast<double>(bases_count) / total_bases_number));
+                        "ReadQuality > {}\t{}({});{}({})\n",
+                        quality,
+                        reads_count,
+                        fmt::format(
+                            "{:.2f}%",
+                            100 * static_cast<double>(reads_count) / total_reads_number),
+                        fmt::format("{:.6f}Mb", static_cast<double>(bases_count) / 1000000),
+                        fmt::format(
+                            "{:.2f}%",
+                            100 * static_cast<double>(bases_count) / total_bases_number));
                 }
             }
         }
     };
     for (const int& quality : read_quals) {
-        std::cout << "calculate: "<< quality << std::endl;
         stats_depend_quality(quality);
     }
     summary_stream << lengths_info.str();

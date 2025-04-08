@@ -62,6 +62,7 @@ public:
 
     std::string to_string(size_t target_3end_len);
 
+    // TODO should output the right alignment
     inline float get_identity() const {
         return static_cast<float>(std::count(m_line.cbegin(), m_line.cend(), '|')) / static_cast<float>(m_line.size());
     }
