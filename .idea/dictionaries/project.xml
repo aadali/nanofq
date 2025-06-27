@@ -2,6 +2,7 @@
   <dictionary name="project">
     <words>
       <w>nanofq</w>
+      <w>topn</w>
     </words>
   </dictionary>
 </component>
