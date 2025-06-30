@@ -9,8 +9,7 @@ use std::io::{BufReader, Stdin};
 use std::path::Path;
 use std::sync::mpsc;
 use std::sync::mpsc::Receiver;
-use std::{io, thread};
-use std::time::Instant;
+use std::{thread};
 
 fn stats_receiver(receiver: Receiver<RecordSet>, gc: bool) -> Vec<EachStats> {
     let mut all_stats: Vec<EachStats> = vec![];
@@ -74,7 +73,8 @@ fn stats_file_gz(file_path: &str, thread: usize, gc: bool) -> Vec<EachStats> {
     if thread == 1 {
         reader.stats(gc)
     } else {
-        let (sender, receiver) = mpsc::sync_channel(1000);
+        // let (sender, receiver) = mpsc::sync_channel(1000);
+        let (sender, receiver) = mpsc::channel();
         let handle = thread::spawn(move || {
             loop {
                 let mut record_set = seq_io::fastq::RecordSet::default();
@@ -137,10 +137,8 @@ pub fn run_stats(stats_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
     
     rayon::ThreadPoolBuilder::new()
         .num_threads(*thread as usize)
-        .build_global()
-        .unwrap();
+        .build_global()?;
 
-    let start = Instant::now();
     let mut stats_result = Vec::<EachStats>::new();
     match input {
         None => stats_result = stats_stdin(*thread as usize, gc),
@@ -157,20 +155,15 @@ pub fn run_stats(stats_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
             }
         }
     }
-    let dur = start.elapsed();
-    println!("CollectReadInfo: {:6?}", dur);
-
-    let start = Instant::now();
-    write_summary(&mut stats_result, lengths, quality, *topn as usize, summary);
+    
     match output {
         None => write_stats(&stats_result, &mut std::io::stdout(), gc)?,
         Some(output_file) => write_stats(
             &stats_result,
-            &mut std::fs::File::create(output_file).unwrap(),
+            &mut std::io::BufWriter::new(std::fs::File::create(output_file).unwrap()),
             gc,
         )?,
     }
-    let dur = start.elapsed();
-    println!("StatsAll: {:6?}", dur);
+    write_summary(&mut stats_result, lengths, quality, *topn as usize, summary);
     Ok(())
 }

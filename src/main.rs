@@ -77,21 +77,15 @@ fn main() -> Result<(), anyhow::Error>{
     if let Some(stats_cmd) = matches.subcommand_matches("stats") {
         // println!("{:?}", stats_cmd);
         // let formats = stats_cmd.get_many::<Vec<String>>("format");
-        let formats = stats_cmd.get_one::<String>("format");
-        let formats = stats_cmd.get_many::<String>("format")
-            .unwrap_or_default()
-            .collect::<Vec<&String>>();
-        let plot = stats_cmd.get_flag("plot");
-        let topn= stats_cmd.get_one::<u16>("topn");
-        let quality = stats_cmd.get_one::<Vec<f64>>("quality");
-        let lengths = stats_cmd.get_one::<Vec<usize>>("length");
-        let input = stats_cmd.get_one::<String>("input");
-        // println!("input: {:?}", input);
-        // println!("format: {:?}", formats);
-        // println!("plot: {:?}", plot);
-        // println!("topn: {:?}", topn);
-        // println!("quality: {:?}", quality);
-        // println!("length: {:?}", lengths);
+        // let formats = stats_cmd.get_one::<String>("format");
+        // let formats = stats_cmd.get_many::<String>("format")
+        //     .unwrap_or_default()
+        //     .collect::<Vec<&String>>();
+        // let plot = stats_cmd.get_flag("plot");
+        // let topn= stats_cmd.get_one::<u16>("topn");
+        // let quality = stats_cmd.get_one::<Vec<f64>>("quality");
+        // let lengths = stats_cmd.get_one::<Vec<usize>>("length");
+        // let input = stats_cmd.get_one::<String>("input");
         run_stats(stats_cmd)?;
     }
     let dur = start.elapsed();

@@ -158,10 +158,6 @@ pub fn get_summary(
 
     // stats_vec decreased by read quality
     stats_vec.par_sort_by(|first, second| second.2.1.partial_cmp(&first.2.1).unwrap());
-    for i in 0..12 {
-        println!("{:?}", &stats_vec[i])
-    }
-    // stats_vec.sort_by(|first, second| first.2.partial_cmp(&second.2).unwrap());
     let read_qual_quantile25 = *&stats_vec[(total_reads as f64 * 0.75) as usize].2.1;
     let read_qual_quantile50 = if total_reads % 2 == 0 {
         (&stats_vec[total_reads / 2 - 1].2.1 + &stats_vec[total_reads / 2 + 1].2.1) / 2.0
@@ -238,24 +234,25 @@ pub fn write_stats<W: Write>(
     let mut content = String::new();
     if gc {
         for each_stats in stats_vec {
-            write!(
-                output,
+            content.push_str(&format!(
                 "{}\t{}\t{:.4}\t{:.4}\n",
                 each_stats.0,
                 each_stats.1,
                 each_stats.2.1,
                 each_stats.3.unwrap()
-            )?
+            ));
         }
     } else {
-        for each_stats in stats_vec {
-            write!(
-                output,
-                "{}\t{}\t{:.4}\n",
-                each_stats.0, each_stats.1, each_stats.2.1
-            )?
-        }
+        stats_vec.iter().for_each(|each_stats| 
+            content.push_str(
+                &format!(
+                    "{}\t{}\t{:.4}\n",
+                    each_stats.0, each_stats.1, each_stats.2.1
+                    
+                )
+            ));
     }
+    write!(output, "{}", content)?;
     output.flush()?;
     Ok(())
 }
