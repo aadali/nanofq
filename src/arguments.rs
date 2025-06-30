@@ -172,7 +172,7 @@ pub fn parse_arguments() -> ArgMatches {
                         .long("thread")
                         .action(ArgAction::Set)
                         .default_value("1")
-                        .value_parser(value_parser!(u16).range(1..16))
+                        .value_parser(value_parser!(u16).range(1..=32))
                         .help("how many threads used to stats fastqs")
                 )
                 .arg(
