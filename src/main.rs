@@ -6,6 +6,7 @@
 mod arguments;
 mod fastq;
 mod stats;
+mod run;
 
 use fastq::{EachStats, FastqReader, ReadStats};
 use rayon::prelude::*;
@@ -20,6 +21,7 @@ use std::{io, thread};
 
 use std::io::BufReader;
 use std::time::Instant;
+use crate::run::run_stats;
 
 fn stats_one_fastq_multi_threads() {
     // multi threads time with debug: 27.91277025s
@@ -62,31 +64,18 @@ fn stats_one_fastq_multi_threads() {
     let mut writer = std::io::BufWriter::new(std::fs::File::create(&output_file).unwrap());
     for x in &all_stats {
         writer
-            .write_fmt(format_args!("{}\t{}\t{:.6}\n", x.0, x.1, x.2))
+            .write_fmt(format_args!("{}\t{}\t{:.6}\n", x.0, x.1, x.2.1))
             .unwrap()
     }
     writer.flush().unwrap();
     let dur = start.elapsed();
     println!("Elapsed time: {:6?}", dur);
 }
-fn main() {
-    // println!("Hello, world!");
-    // let x: Result<(), String> = Err("hello".to_string());
-    // x.expect("today is a good day");
-    // stats_one_fastq_multi_threads()
-    let lengths = "990,2341,23415,432532";
-    let x = lengths.split(",")
-        .into_iter()
-        .map(|x| x.parse::<usize>().unwrap())
-        .collect::<Vec<usize>>();
-    println!("{:?}", x);
-    let x = "234";
-    let x = x.parse::<usize>().unwrap();
-    println!("{x}");
-    // let  y = x.parse::<f64>();
+fn main() -> Result<(), anyhow::Error>{
+    let start =Instant::now();
     let matches = arguments::parse_arguments();
     if let Some(stats_cmd) = matches.subcommand_matches("stats") {
-        println!("{:?}", stats_cmd);
+        // println!("{:?}", stats_cmd);
         // let formats = stats_cmd.get_many::<Vec<String>>("format");
         let formats = stats_cmd.get_one::<String>("format");
         let formats = stats_cmd.get_many::<String>("format")
@@ -96,14 +85,19 @@ fn main() {
         let topn= stats_cmd.get_one::<u16>("topn");
         let quality = stats_cmd.get_one::<Vec<f64>>("quality");
         let lengths = stats_cmd.get_one::<Vec<usize>>("length");
-        println!("format: {:?}", formats);
-        println!("plot: {:?}", plot);
-        println!("topn: {:?}", topn);
-        println!("quality: {:?}", quality);
-        println!("length: {:?}", lengths);
-        
+        let input = stats_cmd.get_one::<String>("input");
+        // println!("input: {:?}", input);
+        // println!("format: {:?}", formats);
+        // println!("plot: {:?}", plot);
+        // println!("topn: {:?}", topn);
+        // println!("quality: {:?}", quality);
+        // println!("length: {:?}", lengths);
+        run_stats(stats_cmd)?;
     }
-    // let stats_cmd = matches.subcommand_matches("stats")
+    let dur = start.elapsed();
+    println!("Elapsed time: {:6?}", dur);
+    Ok(())
+    
 }
 fn read_big_fastq() -> (Receiver<RecordSet>, JoinHandle<io::Result<()>>) {
     let fq = "/Users/aadali/test_data/big.fastq";
@@ -157,7 +151,7 @@ mod test {
         let mut x = fastq_reader.stats(false);
         let summary = get_summary(
             &mut x,
-            &mut vec![20000usize, 15000, 10000, 9000, 5000],
+            Some(&vec![20000usize, 15000, 10000, 9000, 5000]),
             &mut vec![10.0, 9.0, 12.0, 15.0, 20.0],
             10,
         );
@@ -181,7 +175,7 @@ mod test {
         let mut writer = std::io::BufWriter::new(std::fs::File::create(&output_file).unwrap());
         for x in &all_stats {
             writer
-                .write_fmt(format_args!("{}\t{}\t{:.6}\n", x.0, x.1, x.2))
+                .write_fmt(format_args!("{}\t{}\t{:.6}\n", x.0, x.1, x.2.1))
                 .unwrap()
         }
         writer.flush().unwrap();
@@ -221,36 +215,13 @@ mod test {
                     .collect::<Vec<EachStats>>(),
             );
         }
-        //
-        // 'outer: loop {
-        //     let mut this_vec_fastq: Vec<FqRecord> = vec![];
-        //     'inner: loop {
-        //         for record in &mut fq_reader {
-        //             this_vec_fastq.push(record.unwrap());
-        //             if this_vec_fastq.len() >= chunk {
-        //                 let chunk_stats: Vec<EachStats> = this_vec_fastq
-        //                     .into_par_iter()
-        //                     .map(|f| f.stats(false))
-        //                     .collect();
-        //                 chunk_stats.into_iter().for_each(|x| all_stats.push(x));
-        //                 break 'inner;
-        //             }
-        //         }
-        //         let chunk_stats: Vec<EachStats> = this_vec_fastq
-        //             .into_par_iter()
-        //             .map(|f| f.stats(false))
-        //             .collect();
-        //         chunk_stats.into_iter().for_each(|x| all_stats.push(x));
-        //         break 'outer;
-        //     }
-        // }
 
         let output_file =
             Path::new("/Users/aadali/stats_one_big_fastq_multi_threads_with_release.tsv");
         let mut writer = std::io::BufWriter::new(std::fs::File::create(&output_file).unwrap());
         for x in &all_stats {
             writer
-                .write_fmt(format_args!("{}\t{}\t{:.6}\n", x.0, x.1, x.2))
+                .write_fmt(format_args!("{}\t{}\t{:.6}\n", x.0, x.1, x.2.1))
                 .unwrap()
         }
         writer.flush().unwrap();
@@ -273,7 +244,7 @@ mod test {
         let mut writer = std::io::BufWriter::new(std::fs::File::create(&output_file).unwrap());
         for x in &all_stats {
             writer
-                .write_fmt(format_args!("{}\t{}\t{:.6}\n", x.0, x.1, x.2))
+                .write_fmt(format_args!("{}\t{}\t{:.6}\n", x.0, x.1, x.2.1))
                 .unwrap()
         }
         writer.flush().unwrap();
@@ -317,7 +288,7 @@ mod test {
         let mut writer = std::io::BufWriter::new(std::fs::File::create(&output_file).unwrap());
         for x in &all_stats {
             writer
-                .write_fmt(format_args!("{}\t{}\t{:.6}\n", x.0, x.1, x.2))
+                .write_fmt(format_args!("{}\t{}\t{:.6}\n", x.0, x.1, x.2.1))
                 .unwrap()
         }
         writer.flush().unwrap();
@@ -353,7 +324,7 @@ mod test {
         let mut writer = std::io::BufWriter::new(std::fs::File::create(&output_file).unwrap());
         for x in &all_stats {
             writer
-                .write_fmt(format_args!("{}\t{}\t{:.6}\n", x.0, x.1, x.2))
+                .write_fmt(format_args!("{}\t{}\t{:.6}\n", x.0, x.1, x.2.1))
                 .unwrap()
         }
         writer.flush().unwrap();

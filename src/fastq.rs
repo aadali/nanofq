@@ -1,16 +1,17 @@
+use ansi_term::Color;
+use flate2::bufread::MultiGzDecoder;
 use seq_io::fastq;
-use seq_io::fastq::{Record,  RefRecord};
-use std::io::{Read};
+use seq_io::fastq::{Record, RefRecord};
+use std::fs::File;
+use std::io::{BufReader, Read, Stdin};
 use std::ops::{Deref, DerefMut};
-use std::path::Path;
-use anyhow::anyhow;
 
 const BUFF: usize = 1024 * 1024;
-pub type EachStats = (Box<String>, usize, f64, Option<f64>);
+pub type EachStats = (Box<String>, usize, (f64, f64), Option<f64>); // (f64, f64): (this_read_average_error_pro, this_read_quality)
 
 pub trait ReadStats {
     fn gc_count(&self) -> f64;
-    fn calculate_read_quality(&self) -> f64;
+    fn calculate_read_quality(&self) -> (f64, f64);
 
     fn stats(&self, gc: bool) -> EachStats;
 
@@ -44,16 +45,16 @@ impl<'a> ReadStats for RefRecord<'a> {
     }
 
     #[inline]
-    fn calculate_read_quality(&self) -> f64 {
+    fn calculate_read_quality(&self) -> (f64, f64) {
         let seq_len = self.seq().len() as f64;
-        (self
+        let avg_err_prob = self
             .qual()
             .iter()
             .map(|x| 10.0f64.powf((x - 33) as f64 / -10.0))
             .sum::<f64>()
-            / seq_len)
-            .log10()
-            * -10.0
+            / seq_len;
+        let quality = avg_err_prob .log10() * -10.0;
+        (avg_err_prob, quality)
     }
 
     #[inline]
@@ -63,7 +64,11 @@ impl<'a> ReadStats for RefRecord<'a> {
         let gc = if gc { Some(self.gc_count()) } else { None };
 
         (
-            Box::new(self.id().expect("parse id to str error").to_string()),
+            Box::new(
+                self.id()
+                    .expect(&Color::Red.paint("parse id to str error").to_string())
+                    .to_string(),
+            ),
             len,
             read_quality,
             gc,
@@ -89,53 +94,54 @@ impl<'a> ReadStats for RefRecord<'a> {
         };
         seq_len >= min_len
             && seq_len <= max_len
-            && self.calculate_read_quality() > min_read_qvalue
+            && self.calculate_read_quality().1 > min_read_qvalue
             && gc_passed
     }
 }
 
 pub struct FastqReader<R: Read>(pub fastq::Reader<R>);
 
-trait IsFastqReader {}
-
-impl<R: Read> IsFastqReader for FastqReader<R> {}
-
 impl<R: Read> FastqReader<R> {
-    fn new<P: AsRef<Path>>(path: Option<P>) -> Result<Box<dyn IsFastqReader>, anyhow::Error> {
-        if path.is_none() {
-            Ok(Box::new(FastqReader(fastq::Reader::with_capacity(
-                std::io::stdin(),
-                BUFF,
-            ))))
-        } else {
-            let path = path.unwrap();
-            if path.as_ref().ends_with(".fastq") || path.as_ref().ends_with(".fq") {
-                Ok(Box::new(FastqReader(fastq::Reader::with_capacity(
-                    std::fs::File::open(path)?,
-                    BUFF,
-                ))))
-            } else if path.as_ref().ends_with(".fastq.gz") || path.as_ref().ends_with(".fq.gz") {
-                Ok(Box::new(FastqReader(fastq::Reader::with_capacity(
-                    flate2::bufread::MultiGzDecoder::new(std::io::BufReader::new(
-                        std::fs::File::open(path)?,
-                    )),
-                    BUFF,
-                ))))
-            } else {
-                Err(anyhow!("bad file suffix"))
-            }
-        }
+    pub fn with_stdin() -> FastqReader<Stdin> {
+        FastqReader(fastq::Reader::with_capacity(std::io::stdin(), BUFF))
     }
-    
+
+    pub fn with_fastq(path: &str) -> FastqReader<File> {
+        FastqReader(fastq::Reader::with_capacity(
+            File::open(path).expect(&format!(
+                "{}: {}",
+                Color::Red.paint("Open failed failed: "),
+                path
+            )),
+            BUFF,
+        ))
+    }
+
+    pub fn with_fastq_gz(path: &str) -> FastqReader<MultiGzDecoder<BufReader<File>>> {
+        FastqReader(fastq::Reader::with_capacity(
+            MultiGzDecoder::new(BufReader::new(File::open(path).expect(&format!(
+                "{}: {}",
+                Color::Red.paint("Open failed failed: "),
+                path
+            )))),
+            BUFF,
+        ))
+    }
+
     #[inline]
     pub(crate) fn stats(&mut self, gc: bool) -> Vec<EachStats> {
         let mut stats_result = vec![];
         loop {
             let ref_record = self.next();
-            if ref_record.is_none() {
+            if let Some(record) = ref_record {
+                stats_result.push(
+                    record
+                        .expect(&Color::Red.paint("Error: ").to_string())
+                        .stats(gc),
+                )
+            } else {
                 break;
             }
-            stats_result.push(ref_record.unwrap().expect("Error").stats(gc))
         }
         stats_result
     }
