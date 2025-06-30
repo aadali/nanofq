@@ -11,7 +11,6 @@ mod run;
 use fastq::{EachStats, FastqReader, ReadStats};
 use rayon::prelude::*;
 use seq_io::fastq::{Reader, RecordSet};
-use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
 use std::sync::mpsc;
@@ -19,7 +18,6 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::thread::JoinHandle;
 use std::{io, thread};
 
-use std::io::BufReader;
 use std::time::Instant;
 use crate::run::run_stats;
 

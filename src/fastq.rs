@@ -1,9 +1,7 @@
 use ansi_term::Color;
-use flate2::bufread::MultiGzDecoder;
 use seq_io::fastq;
 use seq_io::fastq::{Record, RefRecord};
-use std::fs::File;
-use std::io::{BufReader, Read, Stdin};
+use std::io::{ Read};
 use std::ops::{Deref, DerefMut};
 
 const BUFF: usize = 1024 * 1024;
@@ -102,30 +100,9 @@ impl<'a> ReadStats for RefRecord<'a> {
 pub struct FastqReader<R: Read>(pub fastq::Reader<R>);
 
 impl<R: Read> FastqReader<R> {
-    pub fn with_stdin() -> FastqReader<Stdin> {
-        FastqReader(fastq::Reader::with_capacity(std::io::stdin(), BUFF))
-    }
-
-    pub fn with_fastq(path: &str) -> FastqReader<File> {
-        FastqReader(fastq::Reader::with_capacity(
-            File::open(path).expect(&format!(
-                "{}: {}",
-                Color::Red.paint("Open failed failed: "),
-                path
-            )),
-            BUFF,
-        ))
-    }
-
-    pub fn with_fastq_gz(path: &str) -> FastqReader<MultiGzDecoder<BufReader<File>>> {
-        FastqReader(fastq::Reader::with_capacity(
-            MultiGzDecoder::new(BufReader::new(File::open(path).expect(&format!(
-                "{}: {}",
-                Color::Red.paint("Open failed failed: "),
-                path
-            )))),
-            BUFF,
-        ))
+    
+    pub fn new(reader: R) -> FastqReader<R> {
+        FastqReader::<R>(fastq::Reader::with_capacity(reader, BUFF))
     }
 
     #[inline]

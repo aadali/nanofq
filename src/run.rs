@@ -1,15 +1,16 @@
 use crate::fastq::{EachStats, FastqReader, ReadStats};
-use crate::stats::{ write_stats, write_summary};
+use crate::stats::{write_stats, write_summary};
 use clap::ArgMatches;
 use flate2::bufread::MultiGzDecoder;
 use rayon::prelude::*;
 use seq_io::fastq::RecordSet;
+use std::any::Any;
 use std::fs::File;
-use std::io::{BufReader, Stdin};
+use std::io::{ BufReader, Read };
 use std::path::Path;
 use std::sync::mpsc;
 use std::sync::mpsc::Receiver;
-use std::{thread};
+use std::thread;
 
 fn stats_receiver(receiver: Receiver<RecordSet>, gc: bool) -> Vec<EachStats> {
     let mut all_stats: Vec<EachStats> = vec![];
@@ -26,56 +27,13 @@ fn stats_receiver(receiver: Receiver<RecordSet>, gc: bool) -> Vec<EachStats> {
     all_stats
 }
 
-fn stats_stdin(thread: usize, gc: bool) -> Vec<EachStats> {
-    let mut reader = FastqReader::<Stdin>::with_stdin();
+fn stats<R: Read + Send + Any>(reader: R, thread: usize, gc: bool) -> Vec<EachStats> {
     if thread == 1 {
-        reader.stats(gc)
+        FastqReader::new(reader).stats(gc)
     } else {
         let (sender, receiver) = mpsc::sync_channel(1000);
         let handle = thread::spawn(move || {
-            loop {
-                let mut record_set = seq_io::fastq::RecordSet::default();
-                if reader.read_record_set(&mut record_set).is_none() {
-                    break;
-                }
-                if sender.send(record_set).is_err() {
-                    break;
-                }
-            }
-        });
-        stats_receiver(receiver, gc)
-    }
-}
-
-fn stats_file(file_path: &str, thread: usize, gc: bool) -> Vec<EachStats> {
-    let mut reader = FastqReader::<File>::with_fastq(file_path);
-    if thread == 1 {
-        reader.stats(gc)
-    } else {
-        let (sender, receiver) = mpsc::sync_channel(1000);
-        let handle = thread::spawn(move || {
-           loop {
-               let mut record_set = seq_io::fastq::RecordSet::default();
-               if reader.read_record_set(&mut record_set).is_none() {
-                   break;
-               }
-               if sender.send(record_set).is_err() {
-                   break;
-               }
-           } 
-        });
-        stats_receiver(receiver, gc)
-    }
-}
-
-fn stats_file_gz(file_path: &str, thread: usize, gc: bool) -> Vec<EachStats> {
-    let mut reader = FastqReader::<MultiGzDecoder<BufReader<File>>>::with_fastq_gz(file_path);
-    if thread == 1 {
-        reader.stats(gc)
-    } else {
-        // let (sender, receiver) = mpsc::sync_channel(1000);
-        let (sender, receiver) = mpsc::channel();
-        let handle = thread::spawn(move || {
+            let mut reader = FastqReader::<R>::new(reader);
             loop {
                 let mut record_set = seq_io::fastq::RecordSet::default();
                 if reader.read_record_set(&mut record_set).is_none() {
@@ -92,7 +50,6 @@ fn stats_file_gz(file_path: &str, thread: usize, gc: bool) -> Vec<EachStats> {
 
 fn stats_fastq_dir(path: &Path, thread: usize, gc: bool) -> Vec<EachStats> {
     assert!(path.is_dir());
-    let mut all_stats = vec![];
     let mut fastqs = vec![];
     for fs in path.read_dir().expect(&format!(
         "read directory: {} failed",
@@ -110,14 +67,21 @@ fn stats_fastq_dir(path: &Path, thread: usize, gc: bool) -> Vec<EachStats> {
             }
         }
     }
-    for fq in &fastqs {
-        if fq.to_str().unwrap().ends_with(".gz") {
-            all_stats.extend(stats_file_gz(fq.to_str().unwrap(), thread, gc))
-        } else {
-            all_stats.extend(stats_file(fq.to_str().unwrap(), thread, gc))
-        }
-    }
-    all_stats
+    fastqs
+        .into_par_iter()
+        .map(|fq| {
+            if fq.to_str().unwrap().ends_with(".gz") {
+                stats(
+                    MultiGzDecoder::new(BufReader::new(File::open(fq).unwrap())),
+                    thread,
+                    gc,
+                )
+            } else {
+                stats(BufReader::new(File::open(fq).unwrap()), thread, gc)
+            }
+        })
+        .flatten()
+        .collect::<Vec<EachStats>>()
 }
 
 pub fn run_stats(stats_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
@@ -134,28 +98,33 @@ pub fn run_stats(stats_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
         .get_many::<String>("format")
         .unwrap()
         .collect::<Vec<&String>>();
-    
+
     rayon::ThreadPoolBuilder::new()
         .num_threads(*thread as usize)
         .build_global()?;
 
     let mut stats_result = Vec::<EachStats>::new();
     match input {
-        None => stats_result = stats_stdin(*thread as usize, gc),
+        // None => stats_result = stats_stdin(*thread as usize, gc),
+        None => stats_result = stats(std::io::stdin(), *thread as usize, gc),
         Some(input) => {
             let input_path = Path::new(input);
             if input_path.is_file() {
                 if input_path.to_str().unwrap().ends_with(".gz") {
-                    stats_result = stats_file_gz(input, *thread as usize, gc);
+                    stats_result = stats(
+                        MultiGzDecoder::new(BufReader::new(File::open(input)?)),
+                        *thread as usize,
+                        gc,
+                    );
                 } else {
-                    stats_result = stats_file(input, *thread as usize, gc);
+                    stats_result = stats(BufReader::new(File::open(input)?), *thread as usize, gc);
                 }
             } else {
                 stats_result = stats_fastq_dir(input_path, *thread as usize, gc);
             }
         }
     }
-    
+
     match output {
         None => write_stats(&stats_result, &mut std::io::stdout(), gc)?,
         Some(output_file) => write_stats(

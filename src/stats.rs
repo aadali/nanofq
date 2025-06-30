@@ -199,7 +199,7 @@ pub fn get_summary(
     ));
     stats_vec
         .iter()
-        .rev()
+        // .rev()
         .take(n)
         .enumerate()
         .for_each(|idx_each_stats| {
