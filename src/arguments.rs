@@ -1,13 +1,11 @@
 use ansi_term::Color;
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use std::path::Path;
+use std::str::FromStr;
 
+const U32_MAX: &str = "4294967295";
 fn input_value_parser(input: &str) {
     let input_path = Path::new(input);
-    if !input_path.is_absolute() {
-        eprintln!("{}", Color::Red.paint("input must be absolute path"));
-        std::process::exit(1);
-    }
     match input_path.try_exists() {
         Ok(ok) => {
             if !ok {
@@ -69,6 +67,22 @@ fn input_value_parser(input: &str) {
         }
     }
 }
+
+fn positive_number_parse<T: FromStr>(x: &str, para: &str, float: bool) -> Result<T, anyhow::Error> {
+    let min_length = match x.parse::<T>() {
+        Ok(value) => value,
+        Err(err) => {
+            let num_type = if float { "float" } else { "int" };
+            eprintln!(
+                "{}",
+                Color::Red.paint(format!("Error: {} must be positive {}", para, num_type))
+            );
+            std::process::exit(1);
+        }
+    };
+    Ok(min_length)
+}
+
 pub fn parse_arguments() -> ArgMatches {
     let input_arg = Arg::new("input")
         .short('i')
@@ -84,36 +98,33 @@ pub fn parse_arguments() -> ArgMatches {
         .short('o')
         .long("output")
         .action(ArgAction::Set);
+    
+    let thread_arg = Arg::new("thread")
+        .short('t')
+        .long("thread")
+        .action(ArgAction::Set)
+        .default_value("1")
+        .value_parser(value_parser!(u16).range(1..=32))
+        .help("how many threads used to stats fastqs");
 
-    let cmd = Command::new("nanofq")
-        .version("0.0.1")
-        .about("A tool for nanopore fastq file")
-        .subcommand(
-            Command::new("stats")
+    let stats_cmd = Command::new("stats")
                 .about("stats fastq")
                 .arg( &input_arg )
-                .arg(output_arg
-                         .help("output the stats result into this, a tsv file or default stdout")
-                )
-                .arg(
-                    Arg::new("summary")
+                .arg(output_arg.clone().help("output the stats result into this, a tsv file or default stdout"))
+                .arg(Arg::new("summary")
                         .short('s')
                         .long("summary")
                         .action(ArgAction::Set)
                         .default_value("./NanofqStatsSummary.txt")
-                        .help("output stats summary into this file")
-                )
-                .arg(
-                    Arg::new("topn")
+                        .help("output stats summary into this file"))
+                .arg(Arg::new("topn")
                         .short('n')
                         .long("topn")
                         .action(ArgAction::Set)
                         .default_value("5")
                         .value_parser(value_parser!(u16))
-                        .help("write the top N longest reads and highest quality reads info into summary file")
-                )
-                .arg(
-                    Arg::new("quality")
+                        .help("write the top N longest reads and highest quality reads info into summary file"))
+                .arg(Arg::new("quality")
                         .short('q')
                         .long("quality")
                         .value_parser(|x: &str| {
@@ -134,10 +145,8 @@ pub fn parse_arguments() -> ArgMatches {
                             Result::<Vec<f64>, anyhow::Error>::Ok(qualities)
                         })
                         .default_value("25,20,18,15,12,10")
-                        .help("count the reads number that whose quality is bigger than this value, multi value can be separated by coma")
-                )
-                .arg(
-                    Arg::new("length")
+                        .help("count the reads number that whose quality is bigger than this value, multi value can be separated by coma"))
+                .arg(Arg::new("length")
                         .short('l')
                         .long("length")
                         .value_parser(|x: &str| {
@@ -157,40 +166,109 @@ pub fn parse_arguments() -> ArgMatches {
                             lengths.sort_by(|a,b| b.partial_cmp(a).unwrap());
                             Result::<Vec<usize>, anyhow::Error>::Ok(lengths)
                         })
-                        .help("count the reads number that whose length is bigger than this value, multi values can be separated by coma")
-                )
-                .arg(
-                    Arg::new("gc")
-                        .short('g')
+                        .help("count the reads number that whose length is bigger than this value, multi values can be separated by coma"))
+                .arg(Arg::new("gc")
+                        // .short('g')
                         .long("gc")
                         .action(ArgAction::SetTrue)
-                        .help("whether stats the gc content")
-                )
-                .arg(
-                    Arg::new("thread")
-                        .short('t')
-                        .long("thread")
-                        .action(ArgAction::Set)
-                        .default_value("1")
-                        .value_parser(value_parser!(u16).range(1..=32))
-                        .help("how many threads used to stats fastqs")
-                )
-                .arg(
-                    Arg::new("plot")
+                        .help("whether stats the gc content"))
+                .arg(thread_arg.clone())
+                .arg(Arg::new("plot")
                         .short('p')
                         .long("plot")
                         .action(ArgAction::SetTrue)
-                        .help("whether make plot")
-                )
-                .arg(
-                    Arg::new("format")
+                        .help("whether make plot"))
+                .arg(Arg::new("format")
                         .short('f')
                         .long("format")
                         .action(ArgAction::Append)
                         .value_parser(["png", "pdf", "jpg"])
                         .default_value("png")
-                        .help("which format figure do you want if --plot is true, this para can be set multi times")
-                )
-        );
-    cmd.get_matches()
+                        .help("which format figure do you want if --plot is true, this para can be set multi times"));
+    let filter_cmd = Command::new("filter")
+        .about("filter fastq")
+        .arg(&input_arg)
+        .arg(
+            output_arg
+                .clone()
+                .help("output the filtered fastq into this file or default stdout"),
+        )
+        .arg(
+            Arg::new("min_len")
+                .short('l')
+                .long("min_len")
+                .action(ArgAction::Set)
+                .default_value("500")
+                .value_parser(|x: &str| positive_number_parse::<usize>(x, "--min_len", false))
+                .help("min read length"),
+        )
+        .arg(
+            Arg::new("max_len")
+                .short('L')
+                .long("max_len")
+                .action(ArgAction::Set)
+                .default_value(U32_MAX)
+                .value_parser(|x: &str| positive_number_parse::<usize>(x, "--max_len", false))
+                .help("min read length"),
+        )
+        .arg(
+            Arg::new("min_qual")
+                .short('q')
+                .long("min_qual")
+                .action(ArgAction::Set)
+                .default_value("8.0")
+                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--min_qual", true))
+                .help("max read qual"),
+        )
+        .arg(
+            Arg::new("max_qual")
+                .short('Q')
+                .long("max_qual")
+                .action(ArgAction::Set)
+                .default_value("50.0")
+                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--max_qual", true))
+                .help("max read qual, but in most cases, you won't specify this value"),
+        )
+        .arg(
+            Arg::new("gc")
+                // .short('g')
+                .long("gc")
+                .action(ArgAction::SetTrue)
+                .help("whether use gc content to filter read"),
+        )
+        .arg(
+            Arg::new("min_gc")
+                .short('g')
+                .long("min_gc")
+                .default_value("0.0")
+                .action(ArgAction::Set)
+                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--min_length", true))
+                .help("min gc content if --gc is set true"),
+        )
+        .arg(
+            Arg::new("max_gc")
+                .short('G')
+                .long("max_gc")
+                .default_value("1.0")
+                .action(ArgAction::Set)
+                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--max_length", true))
+                .help("max gc content if --gc is set true"),
+        )
+        .arg(thread_arg.clone())
+        // .arg(
+        //     Arg::new("retain_failed")
+        //         .long("retain_failed")
+        //         .action(ArgAction::Set)
+        //         .help("whether store the failed fastq, if set, this value should be the path of failed fastq")
+        // )
+        ;
+
+    let cmd = Command::new("nanofq")
+        .version("0.0.1")
+        .about("A tool for nanopore fastq file")
+        .subcommand(stats_cmd)
+        .subcommand(filter_cmd);
+    let x = cmd.get_matches();
+    println!("{:?}", &x);
+    x
 }
