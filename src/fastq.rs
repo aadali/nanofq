@@ -1,7 +1,7 @@
 use ansi_term::Color;
 use seq_io::fastq;
 use seq_io::fastq::{Record, RefRecord};
-use std::fmt::{Display};
+use std::fmt::Display;
 use std::fs::File;
 use std::io::{BufWriter, Read, Write};
 use std::ops::{Deref, DerefMut};
@@ -10,7 +10,7 @@ const BUFF: usize = 1024 * 1024;
 pub type EachStats = (Box<String>, usize, (f64, f64), Option<f64>); // (f64, f64): (this_read_average_error_pro, this_read_quality)
 
 #[derive(Clone)]
-pub(crate) struct FilterOption {
+pub(crate) struct FilterOption<'a> {
     pub min_len: usize,
     pub max_len: usize,
     pub min_qual: f64,
@@ -18,14 +18,17 @@ pub(crate) struct FilterOption {
     pub gc: bool,
     pub min_gc: f64,
     pub max_gc: f64,
-    // pub retain_failed: Option<String>,
+    pub retain_failed: Option<&'a String>,
 }
-impl FilterOption {
-    pub(crate) fn set_failed_fastq_file(file_path: Option<String>) -> Result<Option<BufWriter<File>>, anyhow::Error> {
-        if file_path.is_none() {
-            Ok(None)
-        } else {
-            Ok(Some(BufWriter::new(File::create_new(file_path.unwrap())?)))
+impl<'a> FilterOption<'a> {
+    pub(crate) fn set_failed_fastq_file(&self) -> Result<Option<BufWriter<File>>, anyhow::Error> {
+        match self.retain_failed {
+            None => Ok(Some(BufWriter::new(File::create(
+                "/tmp/NanoFqFailed.fastq",
+            )?))),
+            Some(failed_fastq_file) => {
+                Ok(Some(BufWriter::new(File::create(failed_fastq_file)?)))
+            }
         }
     }
 }
@@ -36,7 +39,7 @@ pub trait ReadStats {
     fn stats(&self, gc: bool) -> EachStats;
 
     fn is_passed(&self, fo: &FilterOption) -> bool;
-    
+
     fn write<W: Write>(&self, writer: &mut W) -> Result<(), anyhow::Error>;
 }
 
@@ -105,8 +108,8 @@ impl<'a> ReadStats for RefRecord<'a> {
             && this_read_qual < fo.max_qual
             && gc_passed
     }
-    
-    fn write<W:Write>(&self, writer: &mut W) -> Result<(), anyhow::Error>{
+
+    fn write<W: Write>(&self, writer: &mut W) -> Result<(), anyhow::Error> {
         unsafe {
             write!(
                 writer,
@@ -153,21 +156,45 @@ impl<R: Read> FastqReader<R> {
         &mut self,
         writer: &mut BufWriter<W>,
         fo: &FilterOption,
+        retain_failed: bool,
+        failed_writer: &mut BufWriter<File>,
     ) -> Result<(), anyhow::Error> {
-        loop {
-            match self.next() {
-                Some(ref_record_res) => {
-                    let ref_record = ref_record_res.expect(
-                        &Color::Red
-                            .paint("Error: failed to get fastq record")
-                            .to_string(),
-                    );
-                    if ref_record.is_passed(fo) {
-                        ReadStats::write(&ref_record, writer)?
+        if retain_failed {
+            loop {
+                match self.next() {
+                    Some(ref_record_res) => {
+                        let ref_record = ref_record_res.expect(
+                            &Color::Red
+                                .paint("Error: failed to get fastq record")
+                                .to_string(),
+                        );
+                        if ref_record.is_passed(fo) {
+                            ReadStats::write(&ref_record, writer)?
+                        }
+                    }
+                    None => {
+                        return Ok(());
                     }
                 }
-                None => {
-                    return Ok(());
+            }
+        } else {
+            loop {
+                match self.next() {
+                    Some(ref_record_res) => {
+                        let ref_record = ref_record_res.expect(
+                            &Color::Red
+                                .paint("Error: failed to get fastq record")
+                                .to_string(),
+                        );
+                        if ref_record.is_passed(fo) {
+                            ReadStats::write(&ref_record, writer)?
+                        } else {
+                            ReadStats::write(&ref_record, failed_writer)?
+                        }
+                    }
+                    None => {
+                        return Ok(());
+                    }
                 }
             }
         }

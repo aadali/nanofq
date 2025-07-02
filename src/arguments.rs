@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use ansi_term::Color;
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use std::path::Path;
@@ -68,9 +69,15 @@ fn input_value_parser(input: &str) {
     }
 }
 
-fn positive_number_parse<T: FromStr>(x: &str, para: &str, float: bool) -> Result<T, anyhow::Error> {
+fn positive_number_parse<T: FromStr + PartialOrd + Display>(x: &str, para: &str, float: bool, min: T, max: T) -> Result<T, anyhow::Error> {
     let min_length = match x.parse::<T>() {
-        Ok(value) => value,
+        Ok(value) => {
+            if value < min || value > max {
+                eprintln!("{}", Color::Red.paint(format!("Error: {} must be between {} and {}", para, min, max)))           ;
+                std::process::exit(1);
+            }
+            value
+        },
         Err(err) => {
             let num_type = if float { "float" } else { "int" };
             eprintln!(
@@ -98,7 +105,7 @@ pub fn parse_arguments() -> ArgMatches {
         .short('o')
         .long("output")
         .action(ArgAction::Set);
-    
+
     let thread_arg = Arg::new("thread")
         .short('t')
         .long("thread")
@@ -110,13 +117,13 @@ pub fn parse_arguments() -> ArgMatches {
     let stats_cmd = Command::new("stats")
                 .about("stats fastq")
                 .arg( &input_arg )
-                .arg(output_arg.clone().help("output the stats result into this, a tsv file or default stdout"))
+                .arg(output_arg.clone().help("output the stats result into this, a tsv file or default stdout. it will be truncated if it's a existing file"))
                 .arg(Arg::new("summary")
                         .short('s')
                         .long("summary")
                         .action(ArgAction::Set)
                         .default_value("./NanofqStatsSummary.txt")
-                        .help("output stats summary into this file"))
+                        .help("output stats summary into this file, it will be truncated if it exists"))
                 .arg(Arg::new("topn")
                         .short('n')
                         .long("topn")
@@ -191,15 +198,15 @@ pub fn parse_arguments() -> ArgMatches {
         .arg(
             output_arg
                 .clone()
-                .help("output the filtered fastq into this file or default stdout"),
+                .help("output the filtered fastq into this file or default stdout, it will be truncated if it's a existing file"),
         )
         .arg(
             Arg::new("min_len")
                 .short('l')
                 .long("min_len")
                 .action(ArgAction::Set)
-                .default_value("500")
-                .value_parser(|x: &str| positive_number_parse::<usize>(x, "--min_len", false))
+                .default_value("1")
+                .value_parser(|x: &str| positive_number_parse::<usize>(x, "--min_len", false, 1, u32::MAX as usize))
                 .help("min read length"),
         )
         .arg(
@@ -208,7 +215,7 @@ pub fn parse_arguments() -> ArgMatches {
                 .long("max_len")
                 .action(ArgAction::Set)
                 .default_value(U32_MAX)
-                .value_parser(|x: &str| positive_number_parse::<usize>(x, "--max_len", false))
+                .value_parser(|x: &str| positive_number_parse::<usize>(x, "--max_len", false, 1, u32::MAX as usize))
                 .help("min read length"),
         )
         .arg(
@@ -216,8 +223,8 @@ pub fn parse_arguments() -> ArgMatches {
                 .short('q')
                 .long("min_qual")
                 .action(ArgAction::Set)
-                .default_value("8.0")
-                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--min_qual", true))
+                .default_value("1.0")
+                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--min_qual", true, 1.0f64, 50.0f64))
                 .help("max read qual"),
         )
         .arg(
@@ -226,7 +233,7 @@ pub fn parse_arguments() -> ArgMatches {
                 .long("max_qual")
                 .action(ArgAction::Set)
                 .default_value("50.0")
-                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--max_qual", true))
+                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--max_qual", true, 1.0f64, 50.0f64))
                 .help("max read qual, but in most cases, you won't specify this value"),
         )
         .arg(
@@ -234,7 +241,7 @@ pub fn parse_arguments() -> ArgMatches {
                 // .short('g')
                 .long("gc")
                 .action(ArgAction::SetTrue)
-                .help("whether use gc content to filter read"),
+                .help("whether use gc content to filter read [default: false]"),
         )
         .arg(
             Arg::new("min_gc")
@@ -242,7 +249,7 @@ pub fn parse_arguments() -> ArgMatches {
                 .long("min_gc")
                 .default_value("0.0")
                 .action(ArgAction::Set)
-                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--min_length", true))
+                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--min_gc", true, 0.0f64, 1.0f64))
                 .help("min gc content if --gc is set true"),
         )
         .arg(
@@ -251,16 +258,16 @@ pub fn parse_arguments() -> ArgMatches {
                 .long("max_gc")
                 .default_value("1.0")
                 .action(ArgAction::Set)
-                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--max_length", true))
+                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--max_gc", true, 0.0f64, 1.0f64))
                 .help("max gc content if --gc is set true"),
         )
         .arg(thread_arg.clone())
-        // .arg(
-        //     Arg::new("retain_failed")
-        //         .long("retain_failed")
-        //         .action(ArgAction::Set)
-        //         .help("whether store the failed fastq, if set, this value should be the path of failed fastq")
-        // )
+        .arg(
+            Arg::new("retain_failed")
+                .long("retain_failed")
+                .action(ArgAction::Set)
+                .help("whether store the failed fastq, if set, this value should be the path of failed fastq. this file will be truncated if it exists")
+        )
         ;
 
     let cmd = Command::new("nanofq")
@@ -269,6 +276,5 @@ pub fn parse_arguments() -> ArgMatches {
         .subcommand(stats_cmd)
         .subcommand(filter_cmd);
     let x = cmd.get_matches();
-    println!("{:?}", &x);
     x
 }

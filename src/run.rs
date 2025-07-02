@@ -103,6 +103,8 @@ fn filter_receiver<W: Write>(
     receiver: Receiver<RecordSet>,
     fo: &FilterOption,
     writer: &mut BufWriter<W>,
+    retain_failed: bool,
+    failed_writer: &mut BufWriter<File>
 ) -> Result<(), anyhow::Error> {
     for record_set in receiver {
         let mut record_vec = vec![];
@@ -111,9 +113,19 @@ fn filter_receiver<W: Write>(
             .par_iter()
             .map(|x| x.is_passed(fo))
             .collect::<Vec<bool>>();
-        for (ref_record, is_passed) in record_vec.iter().zip(&vec2) {
-            if *is_passed {
-                ref_record.write(writer)?;
+        if retain_failed {
+            for (ref_record, is_passed) in record_vec.iter().zip(&vec2) {
+                if *is_passed {
+                    ref_record.write(writer)?;
+                } else {
+                    ref_record.write(failed_writer)?
+                }
+            }
+        }else {
+            for (ref_record, is_passed) in record_vec.iter().zip(&vec2) {
+                if *is_passed {
+                    ref_record.write(writer)?;
+                }
             }
         }
     }
@@ -125,13 +137,15 @@ fn filter<R, W>(
     thread: usize,
     writer: &mut BufWriter<W>,
     fo: &FilterOption,
+    retain_failed: bool,
+    failed_writer: &mut BufWriter<File>,
 ) -> Result<(), anyhow::Error>
 where
     R: Read + Send + Any,
     W: Write,
 {
     if thread == 1 {
-        FastqReader::new(reader).filter(writer, fo)?
+        FastqReader::new(reader).filter(writer, fo, retain_failed, failed_writer)?
     } else {
         let (sender, receiver) = mpsc::sync_channel(1000);
         let handle = thread::spawn(move || {
@@ -146,7 +160,7 @@ where
                 }
             }
         });
-        filter_receiver(receiver, fo, writer)?
+        filter_receiver(receiver, fo, writer, retain_failed, failed_writer)?
     }
     Ok(())
 }
@@ -156,6 +170,8 @@ fn filter_fastq_dir<W: Write>(
     thread: usize,
     writer: &mut BufWriter<W>,
     fo: &FilterOption,
+    retain_failed: bool,
+    failed_writer: &mut BufWriter<File>
 ) -> Result<(), anyhow::Error> {
     let fastqs = collect_fastq_dir(path).unwrap();
     for fq in fastqs {
@@ -165,9 +181,11 @@ fn filter_fastq_dir<W: Write>(
                 thread,
                 writer,
                 fo,
+                retain_failed,
+                failed_writer
             )?
         } else {
-            filter(BufReader::new(File::open(fq)?), thread, writer, fo)?;
+            filter(BufReader::new(File::open(fq)?), thread, writer, fo, retain_failed, failed_writer)?;
         }
     }
     Ok(())
@@ -245,16 +263,13 @@ pub fn run_filter(filter_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
         gc: gc,
         min_gc: *min_gc,
         max_gc: *max_gc,
+        retain_failed: failed_fq_path
     };
-
+    let failed_retain = if failed_fq_path.is_none() {false} else {true};
+    let mut failed_writer = filter_option.set_failed_fastq_file()?.unwrap();
     rayon::ThreadPoolBuilder::new()
         .num_threads(*thread as usize)
         .build_global()?;
-    // let mut writer: Box<BufWriter<impl Write>> = BufWriter::new(std::io::stdout());
-    let mut writer: Box<dyn Write> = match output {
-        None => Box::new(std::io::stdout()),
-        Some(output_file) => Box::new(BufWriter::new(File::create_new(output_file)?)),
-    };
 
     match input {
         None => {
@@ -267,16 +282,20 @@ pub fn run_filter(filter_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
                         *thread as usize,
                         &mut writer,
                         &filter_option,
+                        failed_retain,
+                        &mut failed_writer
                     )?
                 }
                 Some(output_file) => {
                     // stdin and file output
-                    let mut writer = BufWriter::new(File::create_new(output_file)?);
+                    let mut writer = BufWriter::new(File::create(output_file)?);
                     filter(
                         std::io::stdin(),
                         *thread as usize,
                         &mut writer,
                         &filter_option,
+                        failed_retain,
+                        &mut failed_writer
                     )?
                 }
             }
@@ -291,12 +310,12 @@ pub fn run_filter(filter_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
                         None => {
                             // fastq.gz in and stdout
                             let mut writer = BufWriter::new(std::io::stdout());
-                            filter(reader, *thread as usize, &mut writer, &filter_option)?
+                            filter(reader, *thread as usize, &mut writer, &filter_option, failed_retain, &mut failed_writer)?
                         }
                         Some(output_file) => {
                             // fastq.gz in and file output
-                            let mut writer = BufWriter::new(File::create_new(output_file)?);
-                            filter(reader, *thread as usize, &mut writer, &filter_option)?
+                            let mut writer = BufWriter::new(File::create(output_file)?);
+                            filter(reader, *thread as usize, &mut writer, &filter_option, failed_retain, &mut failed_writer)?
                         }
                     }
                 } else {
@@ -305,12 +324,12 @@ pub fn run_filter(filter_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
                         None => {
                             // fastq in and stdout
                             let mut writer = BufWriter::new(std::io::stdout());
-                            filter(reader, *thread as usize, &mut writer, &filter_option)?
+                            filter(reader, *thread as usize, &mut writer, &filter_option, failed_retain, &mut failed_writer)?
                         }
                         Some(output_file) => {
                             // fastq in and fastq output
-                            let mut writer = BufWriter::new(File::create_new(output_file)?);
-                            filter(reader, *thread as usize, &mut writer, &filter_option)?
+                            let mut writer = BufWriter::new(File::create(output_file)?);
+                            filter(reader, *thread as usize, &mut writer, &filter_option, failed_retain, &mut failed_writer)?
                         }
                     }
                 }
@@ -319,12 +338,12 @@ pub fn run_filter(filter_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
                     None => {
                         // dir in and stdout
                         let mut writer = BufWriter::new(std::io::stdout());
-                        filter_fastq_dir(input_path, *thread as usize, &mut writer, &filter_option)?
+                        filter_fastq_dir(input_path, *thread as usize, &mut writer, &filter_option, failed_retain, &mut failed_writer)?
                     }
                     Some(output_file) => {
                         // dir in and fastq output
-                        let mut writer = BufWriter::new(File::create_new(output_file)?);
-                        filter_fastq_dir(input_path, *thread as usize, &mut writer, &filter_option)?
+                        let mut writer = BufWriter::new(File::create(output_file)?);
+                        filter_fastq_dir(input_path, *thread as usize, &mut writer, &filter_option, failed_retain, &mut failed_writer)?
                     }
                 }
             }
