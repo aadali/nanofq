@@ -5,6 +5,17 @@ use std::fmt::Display;
 use std::fs::File;
 use std::io::{BufWriter, Read, Write};
 use std::ops::{Deref, DerefMut};
+use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref Q2P_TABLE: [f64; 128] = {
+        let mut arr = [f64::NAN; 128];
+        for q in 33..127usize {
+            arr[q] = 10.0f64.powf((q - 33) as f64 / -10.0)
+        }
+        arr
+    };
+}
 
 const BUFF: usize = 1024 * 1024;
 pub type EachStats = (Box<String>, usize, (f64, f64), Option<f64>); // (f64, f64): (this_read_average_error_pro, this_read_quality)
@@ -67,7 +78,7 @@ impl<'a> ReadStats for RefRecord<'a> {
         let avg_err_prob = self
             .qual()
             .iter()
-            .map(|x| 10.0f64.powf((x - 33) as f64 / -10.0))
+            .map(|x| Q2P_TABLE[*x as usize])
             .sum::<f64>()
             / seq_len;
         let quality = avg_err_prob.log10() * -10.0;
