@@ -1,4 +1,4 @@
-use crate::alignment::{AlignConfig, AlignMatrix, Direction, GlobalAlignMatrix, LocalAlignMatrix};
+use crate::alignment::{AlignConfig, AlignMatrix, AlignResult, Direction, GlobalAlignMatrix, LocalAlignMatrix};
 use lazy_static::lazy_static;
 use std::collections::{HashMap, HashSet};
 
@@ -38,10 +38,8 @@ fn smith_waterman(
     target: &[u8],
     align_config: &AlignConfig,
     align_matrix: &mut LocalAlignMatrix,
+    align_result: &mut AlignResult,
 ) -> Result<(), anyhow::Error> {
-    let (mut max_score, mut target_col_of_max_score, mut query_row_of_max_score) =
-        (0i32, 0usize, 0usize);
-
     let query = if align_matrix.query_len >= query.len() {
         query
     } else {
@@ -100,60 +98,62 @@ fn smith_waterman(
             } else if this_max_score == score_from_left {
                 align_matrix.set_direction(query_row, target_col, Direction::Left)?
             } else {
+                // do nothing
             }
             align_matrix.set_score(query_row, target_col, this_max_score)?;
 
             // update the max score of the entire alignment and its row index and col index in matrix
-            if this_max_score > max_score {
-                query_row_of_max_score = query_row;
-                target_col_of_max_score = target_col;
-                max_score = this_max_score;
+            if this_max_score > align_result.max_score {
+                align_result.idx_of_max_score = (query_row, target_col);
+                align_result.max_score = this_max_score;
             }
         }
-
-        // trace back depend on the direction_matrix
     }
-    let (mut trace_query_row, mut trace_target_col) =
-        (query_row_of_max_score, target_col_of_max_score);
-    let mut align_query: Vec<u8> = vec![];
-    let mut align_target: Vec<u8> = vec![];
-    let mut line: Vec<u8> = vec![];
+    // trace back depend on the direction_matrix
+    let (mut trace_query_row, mut trace_target_col) = align_result.idx_of_max_score;
+        // (query_row_of_max_score, target_col_of_max_score);
+    // let mut align_query: Vec<u8> = vec![];
+    // let mut align_target: Vec<u8> = vec![];
+    // let mut line: Vec<u8> = vec![];
     while trace_query_row > 0
         && trace_target_col > 0
         && align_matrix.get_score(trace_query_row, trace_target_col) > 0
     {
         let this_direction = align_matrix.get_direction(trace_query_row, trace_target_col);
         if this_direction == Direction::Diag {
-            align_query.push(query[trace_query_row - 1]);
-            align_target.push(target[trace_target_col - 1]);
+            align_result.align_query.push(query[trace_query_row - 1]);
+            align_result.align_target.push(target[trace_target_col - 1]);
             if is_match(&query[trace_query_row - 1], &target[trace_target_col-1]) {
-                line.push(b'|');
+                align_result.align_line.push(b'|');
             } else {
-                line.push(b':')
+                align_result.align_line.push(b':')
             }
             trace_target_col -= 1;
             trace_query_row -= 1;
         } else if this_direction == Direction::Up {
-            align_target.push(b'-');
-            align_query.push(query[trace_query_row - 1]);
+            align_result.align_target.push(b'-');
+            align_result.align_query.push(query[trace_query_row - 1]);
             trace_query_row -= 1;
-            line.push(b' ');
+            align_result.align_line.push(b' ');
         } else if this_direction == Direction::Left {
-            align_query.push(b'-');
-            align_target.push(target[trace_target_col - 1]);
+            align_result.align_query.push(b'-');
+            align_result.align_target.push(target[trace_target_col - 1]);
             trace_target_col -= 1;
-            line.push(b' ');
+            align_result.align_line.push(b' ');
         } else {
         }
     }
-    println!("{trace_query_row}-{query_row_of_max_score}");
-    println!("{trace_target_col}-{target_col_of_max_score}");
-    align_target.reverse();
-    align_query.reverse();
-    line.reverse();
-    println!("target: {}", std::str::from_utf8(&align_target)?);
-    println!("line:   {}", std::str::from_utf8(&line)?);
-    println!("query:  {}", std::str::from_utf8(&align_query)?);
+    align_result.idx_of_start = (trace_query_row, trace_target_col);
+    // println!("{trace_query_row}-{query_row_of_max_score}");
+    // println!("{trace_target_col}-{target_col_of_max_score}");
+    align_result.reverse();
+    println!("{}", &align_result);
+    // align_target.reverse();
+    // align_query.reverse();
+    // line.reverse();
+    // println!("target: {}", std::str::from_utf8(&align_target)?);
+    // println!("line:   {}", std::str::from_utf8(&line)?);
+    // println!("query:  {}", std::str::from_utf8(&align_query)?);
     Ok(())
 }
 
@@ -161,7 +161,7 @@ fn smith_waterman(
 fn needleman_wunsch(query: &[u8], target: &[u8], align_config: AlignConfig) {}
 
 // #[cfg(test)]
-// #[test]
+#[test]
 pub fn test_local_align() {
     let align_config = AlignConfig {
         match_score: 3,
@@ -175,5 +175,7 @@ pub fn test_local_align() {
     // let target = b"GTTTTGTTTAACCTACTTCGTTCAGTTACGTATTGCTAAGGTTAACACAAAGACACCGACAACTTTCTCGCAGCACCTGTGTTTTGCCCGTGCATATCGGTCACGAACAAATCTGATTACTAAACACAGTAGCCTGGATTTGTTCTATCAGTAATCGACCTTATTCCTAATTAAATAGAGCAAATCCCCTTATTGGGGGTAAGACATGAAGATGCCGAAAAACATGACCTGTTGGCCGCCATTCTCGCGGCAAAGGAACAAGGCATCGGGGCAATCCTTGCGTTTGCAATGGCGTACCTTCGCGGCAGATATCAATGGCGGTGCGTTTACAAAAACAGTAATCGACGCAACGATGTGCGCCATTATCGCCTAGTTCATTCGTGACCTTCTCGACTTCGCCGGACTAAGTAGCAATCTCGCTTATATAACGAGCGTGTTTATCGGCTACATCGGTACTGACTCGATTGGTTCGCTTATCAAACGCTTCGCTGCTAAAAAAGCCGGAGTCAAGAAGATGGTAGAAATCAATAATCAACGTAAGGCGTTCCTCGATATGCTGGCGTGGTCGGAGGGAACTGATAACGGACGTCAGAAAACCAGAAATCATGGTTATGACGTCATTGTAGGCGGAGAGCTATTTACTGATTACTCCGATCACCCTCGCAAACTTGTCACGCTAAACCCAAAACTCAAATCAACAGGCGCCGGACGCTACCAGCTTCTTTCCCGTTGGTGGGATGCCTACCGCAAGCAGCTTGGCCTGAAAGACTTCTCTCCGAAAAGTCAGGACGCTGTGGCATTGCAGCAACCTAAGGAGCGTCACACTTGTCCTGATTGATCGTGGTGATATCCGTCAGGCAATCGACCGTTGCAGCAATATCTGGGCTTCACTGCCGGGCGCTGGTTATGGTCAGTTCGAGCATAAGGCTGACAGCCTGATTGCAAAATTCAAAGAAGCGGGCGGAACAGTCAGATTGATGTATGAGCAGAGTCACCGCGATTATCTCCGCTCTGGTTATCTGCATCATCGTCTGCCTGTCATGGGCTGTTAATCATTACCGTGATAACGCCATTACCTACAAAGCCCAGCGCGACAAAAATGCCAGAGAACTGAAGCTGGCGAACGCGGCAATTACTGACATGCAGATGCGTCAGCGTGATGTTGCTGCGCTCGATGCAAAATACACGAAGGAGTTAGCTGATGCTAAAGCTGAAAATGATGCTCTGCGTGATGATGTTGCCGCTGGTCGTCGTCGGTTGCACATCAAAGCAGTCTGTGGTGCAGTTGGTTGAAGCCACCACGCCCTTCCGGCGTGGATAATGCAGCCTCCCCCGACTGGCAGACACCGCTGAACGGGATTATTTCACCTCAGAGGCTGATCACTATGCAAAAACAACTGGAAGGAACCCAGAAGTATATTAATGAGCAGTGCAGATAGAGTTGCCCATATCGATGGGCAACTCATGCAATTATTGTGAGCAATACACACGCGCTTCCAGCGGAGTATAAATGCCTAAAGTAAT";
     let target = b"TTTAGCCTGTGCTTCGTTTAGTTACGTATTGCTAAGGTTAACACAAAGACACCGACAACTTTCTCAGCACCTAATGATGCTCTGCGTGATGATGTTGCCGCTGGTCGTCGTCGGTTGCACGTCAAGCGGTCTGTAGTCGTGCGTAAAGCCACCACCGCCTCCGGCGTGGATAATGCAGCCTCCCCGACTCGGCAGACACCGCTGAACGGGATTATTTCACCCTCAGAGAGAGGCTGATCACTATGCAAAAACAACTGGAAGGAACCCAGAAGTATATTAATGAGCAGTGCAGATAGAGTTGCCCATATCGATGGGCAACTCATGCAATTATTGTGAGCAATACACACGCGCTTCCAGCGGAGTATAAATGCCTAAAGTAATAAAACCGAGCAATCCATTTACGAATGTTTGCTGGGTTTCTGTTTTAACAACATTTTCTGCGCCGCCACAAATTTTGGCTGCATCGACAGTTTTCTTTCTGCCCAATTCCAGAAACGAAGAAATGATGGGTGATGGTTTCCTTTGGTGCTACTGCTGCCGGTTTGTTTTGAACAGTAAACGTCTGTTGAGCACATCCTGTAATAAGCAGGGCCAGCGCAGTAGCGAGTAGCATTTTTTTCATGGTGTTATTCCCGATGCTTTTTGAAGTTCGCAGAATGGTATCTGTCAAGAATTAAACAAACCCTAAACAATGAGTTGAAATTTCATATTGTTAATATTTATTAATGTATGTCAGGTGCGATGAATCGTCATTGTATTCCCGGATTAACTATGTCCACAGCCCTGACGGGGAACTTCTCTGCGGGAGTGTCCGGGAATAATTAAAACGATGCACACAGGGTTTAGCGCGTACACGTATTGCAT";
     let mut local_matrix = LocalAlignMatrix::new(query.len(), target.len());
-    smith_waterman(&query[..], &target[..], &align_config, &mut local_matrix).unwrap();
+    let mut align_result = AlignResult::new();
+    smith_waterman(&query[..], &target[..], &align_config, &mut local_matrix, &mut align_result).unwrap();
+    println!("{}", &align_result);
 }
