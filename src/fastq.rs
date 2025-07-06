@@ -51,7 +51,7 @@ pub trait ReadStats {
 
     fn is_passed(&self, fo: &FilterOption) -> bool;
 
-    fn write<W: Write>(&self, writer: &mut W) -> Result<(), anyhow::Error>;
+    fn write(&self, writer: &mut dyn Write) -> Result<(), anyhow::Error>;
 }
 
 impl<'a> ReadStats for RefRecord<'a> {
@@ -120,7 +120,7 @@ impl<'a> ReadStats for RefRecord<'a> {
             && gc_passed
     }
 
-    fn write<W: Write>(&self, writer: &mut W) -> Result<(), anyhow::Error> {
+    fn write(&self, writer: &mut dyn Write) -> Result<(), anyhow::Error> {
         unsafe {
             write!(
                 writer,
@@ -163,9 +163,9 @@ impl<R: Read> FastqReader<R> {
         stats_result
     }
 
-    pub(crate) fn filter<W: Write>(
+    pub(crate) fn filter(
         &mut self,
-        writer: &mut BufWriter<W>,
+        writer: &mut dyn Write,
         fo: &FilterOption,
         retain_failed: bool,
         failed_writer: &mut BufWriter<File>,
