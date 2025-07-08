@@ -1,3 +1,4 @@
+/*
 use std::fmt::{Display, Formatter};
 use anyhow::Error;
 use crate::alignment::Direction::{Diag, Left, Up, Null};
@@ -129,3 +130,5 @@ impl Display for AlignResult{
         }
     }
 }
+
+ */

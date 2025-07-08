@@ -1,3 +1,4 @@
+/*
 use crate::alignment::{AlignConfig, AlignMatrix, AlignResult, Direction, GlobalAlignMatrix, LocalAlignMatrix};
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
@@ -190,3 +191,6 @@ pub fn test_local_align() {
     let dur = start.elapsed();
     println!("{:.10?}", dur)
 }
+
+
+ */

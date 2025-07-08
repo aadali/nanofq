@@ -232,62 +232,62 @@ pub fn get_seq_info() -> &'static HashMap<&'static str, &'static SequenceInfo> {
     })
 }
 
-type End = (usize, f64, f64);
+pub type End = (usize, f64, f64);
 #[derive(Clone, Debug)]
 pub struct SequenceInfo {
-    name: &'static str,
-    end5: (&'static str, End),
-    end3: Option<(&'static str, End)>,
-    rev_com_end5: Option<(&'static str, End)>,
-    rev_com_end3: Option<(&'static str, End)>,
+    pub name: &'static str,
+    pub end5: (&'static str, End),
+    pub end3: Option<(&'static str, End)>,
+    pub rev_com_end5: Option<(&'static str, End)>,
+    pub rev_com_end3: Option<(&'static str, End)>,
 }
 
 impl SequenceInfo {
     fn single_update(
         end: &mut End,
         len: (ValueSource, usize),
-        percent: (ValueSource, f64),
-        identity: (ValueSource, f64),
+        pct: (ValueSource, f64),
+        ident: (ValueSource, f64),
     ) {
         if len.0 == ValueSource::CommandLine {
             end.0 = len.1
         }
-        if percent.0 == ValueSource::CommandLine {
-            end.1 = percent.1;
+        if pct.0 == ValueSource::CommandLine {
+            end.1 = pct.1;
         }
 
-        if identity.0 == ValueSource::CommandLine {
-            end.2 = identity.1;
+        if ident.0 == ValueSource::CommandLine {
+            end.2 = ident.1;
         }
     }
     pub fn update(
         &mut self,
         end5_len: (ValueSource, usize),
-        end5_percent: (ValueSource, f64),
-        end5_identity: (ValueSource, f64),
+        end5_pct: (ValueSource, f64),
+        end5_ident: (ValueSource, f64),
         end3_len: (ValueSource, usize),
-        end3_percent: (ValueSource, f64),
-        end3_identity: (ValueSource, f64),
+        end3_pct: (ValueSource, f64),
+        end3_ident: (ValueSource, f64),
         rev_com_end5_len: (ValueSource, usize),
-        rev_com_end5_percent: (ValueSource, f64),
-        rev_com_end5_identity: (ValueSource, f64),
+        rev_com_end5_pct: (ValueSource, f64),
+        rev_com_end5_ident: (ValueSource, f64),
         rev_com_end3_len: (ValueSource, usize),
-        rev_com_end3_percent: (ValueSource, f64),
-        rev_com_end3_identity: (ValueSource, f64),
+        rev_com_end3_pct: (ValueSource, f64),
+        rev_com_end3_ident: (ValueSource, f64),
     ) {
         if end5_len.0 == ValueSource::CommandLine {
             self.end5.1.0 = end5_len.1
         }
-        if end5_percent.0 == ValueSource::CommandLine {
-            self.end5.1.1 = end5_percent.1
+        if end5_pct.0 == ValueSource::CommandLine {
+            self.end5.1.1 = end5_pct.1
         }
-        if end5_identity.0 == ValueSource::CommandLine {
-            self.end5.1.2 = end5_identity.1
+        if end5_ident.0 == ValueSource::CommandLine {
+            self.end5.1.2 = end5_ident.1
         }
 
         if self.end3.is_some() {
             let mut this_end3 = self.end3.unwrap().1.clone();
-            Self::single_update(&mut this_end3, end3_len, end3_percent, end3_identity);
+            Self::single_update(&mut this_end3, end3_len, end3_pct, end3_ident);
             self.end3 = Some((self.end3.unwrap().0, this_end3));
         }
         if self.rev_com_end5.is_some() {
@@ -295,8 +295,8 @@ impl SequenceInfo {
             Self::single_update(
                 &mut this_rev_com_end5,
                 rev_com_end5_len,
-                rev_com_end5_percent,
-                rev_com_end5_percent,
+                rev_com_end5_pct,
+                rev_com_end5_pct,
             );
             self.rev_com_end5 = Some((self.rev_com_end5.unwrap().0, this_rev_com_end5))
         }
@@ -306,8 +306,8 @@ impl SequenceInfo {
             Self::single_update(
                 &mut this_rev_com_end3,
                 rev_com_end3_len,
-                rev_com_end3_percent,
-                rev_com_end3_percent,
+                rev_com_end3_pct,
+                rev_com_end3_pct,
             );
             self.rev_com_end3 = Some((self.rev_com_end3.unwrap().0, this_rev_com_end3))
         }
