@@ -1,20 +1,20 @@
 use ansi_term::Color;
 use seq_io::fastq;
 use seq_io::fastq::{Record, RefRecord};
-use std::fmt::Display;
 use std::fs::File;
 use std::io::{BufWriter, Read, Write};
 use std::ops::{Deref, DerefMut};
-use lazy_static::lazy_static;
+use std::sync::OnceLock;
 
-lazy_static! {
-    static ref Q2P_TABLE: [f64; 128] = {
+static Q2P_TABLE: OnceLock<[f64; 128]> = OnceLock::new();
+fn get_q2p_table() -> &'static [f64; 128] {
+    Q2P_TABLE.get_or_init(|| {
         let mut arr = [f64::NAN; 128];
         for q in 33..127usize {
             arr[q] = 10.0f64.powf((q - 33) as f64 / -10.0)
         }
         arr
-    };
+    })
 }
 
 const BUFF: usize = 1024 * 1024;
@@ -78,7 +78,7 @@ impl<'a> ReadStats for RefRecord<'a> {
         let avg_err_prob = self
             .qual()
             .iter()
-            .map(|x| Q2P_TABLE[*x as usize])
+            .map(|x| get_q2p_table()[*x as usize])
             .sum::<f64>()
             / seq_len;
         let quality = avg_err_prob.log10() * -10.0;
