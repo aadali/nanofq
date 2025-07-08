@@ -2,7 +2,6 @@ use std::fmt::{Display, Formatter};
 use anyhow::Error;
 use crate::alignment::Direction::{Diag, Left, Up, Null};
 
-mod adapter;
 pub mod pairwise_align;
 
 #[derive(PartialEq, Clone, Copy)]
@@ -82,6 +81,7 @@ impl AlignMatrix  for LocalAlignMatrix{
     }
 }
 
+#[derive(Debug)]
 struct AlignResult {
     align_target: Vec<u8>,
     align_line: Vec<u8>,

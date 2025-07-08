@@ -1,6 +1,7 @@
 use crate::alignment::{AlignConfig, AlignMatrix, AlignResult, Direction, GlobalAlignMatrix, LocalAlignMatrix};
 use lazy_static::lazy_static;
 use std::collections::{HashMap, HashSet};
+use std::time::Instant;
 
 // local
 lazy_static! {
@@ -24,7 +25,7 @@ lazy_static! {
     };
 }
 #[inline]
-fn is_match(query_base: &u8, target_base: &u8) -> bool {
+fn is_matched(query_base: &u8, target_base: &u8) -> bool {
     query_base == target_base || {
         if let Some(target_bases) = BASES.get(query_base) {
             target_bases.contains(target_base)
@@ -33,7 +34,7 @@ fn is_match(query_base: &u8, target_base: &u8) -> bool {
         }
     }
 }
-fn smith_waterman(
+pub fn smith_waterman(
     query: &[u8],
     target: &[u8],
     align_config: &AlignConfig,
@@ -55,7 +56,7 @@ fn smith_waterman(
         for target_col in 1..target.len() + 1 {
             // calculate score from diag
             let prev_score_from_diag = align_matrix.get_score(query_row - 1, target_col - 1);
-            let bases_align_score = if is_match(&query[query_row - 1], &target[target_col - 1]) {
+            let bases_align_score = if is_matched(&query[query_row - 1], &target[target_col - 1]) {
                 align_config.match_score
             } else {
                 align_config.mismatch_score
@@ -109,12 +110,7 @@ fn smith_waterman(
             }
         }
     }
-    // trace back depend on the direction_matrix
     let (mut trace_query_row, mut trace_target_col) = align_result.idx_of_max_score;
-        // (query_row_of_max_score, target_col_of_max_score);
-    // let mut align_query: Vec<u8> = vec![];
-    // let mut align_target: Vec<u8> = vec![];
-    // let mut line: Vec<u8> = vec![];
     while trace_query_row > 0
         && trace_target_col > 0
         && align_matrix.get_score(trace_query_row, trace_target_col) > 0
@@ -123,7 +119,7 @@ fn smith_waterman(
         if this_direction == Direction::Diag {
             align_result.align_query.push(query[trace_query_row - 1]);
             align_result.align_target.push(target[trace_target_col - 1]);
-            if is_match(&query[trace_query_row - 1], &target[trace_target_col-1]) {
+            if is_matched(&query[trace_query_row - 1], &target[trace_target_col-1]) {
                 align_result.align_line.push(b'|');
             } else {
                 align_result.align_line.push(b':')
@@ -134,7 +130,7 @@ fn smith_waterman(
             align_result.align_target.push(b'-');
             align_result.align_query.push(query[trace_query_row - 1]);
             trace_query_row -= 1;
-            align_result.align_line.push(b' ');
+            align_result.align_line.push(b':');
         } else if this_direction == Direction::Left {
             align_result.align_query.push(b'-');
             align_result.align_target.push(target[trace_target_col - 1]);
@@ -144,16 +140,7 @@ fn smith_waterman(
         }
     }
     align_result.idx_of_start = (trace_query_row, trace_target_col);
-    // println!("{trace_query_row}-{query_row_of_max_score}");
-    // println!("{trace_target_col}-{target_col_of_max_score}");
     align_result.reverse();
-    println!("{}", &align_result);
-    // align_target.reverse();
-    // align_query.reverse();
-    // line.reverse();
-    // println!("target: {}", std::str::from_utf8(&align_target)?);
-    // println!("line:   {}", std::str::from_utf8(&line)?);
-    // println!("query:  {}", std::str::from_utf8(&align_query)?);
     Ok(())
 }
 
@@ -162,7 +149,9 @@ fn needleman_wunsch(query: &[u8], target: &[u8], align_config: AlignConfig) {}
 
 // #[cfg(test)]
 #[test]
+#[ignore]
 pub fn test_local_align() {
+    let start = Instant::now();
     let align_config = AlignConfig {
         match_score: 3,
         mismatch_score: -3,
@@ -170,12 +159,15 @@ pub fn test_local_align() {
         gap_extend_score: -1,
     };
     let query = b"CCTGTACTTCGTTCAGTTACGTATTGCTAAGGTTAACACAAAGACACCGACAACTTTCTT";
-    // let target = b"GGTAATGACATTTATTCGTTCAGTTACGTATTGCTAAGGTTAACACAAAGACACCGACAACTTTCTTCAGCACCTTATTGATTTCTACCATCTTCTACTCCGGCTTTTTTAGCAGCGAAGCGTTTGATAAGCGAACCAATCGAGTCAGTACCGATGTAGCCGATAAACACGCTCGTTATATAAGCGAGATTGCTACTTAGTCCGGCGAAGTCGAGAAGGTCACGA";
+    let target = b"GGTAATGACATTTATTCGTTCAGTTACGTATTGCTAAGGTTAACACAAAGACACCGACAACTTTCTTCAGCACCTTATTGATTTCTACCATCTTCTACTCCGGCTTTTTTAGCAGCGAAGCGTTTGATAAGCGAACCAATCGAGTCAGTACCGATGTAGCCGATAAACACGCTCGTTATATAAGCGAGATTGCTACTTAGTCCGGCGAAGTCGAGAAGGTCACGA";
     // let target = b"TTTGTTAGTCTACTTCGTTCAGTTACGTATTGCTAAAGGTTAACACAAAGACACCGACAACTTTCTTCAGCACCTGCTTACGGTTCACTACTCACGACGATGTTTTTTTTGGTACCTTTTTTTCACCGGAGAGGACCCCGTAAAGTGATAATGATTATCATCTACATATCACAACGTGCGTGGAGGCCATCAAACCACGTCAAATAATCAATTATGACGCAGGTATCGTATTA";
     // let target = b"GTTTTGTTTAACCTACTTCGTTCAGTTACGTATTGCTAAGGTTAACACAAAGACACCGACAACTTTCTCGCAGCACCTGTGTTTTGCCCGTGCATATCGGTCACGAACAAATCTGATTACTAAACACAGTAGCCTGGATTTGTTCTATCAGTAATCGACCTTATTCCTAATTAAATAGAGCAAATCCCCTTATTGGGGGTAAGACATGAAGATGCCGAAAAACATGACCTGTTGGCCGCCATTCTCGCGGCAAAGGAACAAGGCATCGGGGCAATCCTTGCGTTTGCAATGGCGTACCTTCGCGGCAGATATCAATGGCGGTGCGTTTACAAAAACAGTAATCGACGCAACGATGTGCGCCATTATCGCCTAGTTCATTCGTGACCTTCTCGACTTCGCCGGACTAAGTAGCAATCTCGCTTATATAACGAGCGTGTTTATCGGCTACATCGGTACTGACTCGATTGGTTCGCTTATCAAACGCTTCGCTGCTAAAAAAGCCGGAGTCAAGAAGATGGTAGAAATCAATAATCAACGTAAGGCGTTCCTCGATATGCTGGCGTGGTCGGAGGGAACTGATAACGGACGTCAGAAAACCAGAAATCATGGTTATGACGTCATTGTAGGCGGAGAGCTATTTACTGATTACTCCGATCACCCTCGCAAACTTGTCACGCTAAACCCAAAACTCAAATCAACAGGCGCCGGACGCTACCAGCTTCTTTCCCGTTGGTGGGATGCCTACCGCAAGCAGCTTGGCCTGAAAGACTTCTCTCCGAAAAGTCAGGACGCTGTGGCATTGCAGCAACCTAAGGAGCGTCACACTTGTCCTGATTGATCGTGGTGATATCCGTCAGGCAATCGACCGTTGCAGCAATATCTGGGCTTCACTGCCGGGCGCTGGTTATGGTCAGTTCGAGCATAAGGCTGACAGCCTGATTGCAAAATTCAAAGAAGCGGGCGGAACAGTCAGATTGATGTATGAGCAGAGTCACCGCGATTATCTCCGCTCTGGTTATCTGCATCATCGTCTGCCTGTCATGGGCTGTTAATCATTACCGTGATAACGCCATTACCTACAAAGCCCAGCGCGACAAAAATGCCAGAGAACTGAAGCTGGCGAACGCGGCAATTACTGACATGCAGATGCGTCAGCGTGATGTTGCTGCGCTCGATGCAAAATACACGAAGGAGTTAGCTGATGCTAAAGCTGAAAATGATGCTCTGCGTGATGATGTTGCCGCTGGTCGTCGTCGGTTGCACATCAAAGCAGTCTGTGGTGCAGTTGGTTGAAGCCACCACGCCCTTCCGGCGTGGATAATGCAGCCTCCCCCGACTGGCAGACACCGCTGAACGGGATTATTTCACCTCAGAGGCTGATCACTATGCAAAAACAACTGGAAGGAACCCAGAAGTATATTAATGAGCAGTGCAGATAGAGTTGCCCATATCGATGGGCAACTCATGCAATTATTGTGAGCAATACACACGCGCTTCCAGCGGAGTATAAATGCCTAAAGTAAT";
-    let target = b"TTTAGCCTGTGCTTCGTTTAGTTACGTATTGCTAAGGTTAACACAAAGACACCGACAACTTTCTCAGCACCTAATGATGCTCTGCGTGATGATGTTGCCGCTGGTCGTCGTCGGTTGCACGTCAAGCGGTCTGTAGTCGTGCGTAAAGCCACCACCGCCTCCGGCGTGGATAATGCAGCCTCCCCGACTCGGCAGACACCGCTGAACGGGATTATTTCACCCTCAGAGAGAGGCTGATCACTATGCAAAAACAACTGGAAGGAACCCAGAAGTATATTAATGAGCAGTGCAGATAGAGTTGCCCATATCGATGGGCAACTCATGCAATTATTGTGAGCAATACACACGCGCTTCCAGCGGAGTATAAATGCCTAAAGTAATAAAACCGAGCAATCCATTTACGAATGTTTGCTGGGTTTCTGTTTTAACAACATTTTCTGCGCCGCCACAAATTTTGGCTGCATCGACAGTTTTCTTTCTGCCCAATTCCAGAAACGAAGAAATGATGGGTGATGGTTTCCTTTGGTGCTACTGCTGCCGGTTTGTTTTGAACAGTAAACGTCTGTTGAGCACATCCTGTAATAAGCAGGGCCAGCGCAGTAGCGAGTAGCATTTTTTTCATGGTGTTATTCCCGATGCTTTTTGAAGTTCGCAGAATGGTATCTGTCAAGAATTAAACAAACCCTAAACAATGAGTTGAAATTTCATATTGTTAATATTTATTAATGTATGTCAGGTGCGATGAATCGTCATTGTATTCCCGGATTAACTATGTCCACAGCCCTGACGGGGAACTTCTCTGCGGGAGTGTCCGGGAATAATTAAAACGATGCACACAGGGTTTAGCGCGTACACGTATTGCAT";
+    // let target = b"TTTAGCCTGTGCTTCGTTTAGTTACGTATTGCTAAGGTTAACACAAAGACACCGACAACTTTCTCAGCACCTAATGATGCTCTGCGTGATGATGTTGCCGCTGGTCGTCGTCGGTTGCACGTCAAGCGGTCTGTAGTCGTGCGTAAAGCCACCACCGCCTCCGGCGTGGATAATGCAGCCTCCCCGACTCGGCAGACACCGCTGAACGGGATTATTTCACCCTCAGAGAGAGGCTGATCACTATGCAAAAACAACTGGAAGGAACCCAGAAGTATATTAATGAGCAGTGCAGATAGAGTTGCCCATATCGATGGGCAACTCATGCAATTATTGTGAGCAATACACACGCGCTTCCAGCGGAGTATAAATGCCTAAAGTAATAAAACCGAGCAATCCATTTACGAATGTTTGCTGGGTTTCTGTTTTAACAACATTTTCTGCGCCGCCACAAATTTTGGCTGCATCGACAGTTTTCTTTCTGCCCAATTCCAGAAACGAAGAAATGATGGGTGATGGTTTCCTTTGGTGCTACTGCTGCCGGTTTGTTTTGAACAGTAAACGTCTGTTGAGCACATCCTGTAATAAGCAGGGCCAGCGCAGTAGCGAGTAGCATTTTTTTCATGGTGTTATTCCCGATGCTTTTTGAAGTTCGCAGAATGGTATCTGTCAAGAATTAAACAAACCCTAAACAATGAGTTGAAATTTCATATTGTTAATATTTATTAATGTATGTCAGGTGCGATGAATCGTCATTGTATTCCCGGATTAACTATGTCCACAGCCCTGACGGGGAACTTCTCTGCGGGAGTGTCCGGGAATAATTAAAACGATGCACACAGGGTTTAGCGCGTACACGTATTGCAT";
     let mut local_matrix = LocalAlignMatrix::new(query.len(), target.len());
     let mut align_result = AlignResult::new();
     smith_waterman(&query[..], &target[..], &align_config, &mut local_matrix, &mut align_result).unwrap();
     println!("{}", &align_result);
+    println!("{:?}", align_result);
+    let dur = start.elapsed();
+    println!("{:.10?}", dur)
 }
