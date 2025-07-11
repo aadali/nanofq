@@ -43,7 +43,7 @@ impl<'a> FilterOption<'a> {
         }
     }
 }
-pub trait ReadStats {
+pub trait NanoRead {
     fn gc_count(&self) -> f64;
     fn calculate_read_quality(&self) -> (f64, f64);
 
@@ -52,9 +52,11 @@ pub trait ReadStats {
     fn is_passed(&self, fo: &FilterOption) -> bool;
 
     fn write(&self, writer: &mut dyn Write) -> Result<(), anyhow::Error>;
+    
+    fn sub_record_to_string(&self, start: Option<usize>, end: Option<usize>) -> Option<String>;
 }
 
-impl<'a> ReadStats for RefRecord<'a> {
+impl<'a> NanoRead for RefRecord<'a> {
     #[inline]
     fn gc_count(&self) -> f64 {
         let seq_len = self.seq().len() as f64;
@@ -132,6 +134,25 @@ impl<'a> ReadStats for RefRecord<'a> {
         }
         Ok(())
     }
+
+     fn sub_record_to_string(&self, start: Option<usize>, end: Option<usize>) -> Option<String> {
+        let start = start.unwrap_or(0);
+        let end = end.unwrap_or(self.seq().len());
+        if end > start  {
+            let seq = &self.seq()[start..end];
+            let qual = &self.qual()[start..end];
+            unsafe {
+                Some(format!(
+                    "@{}\n{}\n+\n{}\n",
+                    std::str::from_utf8_unchecked(self.head()),
+                    std::str::from_utf8_unchecked(seq),
+                    std::str::from_utf8_unchecked(qual)
+                ))
+            }
+        } else {
+            None
+        }
+    }
 }
 
 pub struct FastqReader<R: Read>(pub fastq::Reader<R>);
@@ -180,7 +201,7 @@ impl<R: Read> FastqReader<R> {
                                 .to_string(),
                         );
                         if ref_record.is_passed(fo) {
-                            ReadStats::write(&ref_record, writer)?
+                            NanoRead::write(&ref_record, writer)?
                         }
                     }
                     None => {
@@ -198,9 +219,9 @@ impl<R: Read> FastqReader<R> {
                                 .to_string(),
                         );
                         if ref_record.is_passed(fo) {
-                            ReadStats::write(&ref_record, writer)?
+                            NanoRead::write(&ref_record, writer)?
                         } else {
-                            ReadStats::write(&ref_record, failed_writer)?
+                            NanoRead::write(&ref_record, failed_writer)?
                         }
                     }
                     None => {

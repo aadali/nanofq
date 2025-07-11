@@ -1,4 +1,4 @@
-use crate::fastq::{EachStats, FastqReader, FilterOption, ReadStats};
+use crate::fastq::{EachStats, FastqReader, FilterOption, NanoRead};
 use crate::summary::{write_stats, write_summary};
 use clap::ArgMatches;
 use flate2::bufread::MultiGzDecoder;

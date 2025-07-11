@@ -1,4 +1,4 @@
-use hashbrown::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::hint::assert_unchecked;
 use std::io::IoSliceMut;
 use std::sync::OnceLock;

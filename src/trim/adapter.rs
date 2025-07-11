@@ -1,5 +1,7 @@
 use clap::parser::ValueSource;
 use std::collections::HashMap;
+use std::io::repeat;
+use std::iter::repeat_n;
 use std::sync::OnceLock;
 
 static SEQ_INFO: OnceLock<HashMap<&str, &SequenceInfo>> = OnceLock::new();
@@ -203,30 +205,30 @@ pub fn get_seq_info() -> &'static HashMap<&'static str, &'static SequenceInfo> {
             ("RBK_95", &RBK_95),
             ("RBK_96", &RBK_96),
             ("PCS", &PCS),
-            ("PCB_1", &PCB_1),
-            ("PCB_2", &PCB_2),
-            ("PCB_3", &PCB_3),
-            ("PCB_4", &PCB_4),
-            ("PCB_5", &PCB_5),
-            ("PCB_6", &PCB_6),
-            ("PCB_7", &PCB_7),
-            ("PCB_8", &PCB_8),
-            ("PCB_9", &PCB_9),
-            ("PCB_10", &PCB_10),
-            ("PCB_11", &PCB_11),
-            ("PCB_12", &PCB_12),
-            ("PCB_13", &PCB_13),
-            ("PCB_14", &PCB_14),
-            ("PCB_15", &PCB_15),
-            ("PCB_16", &PCB_16),
-            ("PCB_17", &PCB_17),
-            ("PCB_18", &PCB_18),
-            ("PCB_19", &PCB_19),
-            ("PCB_20", &PCB_20),
-            ("PCB_21", &PCB_21),
-            ("PCB_22", &PCB_22),
-            ("PCB_23", &PCB_23),
-            ("PCB_24", &PCB_24),
+            ("PCB", &PCB),
+            // ("PCB_2", &PCB_2),
+            // ("PCB_3", &PCB_3),
+            // ("PCB_4", &PCB_4),
+            // ("PCB_5", &PCB_5),
+            // ("PCB_6", &PCB_6),
+            // ("PCB_7", &PCB_7),
+            // ("PCB_8", &PCB_8),
+            // ("PCB_9", &PCB_9),
+            // ("PCB_10", &PCB_10),
+            // ("PCB_11", &PCB_11),
+            // ("PCB_12", &PCB_12),
+            // ("PCB_13", &PCB_13),
+            // ("PCB_14", &PCB_14),
+            // ("PCB_15", &PCB_15),
+            // ("PCB_16", &PCB_16),
+            // ("PCB_17", &PCB_17),
+            // ("PCB_18", &PCB_18),
+            // ("PCB_19", &PCB_19),
+            // ("PCB_20", &PCB_20),
+            // ("PCB_21", &PCB_21),
+            // ("PCB_22", &PCB_22),
+            // ("PCB_23", &PCB_23),
+            // ("PCB_24", &PCB_24),
         ]);
         seq_info
     })
@@ -235,8 +237,8 @@ pub fn get_seq_info() -> &'static HashMap<&'static str, &'static SequenceInfo> {
 pub type End = (usize, f64, f64);
 #[derive(Clone, Debug)]
 pub struct SequenceInfo {
-    pub name: &'static str,
-    pub end5: (&'static str, End),
+    pub kit_name: &'static str,
+    pub end5: Option<(&'static str, End)>,
     pub end3: Option<(&'static str, End)>,
     pub rev_com_end5: Option<(&'static str, End)>,
     pub rev_com_end3: Option<(&'static str, End)>,
@@ -260,6 +262,68 @@ impl SequenceInfo {
             end.2 = ident.1;
         }
     }
+
+    pub fn get_info(&self) -> String {
+        let mut info = String::new();
+        info.push_str(self.kit_name);
+        info.push('\n');
+        if self.end5.is_some() {
+            let end5 = self.end5.unwrap();
+            info.push_str(&format!(
+                "Expect sequence1 in 5'end: {}, length: {}, config: {:?}\n",
+                end5.0,
+                end5.0.len(),
+                end5.1
+            ));
+        }
+        if self.end3.is_some() {
+            let end3 = self.end3.unwrap();
+            info.push_str(&format!(
+                "Expect sequence1 in 3'end: {}, length: {}, config: {:?}\n",
+                end3.0,
+                end3.0.len(),
+                end3.1
+            ));
+        }
+
+        if self.rev_com_end5.is_some() {
+            let rev_com_end5 = self.rev_com_end5.unwrap();
+            info.push_str(&format!(
+                "Expect sequence2 in 5'end: {}, length: {}, config: {:?}\n",
+                rev_com_end5.0,
+                rev_com_end5.0.len(),
+                rev_com_end5.1
+            ));
+        }
+        if self.rev_com_end3.is_some() {
+            let rev_com_end3 = self.rev_com_end3.unwrap();
+            info.push_str(&format!(
+                "Expect sequence2 in 3'end: {}, length: {}, config: {:?}\n",
+                rev_com_end3.0,
+                rev_com_end3.0.len(),
+                rev_com_end3.1
+            ));
+        }
+        let x: String = repeat_n('=', 100).collect::<String>() + "\n";
+        info.push_str(&x);
+        info
+    }
+
+    #[inline]
+    pub fn maybe_trim_end3(&self) -> bool {
+        self.end3.is_some()
+    }
+
+    #[inline]
+    pub fn maybe_trim_rev_com_end5(&self) -> bool {
+        self.rev_com_end5.is_some()
+    }
+
+    #[inline]
+    pub fn maybe_trim_rev_com_end3(&self) -> bool {
+        self.rev_com_end3.is_some()
+    }
+
     pub fn update(
         &mut self,
         end5_len: (ValueSource, usize),
@@ -275,16 +339,11 @@ impl SequenceInfo {
         rev_com_end3_pct: (ValueSource, f64),
         rev_com_end3_ident: (ValueSource, f64),
     ) {
-        if end5_len.0 == ValueSource::CommandLine {
-            self.end5.1.0 = end5_len.1
+        if self.end5.is_some() {
+            let mut this_end5 = self.end5.unwrap().1.clone();
+            Self::single_update(&mut this_end5, end5_len, end5_pct, end5_ident);
+            self.end5 = Some((self.end5.unwrap().0, this_end5))
         }
-        if end5_pct.0 == ValueSource::CommandLine {
-            self.end5.1.1 = end5_pct.1
-        }
-        if end5_ident.0 == ValueSource::CommandLine {
-            self.end5.1.2 = end5_ident.1
-        }
-
         if self.end3.is_some() {
             let mut this_end3 = self.end3.unwrap().1.clone();
             Self::single_update(&mut this_end3, end3_len, end3_pct, end3_ident);
@@ -324,10 +383,10 @@ const PCS_END5: End = (150, 0.6, 0.75);
 const PCS_END3: End = (150, 0.4, 0.75);
 const PCS_REV_COM_END5: End = (150, 0.6, 0.75);
 const PCS_REV_COM_END3: End = (150, 0.4, 0.75);
-const PCB_END5: End = (180, 0.4, 0.75);
-const PCB_END3: End = (180, 0.3, 0.75);
+const PCB_END5: End = (180, 0.5, 0.75);
+const PCB_END3: End = (180, 0.5, 0.75);
 const PCB_REV_COM_END5: End = (180, 0.5, 0.75);
-const PCB_REV_COM_END3: End = (180, 0.3, 0.75);
+const PCB_REV_COM_END3: End = (180, 0.5, 0.75);
 
 /*
 SQK-LSK114
@@ -338,8 +397,8 @@ LSK114 library reads structure
 3' end always is truncated
  */
 const LSK: SequenceInfo = SequenceInfo {
-    name: "LSK",
-    end5: ("CCTGTACTTCGTTCAGTTACGTATTGCT", LSK_END5),
+    kit_name: "LSK",
+    end5: Some(("CCTGTACTTCGTTCAGTTACGTATTGCT", LSK_END5)),
     end3: Some(("AGCAATACGTAACTGAACGAAGTACAGG", LSK_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
@@ -356,21 +415,21 @@ const LSK: SequenceInfo = SequenceInfo {
 
 */
 const RAD: SequenceInfo = SequenceInfo {
-    name: "RAD",
-    end5: (
+    kit_name: "RAD",
+    end5: Some((
         "GCTTGGGTGTTTAACCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RAD_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const ULK: SequenceInfo = SequenceInfo {
-    name: "ULK",
-    end5: (
+    kit_name: "ULK",
+    end5: Some((
         "GCTTGGGTGTTTAACCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RAD_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
@@ -385,1633 +444,1640 @@ Example for Native Barcode01
 we use barcode_left_flanking + barcode + barcode_right_flanking as query to trim nbd reads
 */
 const NBD_1: SequenceInfo = SequenceInfo {
-    name: "NBD_1",
-    end5: ("AAGGTTAACACAAAGACACCGACAACTTTCTTCAGCACCT", NBD_END5),
+    kit_name: "NBD_1",
+    end5: Some(("AAGGTTAACACAAAGACACCGACAACTTTCTTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGAAGAAAGTTGTCGGTGTCTTTGTGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_2: SequenceInfo = SequenceInfo {
-    name: "NBD_2",
-    end5: ("AAGGTTAAACAGACGACTACAAACGGAATCGACAGCACCT", NBD_END5),
+    kit_name: "NBD_2",
+    end5: Some(("AAGGTTAAACAGACGACTACAAACGGAATCGACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTCGATTCCGTTTGTAGTCGTCTGTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_3: SequenceInfo = SequenceInfo {
-    name: "NBD_3",
-    end5: ("AAGGTTAACCTGGTAACTGGGACACAAGACTCCAGCACCT", NBD_END5),
+    kit_name: "NBD_3",
+    end5: Some(("AAGGTTAACCTGGTAACTGGGACACAAGACTCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGAGTCTTGTGTCCCAGTTACCAGGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_4: SequenceInfo = SequenceInfo {
-    name: "NBD_4",
-    end5: ("AAGGTTAATAGGGAAACACGATAGAATCCGAACAGCACCT", NBD_END5),
+    kit_name: "NBD_4",
+    end5: Some(("AAGGTTAATAGGGAAACACGATAGAATCCGAACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTTCGGATTCTATCGTGTTTCCCTATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_5: SequenceInfo = SequenceInfo {
-    name: "NBD_5",
-    end5: ("AAGGTTAAAAGGTTACACAAACCCTGGACAAGCAGCACCT", NBD_END5),
+    kit_name: "NBD_5",
+    end5: Some(("AAGGTTAAAAGGTTACACAAACCCTGGACAAGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCTTGTCCAGGGTTTGTGTAACCTTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_6: SequenceInfo = SequenceInfo {
-    name: "NBD_6",
-    end5: ("AAGGTTAAGACTACTTTCTGCCTTTGCGAGAACAGCACCT", NBD_END5),
+    kit_name: "NBD_6",
+    end5: Some(("AAGGTTAAGACTACTTTCTGCCTTTGCGAGAACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTTCTCGCAAAGGCAGAAAGTAGTCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_7: SequenceInfo = SequenceInfo {
-    name: "NBD_7",
-    end5: ("AAGGTTAAAAGGATTCATTCCCACGGTAACACCAGCACCT", NBD_END5),
+    kit_name: "NBD_7",
+    end5: Some(("AAGGTTAAAAGGATTCATTCCCACGGTAACACCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGTGTTACCGTGGGAATGAATCCTTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_8: SequenceInfo = SequenceInfo {
-    name: "NBD_8",
-    end5: ("AAGGTTAAACGTAACTTGGTTTGTTCCCTGAACAGCACCT", NBD_END5),
+    kit_name: "NBD_8",
+    end5: Some(("AAGGTTAAACGTAACTTGGTTTGTTCCCTGAACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTTCAGGGAACAAACCAAGTTACGTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_9: SequenceInfo = SequenceInfo {
-    name: "NBD_9",
-    end5: ("AAGGTTAAAACCAAGACTCGCTGTGCCTAGTTCAGCACCT", NBD_END5),
+    kit_name: "NBD_9",
+    end5: Some(("AAGGTTAAAACCAAGACTCGCTGTGCCTAGTTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGAACTAGGCACAGCGAGTCTTGGTTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_10: SequenceInfo = SequenceInfo {
-    name: "NBD_10",
-    end5: ("AAGGTTAAGAGAGGACAAAGGTTTCAACGCTTCAGCACCT", NBD_END5),
+    kit_name: "NBD_10",
+    end5: Some(("AAGGTTAAGAGAGGACAAAGGTTTCAACGCTTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGAAGCGTTGAAACCTTTGTCCTCTCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_11: SequenceInfo = SequenceInfo {
-    name: "NBD_11",
-    end5: ("AAGGTTAATCCATTCCCTCCGATAGATGAAACCAGCACCT", NBD_END5),
+    kit_name: "NBD_11",
+    end5: Some(("AAGGTTAATCCATTCCCTCCGATAGATGAAACCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGTTTCATCTATCGGAGGGAATGGATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_12: SequenceInfo = SequenceInfo {
-    name: "NBD_12",
-    end5: ("AAGGTTAATCCGATTCTGCTTCTTTCTACCTGCAGCACCT", NBD_END5),
+    kit_name: "NBD_12",
+    end5: Some(("AAGGTTAATCCGATTCTGCTTCTTTCTACCTGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCAGGTAGAAAGAAGCAGAATCGGATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_13: SequenceInfo = SequenceInfo {
-    name: "NBD_13",
-    end5: ("AAGGTTAAAGAACGACTTCCATACTCGTGTGACAGCACCT", NBD_END5),
+    kit_name: "NBD_13",
+    end5: Some(("AAGGTTAAAGAACGACTTCCATACTCGTGTGACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTCACACGAGTATGGAAGTCGTTCTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_14: SequenceInfo = SequenceInfo {
-    name: "NBD_14",
-    end5: ("AAGGTTAAAACGAGTCTCTTGGGACCCATAGACAGCACCT", NBD_END5),
+    kit_name: "NBD_14",
+    end5: Some(("AAGGTTAAAACGAGTCTCTTGGGACCCATAGACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTCTATGGGTCCCAAGAGACTCGTTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_15: SequenceInfo = SequenceInfo {
-    name: "NBD_15",
-    end5: ("AAGGTTAAAGGTCTACCTCGCTAACACCACTGCAGCACCT", NBD_END5),
+    kit_name: "NBD_15",
+    end5: Some(("AAGGTTAAAGGTCTACCTCGCTAACACCACTGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCAGTGGTGTTAGCGAGGTAGACCTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_16: SequenceInfo = SequenceInfo {
-    name: "NBD_16",
-    end5: ("AAGGTTAACGTCAACTGACAGTGGTTCGTACTCAGCACCT", NBD_END5),
+    kit_name: "NBD_16",
+    end5: Some(("AAGGTTAACGTCAACTGACAGTGGTTCGTACTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGAGTACGAACCACTGTCAGTTGACGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_17: SequenceInfo = SequenceInfo {
-    name: "NBD_17",
-    end5: ("AAGGTTAAACCCTCCAGGAAAGTACCTCTGATCAGCACCT", NBD_END5),
+    kit_name: "NBD_17",
+    end5: Some(("AAGGTTAAACCCTCCAGGAAAGTACCTCTGATCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGATCAGAGGTACTTTCCTGGAGGGTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_18: SequenceInfo = SequenceInfo {
-    name: "NBD_18",
-    end5: ("AAGGTTAACCAAACCCAACAACCTAGATAGGCCAGCACCT", NBD_END5),
+    kit_name: "NBD_18",
+    end5: Some(("AAGGTTAACCAAACCCAACAACCTAGATAGGCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGCCTATCTAGGTTGTTGGGTTTGGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_19: SequenceInfo = SequenceInfo {
-    name: "NBD_19",
-    end5: ("AAGGTTAAGTTCCTCGTGCAGTGTCAAGAGATCAGCACCT", NBD_END5),
+    kit_name: "NBD_19",
+    end5: Some(("AAGGTTAAGTTCCTCGTGCAGTGTCAAGAGATCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGATCTCTTGACACTGCACGAGGAACTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_20: SequenceInfo = SequenceInfo {
-    name: "NBD_20",
-    end5: ("AAGGTTAATTGCGTCCTGTTACGAGAACTCATCAGCACCT", NBD_END5),
+    kit_name: "NBD_20",
+    end5: Some(("AAGGTTAATTGCGTCCTGTTACGAGAACTCATCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGATGAGTTCTCGTAACAGGACGCAATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_21: SequenceInfo = SequenceInfo {
-    name: "NBD_21",
-    end5: ("AAGGTTAAGAGCCTCTCATTGTCCGTTCTCTACAGCACCT", NBD_END5),
+    kit_name: "NBD_21",
+    end5: Some(("AAGGTTAAGAGCCTCTCATTGTCCGTTCTCTACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTAGAGAACGGACAATGAGAGGCTCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_22: SequenceInfo = SequenceInfo {
-    name: "NBD_22",
-    end5: ("AAGGTTAAACCACTGCCATGTATCAAAGTACGCAGCACCT", NBD_END5),
+    kit_name: "NBD_22",
+    end5: Some(("AAGGTTAAACCACTGCCATGTATCAAAGTACGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCGTACTTTGATACATGGCAGTGGTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_23: SequenceInfo = SequenceInfo {
-    name: "NBD_23",
-    end5: ("AAGGTTAACTTACTACCCAGTGAACCTCCTCGCAGCACCT", NBD_END5),
+    kit_name: "NBD_23",
+    end5: Some(("AAGGTTAACTTACTACCCAGTGAACCTCCTCGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCGAGGAGGTTCACTGGGTAGTAAGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_24: SequenceInfo = SequenceInfo {
-    name: "NBD_24",
-    end5: ("AAGGTTAAGCATAGTTCTGCATGATGGGTTAGCAGCACCT", NBD_END5),
+    kit_name: "NBD_24",
+    end5: Some(("AAGGTTAAGCATAGTTCTGCATGATGGGTTAGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCTAACCCATCATGCAGAACTATGCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_25: SequenceInfo = SequenceInfo {
-    name: "NBD_25",
-    end5: ("AAGGTTAAGTAAGTTGGGTATGCAACGCAATGCAGCACCT", NBD_END5),
+    kit_name: "NBD_25",
+    end5: Some(("AAGGTTAAGTAAGTTGGGTATGCAACGCAATGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCATTGCGTTGCATACCCAACTTACTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_26: SequenceInfo = SequenceInfo {
-    name: "NBD_26",
-    end5: ("AAGGTTAACATACAGCGACTACGCATTCTCATCAGCACCT", NBD_END5),
+    kit_name: "NBD_26",
+    end5: Some(("AAGGTTAACATACAGCGACTACGCATTCTCATCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGATGAGAATGCGTAGTCGCTGTATGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_27: SequenceInfo = SequenceInfo {
-    name: "NBD_27",
-    end5: ("AAGGTTAACGACGGTTAGATTCACCTCTTACACAGCACCT", NBD_END5),
+    kit_name: "NBD_27",
+    end5: Some(("AAGGTTAACGACGGTTAGATTCACCTCTTACACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTGTAAGAGGTGAATCTAACCGTCGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_28: SequenceInfo = SequenceInfo {
-    name: "NBD_28",
-    end5: ("AAGGTTAATGAAACCTAAGAAGGCACCGTATCCAGCACCT", NBD_END5),
+    kit_name: "NBD_28",
+    end5: Some(("AAGGTTAATGAAACCTAAGAAGGCACCGTATCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGATACGGTGCCTTCTTAGGTTTCATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_29: SequenceInfo = SequenceInfo {
-    name: "NBD_29",
-    end5: ("AAGGTTAACTAGACACCTTGGGTTGACAGACCCAGCACCT", NBD_END5),
+    kit_name: "NBD_29",
+    end5: Some(("AAGGTTAACTAGACACCTTGGGTTGACAGACCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGGTCTGTCAACCCAAGGTGTCTAGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_30: SequenceInfo = SequenceInfo {
-    name: "NBD_30",
-    end5: ("AAGGTTAATCAGTGAGGATCTACTTCGACCCACAGCACCT", NBD_END5),
+    kit_name: "NBD_30",
+    end5: Some(("AAGGTTAATCAGTGAGGATCTACTTCGACCCACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTGGGTCGAAGTAGATCCTCACTGATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_31: SequenceInfo = SequenceInfo {
-    name: "NBD_31",
-    end5: ("AAGGTTAATGCGTACAGCAATCAGTTACATTGCAGCACCT", NBD_END5),
+    kit_name: "NBD_31",
+    end5: Some(("AAGGTTAATGCGTACAGCAATCAGTTACATTGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCAATGTAACTGATTGCTGTACGCATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_32: SequenceInfo = SequenceInfo {
-    name: "NBD_32",
-    end5: ("AAGGTTAACCAGTAGAAGTCCGACAACGTCATCAGCACCT", NBD_END5),
+    kit_name: "NBD_32",
+    end5: Some(("AAGGTTAACCAGTAGAAGTCCGACAACGTCATCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGATGACGTTGTCGGACTTCTACTGGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_33: SequenceInfo = SequenceInfo {
-    name: "NBD_33",
-    end5: ("AAGGTTAACAGACTTGGTACGGTTGGGTAACTCAGCACCT", NBD_END5),
+    kit_name: "NBD_33",
+    end5: Some(("AAGGTTAACAGACTTGGTACGGTTGGGTAACTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGAGTTACCCAACCGTACCAAGTCTGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_34: SequenceInfo = SequenceInfo {
-    name: "NBD_34",
-    end5: ("AAGGTTAAGGACGAAGAACTCAAGTCAAAGGCCAGCACCT", NBD_END5),
+    kit_name: "NBD_34",
+    end5: Some(("AAGGTTAAGGACGAAGAACTCAAGTCAAAGGCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGCCTTTGACTTGAGTTCTTCGTCCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_35: SequenceInfo = SequenceInfo {
-    name: "NBD_35",
-    end5: ("AAGGTTAACTACTTACGAAGCTGAGGGACTGCCAGCACCT", NBD_END5),
+    kit_name: "NBD_35",
+    end5: Some(("AAGGTTAACTACTTACGAAGCTGAGGGACTGCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGCAGTCCCTCAGCTTCGTAAGTAGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_36: SequenceInfo = SequenceInfo {
-    name: "NBD_36",
-    end5: ("AAGGTTAAATGTCCCAGTTAGAGGAGGAAACACAGCACCT", NBD_END5),
+    kit_name: "NBD_36",
+    end5: Some(("AAGGTTAAATGTCCCAGTTAGAGGAGGAAACACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTGTTTCCTCCTCTAACTGGGACATTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_37: SequenceInfo = SequenceInfo {
-    name: "NBD_37",
-    end5: ("AAGGTTAAGCTTGCGATTGATGCTTAGTATCACAGCACCT", NBD_END5),
+    kit_name: "NBD_37",
+    end5: Some(("AAGGTTAAGCTTGCGATTGATGCTTAGTATCACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTGATACTAAGCATCAATCGCAAGCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_38: SequenceInfo = SequenceInfo {
-    name: "NBD_38",
-    end5: ("AAGGTTAAACCACAGGAGGACGATACAGAGAACAGCACCT", NBD_END5),
+    kit_name: "NBD_38",
+    end5: Some(("AAGGTTAAACCACAGGAGGACGATACAGAGAACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTTCTCTGTATCGTCCTCCTGTGGTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_39: SequenceInfo = SequenceInfo {
-    name: "NBD_39",
-    end5: ("AAGGTTAACCACAGTGTCAACTAGAGCCTCTCCAGCACCT", NBD_END5),
+    kit_name: "NBD_39",
+    end5: Some(("AAGGTTAACCACAGTGTCAACTAGAGCCTCTCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGAGAGGCTCTAGTTGACACTGTGGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_40: SequenceInfo = SequenceInfo {
-    name: "NBD_40",
-    end5: ("AAGGTTAATAGTTTGGATGACCAAGGATAGCCCAGCACCT", NBD_END5),
+    kit_name: "NBD_40",
+    end5: Some(("AAGGTTAATAGTTTGGATGACCAAGGATAGCCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGGCTATCCTTGGTCATCCAAACTATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_41: SequenceInfo = SequenceInfo {
-    name: "NBD_41",
-    end5: ("AAGGTTAAGGAGTTCGTCCAGAGAAGTACACGCAGCACCT", NBD_END5),
+    kit_name: "NBD_41",
+    end5: Some(("AAGGTTAAGGAGTTCGTCCAGAGAAGTACACGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCGTGTACTTCTCTGGACGAACTCCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_42: SequenceInfo = SequenceInfo {
-    name: "NBD_42",
-    end5: ("AAGGTTAACTACGTGTAAGGCATACCTGCCAGCAGCACCT", NBD_END5),
+    kit_name: "NBD_42",
+    end5: Some(("AAGGTTAACTACGTGTAAGGCATACCTGCCAGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCTGGCAGGTATGCCTTACACGTAGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_43: SequenceInfo = SequenceInfo {
-    name: "NBD_43",
-    end5: ("AAGGTTAACTTTCGTTGTTGACTCGACGGTAGCAGCACCT", NBD_END5),
+    kit_name: "NBD_43",
+    end5: Some(("AAGGTTAACTTTCGTTGTTGACTCGACGGTAGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCTACCGTCGAGTCAACAACGAAAGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_44: SequenceInfo = SequenceInfo {
-    name: "NBD_44",
-    end5: ("AAGGTTAAAGTAGAAAGGGTTCCTTCCCACTCCAGCACCT", NBD_END5),
+    kit_name: "NBD_44",
+    end5: Some(("AAGGTTAAAGTAGAAAGGGTTCCTTCCCACTCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGAGTGGGAAGGAACCCTTTCTACTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_45: SequenceInfo = SequenceInfo {
-    name: "NBD_45",
-    end5: ("AAGGTTAAGATCCAACAGAGATGCCTTCAGTGCAGCACCT", NBD_END5),
+    kit_name: "NBD_45",
+    end5: Some(("AAGGTTAAGATCCAACAGAGATGCCTTCAGTGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCACTGAAGGCATCTCTGTTGGATCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_46: SequenceInfo = SequenceInfo {
-    name: "NBD_46",
-    end5: ("AAGGTTAAGCTGTGTTCCACTTCATTCTCCTGCAGCACCT", NBD_END5),
+    kit_name: "NBD_46",
+    end5: Some(("AAGGTTAAGCTGTGTTCCACTTCATTCTCCTGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCAGGAGAATGAAGTGGAACACAGCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_47: SequenceInfo = SequenceInfo {
-    name: "NBD_47",
-    end5: ("AAGGTTAAGTGCAACTTTCCCACAGGTAGTTCCAGCACCT", NBD_END5),
+    kit_name: "NBD_47",
+    end5: Some(("AAGGTTAAGTGCAACTTTCCCACAGGTAGTTCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGAACTACCTGTGGGAAAGTTGCACTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_48: SequenceInfo = SequenceInfo {
-    name: "NBD_48",
-    end5: ("AAGGTTAACATCTGGAACGTGGTACACCTGTACAGCACCT", NBD_END5),
+    kit_name: "NBD_48",
+    end5: Some(("AAGGTTAACATCTGGAACGTGGTACACCTGTACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTACAGGTGTACCACGTTCCAGATGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_49: SequenceInfo = SequenceInfo {
-    name: "NBD_49",
-    end5: ("AAGGTTAAACTGGTGCAGCTTTGAACATCTAGCAGCACCT", NBD_END5),
+    kit_name: "NBD_49",
+    end5: Some(("AAGGTTAAACTGGTGCAGCTTTGAACATCTAGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCTAGATGTTCAAAGCTGCACCAGTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_50: SequenceInfo = SequenceInfo {
-    name: "NBD_50",
-    end5: ("AAGGTTAAATGGACTTTGGTAACTTCCTGCGTCAGCACCT", NBD_END5),
+    kit_name: "NBD_50",
+    end5: Some(("AAGGTTAAATGGACTTTGGTAACTTCCTGCGTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGACGCAGGAAGTTACCAAAGTCCATTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_51: SequenceInfo = SequenceInfo {
-    name: "NBD_51",
-    end5: ("AAGGTTAAGTTGAATGAGCCTACTGGGTCCTCCAGCACCT", NBD_END5),
+    kit_name: "NBD_51",
+    end5: Some(("AAGGTTAAGTTGAATGAGCCTACTGGGTCCTCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGAGGACCCAGTAGGCTCATTCAACTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_52: SequenceInfo = SequenceInfo {
-    name: "NBD_52",
-    end5: ("AAGGTTAATGAGAGACAAGATTGTTCGTGGACCAGCACCT", NBD_END5),
+    kit_name: "NBD_52",
+    end5: Some(("AAGGTTAATGAGAGACAAGATTGTTCGTGGACCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGTCCACGAACAATCTTGTCTCTCATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_53: SequenceInfo = SequenceInfo {
-    name: "NBD_53",
-    end5: ("AAGGTTAAAGATTCAGACCGTCTCATGCAAAGCAGCACCT", NBD_END5),
+    kit_name: "NBD_53",
+    end5: Some(("AAGGTTAAAGATTCAGACCGTCTCATGCAAAGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCTTTGCATGAGACGGTCTGAATCTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_54: SequenceInfo = SequenceInfo {
-    name: "NBD_54",
-    end5: ("AAGGTTAACAAGAGCTTTGACTAAGGAGCATGCAGCACCT", NBD_END5),
+    kit_name: "NBD_54",
+    end5: Some(("AAGGTTAACAAGAGCTTTGACTAAGGAGCATGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCATGCTCCTTAGTCAAAGCTCTTGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_55: SequenceInfo = SequenceInfo {
-    name: "NBD_55",
-    end5: ("AAGGTTAATGGAAGATGAGACCCTGATCTACGCAGCACCT", NBD_END5),
+    kit_name: "NBD_55",
+    end5: Some(("AAGGTTAATGGAAGATGAGACCCTGATCTACGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCGTAGATCAGGGTCTCATCTTCCATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_56: SequenceInfo = SequenceInfo {
-    name: "NBD_56",
-    end5: ("AAGGTTAATCACTACTCAACAGGTGGCATGAACAGCACCT", NBD_END5),
+    kit_name: "NBD_56",
+    end5: Some(("AAGGTTAATCACTACTCAACAGGTGGCATGAACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTTCATGCCACCTGTTGAGTAGTGATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_57: SequenceInfo = SequenceInfo {
-    name: "NBD_57",
-    end5: ("AAGGTTAAGCTAGGTCAATCTCCTTCGGAAGTCAGCACCT", NBD_END5),
+    kit_name: "NBD_57",
+    end5: Some(("AAGGTTAAGCTAGGTCAATCTCCTTCGGAAGTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGACTTCCGAAGGAGATTGACCTAGCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_58: SequenceInfo = SequenceInfo {
-    name: "NBD_58",
-    end5: ("AAGGTTAACAGGTTACTCCTCCGTGAGTCTGACAGCACCT", NBD_END5),
+    kit_name: "NBD_58",
+    end5: Some(("AAGGTTAACAGGTTACTCCTCCGTGAGTCTGACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTCAGACTCACGGAGGAGTAACCTGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_59: SequenceInfo = SequenceInfo {
-    name: "NBD_59",
-    end5: ("AAGGTTAATCAATCAAGAAGGGAAAGCAAGGTCAGCACCT", NBD_END5),
+    kit_name: "NBD_59",
+    end5: Some(("AAGGTTAATCAATCAAGAAGGGAAAGCAAGGTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGACCTTGCTTTCCCTTCTTGATTGATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_60: SequenceInfo = SequenceInfo {
-    name: "NBD_60",
-    end5: ("AAGGTTAACATGTTCAACCAAGGCTTCTATGGCAGCACCT", NBD_END5),
+    kit_name: "NBD_60",
+    end5: Some(("AAGGTTAACATGTTCAACCAAGGCTTCTATGGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCCATAGAAGCCTTGGTTGAACATGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_61: SequenceInfo = SequenceInfo {
-    name: "NBD_61",
-    end5: ("AAGGTTAAAGAGGGTACTATGTGCCTCAGCACCAGCACCT", NBD_END5),
+    kit_name: "NBD_61",
+    end5: Some(("AAGGTTAAAGAGGGTACTATGTGCCTCAGCACCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGTGCTGAGGCACATAGTACCCTCTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_62: SequenceInfo = SequenceInfo {
-    name: "NBD_62",
-    end5: ("AAGGTTAACACCCACACTTACTTCAGGACGTACAGCACCT", NBD_END5),
+    kit_name: "NBD_62",
+    end5: Some(("AAGGTTAACACCCACACTTACTTCAGGACGTACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTACGTCCTGAAGTAAGTGTGGGTGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_63: SequenceInfo = SequenceInfo {
-    name: "NBD_63",
-    end5: ("AAGGTTAATTCTGAAGTTCCTGGGTCTTGAACCAGCACCT", NBD_END5),
+    kit_name: "NBD_63",
+    end5: Some(("AAGGTTAATTCTGAAGTTCCTGGGTCTTGAACCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGTTCAAGACCCAGGAACTTCAGAATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_64: SequenceInfo = SequenceInfo {
-    name: "NBD_64",
-    end5: ("AAGGTTAAGACAGACACCGTTCATCGACTTTCCAGCACCT", NBD_END5),
+    kit_name: "NBD_64",
+    end5: Some(("AAGGTTAAGACAGACACCGTTCATCGACTTTCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGAAAGTCGATGAACGGTGTCTGTCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_65: SequenceInfo = SequenceInfo {
-    name: "NBD_65",
-    end5: ("AAGGTTAATTCTCAGTCTTCCTCCAGACAAGGCAGCACCT", NBD_END5),
+    kit_name: "NBD_65",
+    end5: Some(("AAGGTTAATTCTCAGTCTTCCTCCAGACAAGGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCCTTGTCTGGAGGAAGACTGAGAATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_66: SequenceInfo = SequenceInfo {
-    name: "NBD_66",
-    end5: ("AAGGTTAACCGATCCTTGTGGCTTCTAACTTCCAGCACCT", NBD_END5),
+    kit_name: "NBD_66",
+    end5: Some(("AAGGTTAACCGATCCTTGTGGCTTCTAACTTCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGAAGTTAGAAGCCACAAGGATCGGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_67: SequenceInfo = SequenceInfo {
-    name: "NBD_67",
-    end5: ("AAGGTTAAGTTTGTCATACTCGTGTGCTCACCCAGCACCT", NBD_END5),
+    kit_name: "NBD_67",
+    end5: Some(("AAGGTTAAGTTTGTCATACTCGTGTGCTCACCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGGTGAGCACACGAGTATGACAAACTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_68: SequenceInfo = SequenceInfo {
-    name: "NBD_68",
-    end5: ("AAGGTTAAGAATCTAAGCAAACACGAAGGTGGCAGCACCT", NBD_END5),
+    kit_name: "NBD_68",
+    end5: Some(("AAGGTTAAGAATCTAAGCAAACACGAAGGTGGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCCACCTTCGTGTTTGCTTAGATTCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_69: SequenceInfo = SequenceInfo {
-    name: "NBD_69",
-    end5: ("AAGGTTAATACAGTCCGAGCCTCATGTGATCTCAGCACCT", NBD_END5),
+    kit_name: "NBD_69",
+    end5: Some(("AAGGTTAATACAGTCCGAGCCTCATGTGATCTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGAGATCACATGAGGCTCGGACTGTATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_70: SequenceInfo = SequenceInfo {
-    name: "NBD_70",
-    end5: ("AAGGTTAAACCGAGATCCTACGAATGGAGTGTCAGCACCT", NBD_END5),
+    kit_name: "NBD_70",
+    end5: Some(("AAGGTTAAACCGAGATCCTACGAATGGAGTGTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGACACTCCATTCGTAGGATCTCGGTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_71: SequenceInfo = SequenceInfo {
-    name: "NBD_71",
-    end5: ("AAGGTTAACCTGGGAGCATCAGGTAGTAACAGCAGCACCT", NBD_END5),
+    kit_name: "NBD_71",
+    end5: Some(("AAGGTTAACCTGGGAGCATCAGGTAGTAACAGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCTGTTACTACCTGATGCTCCCAGGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_72: SequenceInfo = SequenceInfo {
-    name: "NBD_72",
-    end5: ("AAGGTTAATAGCTGACTGTCTTCCATACCGACCAGCACCT", NBD_END5),
+    kit_name: "NBD_72",
+    end5: Some(("AAGGTTAATAGCTGACTGTCTTCCATACCGACCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGTCGGTATGGAAGACAGTCAGCTATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_73: SequenceInfo = SequenceInfo {
-    name: "NBD_73",
-    end5: ("AAGGTTAAAAGAAACAGGATGACAGAACCCTCCAGCACCT", NBD_END5),
+    kit_name: "NBD_73",
+    end5: Some(("AAGGTTAAAAGAAACAGGATGACAGAACCCTCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGAGGGTTCTGTCATCCTGTTTCTTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_74: SequenceInfo = SequenceInfo {
-    name: "NBD_74",
-    end5: ("AAGGTTAATACAAGCATCCCAACACTTCCACTCAGCACCT", NBD_END5),
+    kit_name: "NBD_74",
+    end5: Some(("AAGGTTAATACAAGCATCCCAACACTTCCACTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGAGTGGAAGTGTTGGGATGCTTGTATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_75: SequenceInfo = SequenceInfo {
-    name: "NBD_75",
-    end5: ("AAGGTTAAGACCATTGTGATGAACCCTGTTGTCAGCACCT", NBD_END5),
+    kit_name: "NBD_75",
+    end5: Some(("AAGGTTAAGACCATTGTGATGAACCCTGTTGTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGACAACAGGGTTCATCACAATGGTCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_76: SequenceInfo = SequenceInfo {
-    name: "NBD_76",
-    end5: ("AAGGTTAAATGCTTGTTACATCAACCCTGGACCAGCACCT", NBD_END5),
+    kit_name: "NBD_76",
+    end5: Some(("AAGGTTAAATGCTTGTTACATCAACCCTGGACCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGTCCAGGGTTGATGTAACAAGCATTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_77: SequenceInfo = SequenceInfo {
-    name: "NBD_77",
-    end5: ("AAGGTTAACGACCTGTTTCTCAGGGATACAACCAGCACCT", NBD_END5),
+    kit_name: "NBD_77",
+    end5: Some(("AAGGTTAACGACCTGTTTCTCAGGGATACAACCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGTTGTATCCCTGAGAAACAGGTCGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_78: SequenceInfo = SequenceInfo {
-    name: "NBD_78",
-    end5: ("AAGGTTAAAACAACCGAACCTTTGAATCAGAACAGCACCT", NBD_END5),
+    kit_name: "NBD_78",
+    end5: Some(("AAGGTTAAAACAACCGAACCTTTGAATCAGAACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTTCTGATTCAAAGGTTCGGTTGTTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_79: SequenceInfo = SequenceInfo {
-    name: "NBD_79",
-    end5: ("AAGGTTAATCTCGGAGATAGTTCTCACTGCTGCAGCACCT", NBD_END5),
+    kit_name: "NBD_79",
+    end5: Some(("AAGGTTAATCTCGGAGATAGTTCTCACTGCTGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCAGCAGTGAGAACTATCTCCGAGATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_80: SequenceInfo = SequenceInfo {
-    name: "NBD_80",
-    end5: ("AAGGTTAACGGATGAACATAGGATAGCGATTCCAGCACCT", NBD_END5),
+    kit_name: "NBD_80",
+    end5: Some(("AAGGTTAACGGATGAACATAGGATAGCGATTCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGAATCGCTATCCTATGTTCATCCGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_81: SequenceInfo = SequenceInfo {
-    name: "NBD_81",
-    end5: ("AAGGTTAACCTCATCTTGTGAAGTTGTTTCGGCAGCACCT", NBD_END5),
+    kit_name: "NBD_81",
+    end5: Some(("AAGGTTAACCTCATCTTGTGAAGTTGTTTCGGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCCGAAACAACTTCACAAGATGAGGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_82: SequenceInfo = SequenceInfo {
-    name: "NBD_82",
-    end5: ("AAGGTTAAACGGTATGTCGAGTTCCAGGACTACAGCACCT", NBD_END5),
+    kit_name: "NBD_82",
+    end5: Some(("AAGGTTAAACGGTATGTCGAGTTCCAGGACTACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTAGTCCTGGAACTCGACATACCGTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_83: SequenceInfo = SequenceInfo {
-    name: "NBD_83",
-    end5: ("AAGGTTAATGGCTTGATCTAGGTAAGGTCGAACAGCACCT", NBD_END5),
+    kit_name: "NBD_83",
+    end5: Some(("AAGGTTAATGGCTTGATCTAGGTAAGGTCGAACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTTCGACCTTACCTAGATCAAGCCATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_84: SequenceInfo = SequenceInfo {
-    name: "NBD_84",
-    end5: ("AAGGTTAAGTAGTGGACCTAGAACCTGTGCCACAGCACCT", NBD_END5),
+    kit_name: "NBD_84",
+    end5: Some(("AAGGTTAAGTAGTGGACCTAGAACCTGTGCCACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTGGCACAGGTTCTAGGTCCACTACTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_85: SequenceInfo = SequenceInfo {
-    name: "NBD_85",
-    end5: ("AAGGTTAAAACGGAGGAGTTAGTTGGATGATCCAGCACCT", NBD_END5),
+    kit_name: "NBD_85",
+    end5: Some(("AAGGTTAAAACGGAGGAGTTAGTTGGATGATCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGATCATCCAACTAACTCCTCCGTTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_86: SequenceInfo = SequenceInfo {
-    name: "NBD_86",
-    end5: ("AAGGTTAAAGGTGATCCCAACAAGCGTAAGTACAGCACCT", NBD_END5),
+    kit_name: "NBD_86",
+    end5: Some(("AAGGTTAAAGGTGATCCCAACAAGCGTAAGTACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTACTTACGCTTGTTGGGATCACCTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_87: SequenceInfo = SequenceInfo {
-    name: "NBD_87",
-    end5: ("AAGGTTAATACATGCTCCTGTTGTTAGGGAGGCAGCACCT", NBD_END5),
+    kit_name: "NBD_87",
+    end5: Some(("AAGGTTAATACATGCTCCTGTTGTTAGGGAGGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCCTCCCTAACAACAGGAGCATGTATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_88: SequenceInfo = SequenceInfo {
-    name: "NBD_88",
-    end5: ("AAGGTTAATCTTCTACTACCGATCCGAAGCAGCAGCACCT", NBD_END5),
+    kit_name: "NBD_88",
+    end5: Some(("AAGGTTAATCTTCTACTACCGATCCGAAGCAGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCTGCTTCGGATCGGTAGTAGAAGATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_89: SequenceInfo = SequenceInfo {
-    name: "NBD_89",
-    end5: ("AAGGTTAAACAGCATCAATGTTTGGCTAGTTGCAGCACCT", NBD_END5),
+    kit_name: "NBD_89",
+    end5: Some(("AAGGTTAAACAGCATCAATGTTTGGCTAGTTGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCAACTAGCCAAACATTGATGCTGTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_90: SequenceInfo = SequenceInfo {
-    name: "NBD_90",
-    end5: ("AAGGTTAAGATGTAGAGGGTACGGTTTGAGGCCAGCACCT", NBD_END5),
+    kit_name: "NBD_90",
+    end5: Some(("AAGGTTAAGATGTAGAGGGTACGGTTTGAGGCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGCCTCAAACCGTACCCTCTACATCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_91: SequenceInfo = SequenceInfo {
-    name: "NBD_91",
-    end5: ("AAGGTTAAGGCTCCATAGGAACTCACGCTACTCAGCACCT", NBD_END5),
+    kit_name: "NBD_91",
+    end5: Some(("AAGGTTAAGGCTCCATAGGAACTCACGCTACTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGAGTAGCGTGAGTTCCTATGGAGCCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_92: SequenceInfo = SequenceInfo {
-    name: "NBD_92",
-    end5: ("AAGGTTAATTGTGAGTGGAAAGATACAGGACCCAGCACCT", NBD_END5),
+    kit_name: "NBD_92",
+    end5: Some(("AAGGTTAATTGTGAGTGGAAAGATACAGGACCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGGTCCTGTATCTTTCCACTCACAATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_93: SequenceInfo = SequenceInfo {
-    name: "NBD_93",
-    end5: ("AAGGTTAAAGTTTCCATCACTTCAGACTTGGGCAGCACCT", NBD_END5),
+    kit_name: "NBD_93",
+    end5: Some(("AAGGTTAAAGTTTCCATCACTTCAGACTTGGGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCCCAAGTCTGAAGTGATGGAAACTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_94: SequenceInfo = SequenceInfo {
-    name: "NBD_94",
-    end5: ("AAGGTTAAGATTGTCCTCAAACTGCCACCTACCAGCACCT", NBD_END5),
+    kit_name: "NBD_94",
+    end5: Some(("AAGGTTAAGATTGTCCTCAAACTGCCACCTACCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGTAGGTGGCAGTTTGAGGACAATCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_95: SequenceInfo = SequenceInfo {
-    name: "NBD_95",
-    end5: ("AAGGTTAACCTGTCTGGAAGAAGAATGGACTTCAGCACCT", NBD_END5),
+    kit_name: "NBD_95",
+    end5: Some(("AAGGTTAACCTGTCTGGAAGAAGAATGGACTTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGAAGTCCATTCTTCTTCCAGACAGGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const NBD_96: SequenceInfo = SequenceInfo {
-    name: "NBD_96",
-    end5: ("AAGGTTAACTGAACGGTCATAGAGTCCACCATCAGCACCT", NBD_END5),
+    kit_name: "NBD_96",
+    end5: Some(("AAGGTTAACTGAACGGTCATAGAGTCCACCATCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGATGGTGGACTCTATGACCGTTCAGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
+/*
+SQK-RBK114.24; SQK-RBK114.96
+structure of reads with RA, with rapid barcode
+Example for Rapid Barcode01
+  |L_F             |Rapid Barcode01         |R_F                                               | insert Seq
+5-GCTTGGGTGTTTAACC AAGAAAGTTGTCGGTGTCTTTGTG GTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA .................-3
+*/
 const RBK_1: SequenceInfo = SequenceInfo {
-    name: "RBK_1",
-    end5: (
+    kit_name: "RBK_1",
+    end5: Some((
         "AAGAAAGTTGTCGGTGTCTTTGTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_2: SequenceInfo = SequenceInfo {
-    name: "RBK_2",
-    end5: (
+    kit_name: "RBK_2",
+    end5: Some((
         "TCGATTCCGTTTGTAGTCGTCTGTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_3: SequenceInfo = SequenceInfo {
-    name: "RBK_3",
-    end5: (
+    kit_name: "RBK_3",
+    end5: Some((
         "GAGTCTTGTGTCCCAGTTACCAGGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_4: SequenceInfo = SequenceInfo {
-    name: "RBK_4",
-    end5: (
+    kit_name: "RBK_4",
+    end5: Some((
         "TTCGGATTCTATCGTGTTTCCCTAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_5: SequenceInfo = SequenceInfo {
-    name: "RBK_5",
-    end5: (
+    kit_name: "RBK_5",
+    end5: Some((
         "CTTGTCCAGGGTTTGTGTAACCTTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_6: SequenceInfo = SequenceInfo {
-    name: "RBK_6",
-    end5: (
+    kit_name: "RBK_6",
+    end5: Some((
         "TTCTCGCAAAGGCAGAAAGTAGTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_7: SequenceInfo = SequenceInfo {
-    name: "RBK_7",
-    end5: (
+    kit_name: "RBK_7",
+    end5: Some((
         "GTGTTACCGTGGGAATGAATCCTTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_8: SequenceInfo = SequenceInfo {
-    name: "RBK_8",
-    end5: (
+    kit_name: "RBK_8",
+    end5: Some((
         "TTCAGGGAACAAACCAAGTTACGTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_9: SequenceInfo = SequenceInfo {
-    name: "RBK_9",
-    end5: (
+    kit_name: "RBK_9",
+    end5: Some((
         "AACTAGGCACAGCGAGTCTTGGTTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_10: SequenceInfo = SequenceInfo {
-    name: "RBK_10",
-    end5: (
+    kit_name: "RBK_10",
+    end5: Some((
         "AAGCGTTGAAACCTTTGTCCTCTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_11: SequenceInfo = SequenceInfo {
-    name: "RBK_11",
-    end5: (
+    kit_name: "RBK_11",
+    end5: Some((
         "GTTTCATCTATCGGAGGGAATGGAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_12: SequenceInfo = SequenceInfo {
-    name: "RBK_12",
-    end5: (
+    kit_name: "RBK_12",
+    end5: Some((
         "CAGGTAGAAAGAAGCAGAATCGGAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_13: SequenceInfo = SequenceInfo {
-    name: "RBK_13",
-    end5: (
+    kit_name: "RBK_13",
+    end5: Some((
         "AGAACGACTTCCATACTCGTGTGAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_14: SequenceInfo = SequenceInfo {
-    name: "RBK_14",
-    end5: (
+    kit_name: "RBK_14",
+    end5: Some((
         "AACGAGTCTCTTGGGACCCATAGAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_15: SequenceInfo = SequenceInfo {
-    name: "RBK_15",
-    end5: (
+    kit_name: "RBK_15",
+    end5: Some((
         "AGGTCTACCTCGCTAACACCACTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_16: SequenceInfo = SequenceInfo {
-    name: "RBK_16",
-    end5: (
+    kit_name: "RBK_16",
+    end5: Some((
         "CGTCAACTGACAGTGGTTCGTACTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_17: SequenceInfo = SequenceInfo {
-    name: "RBK_17",
-    end5: (
+    kit_name: "RBK_17",
+    end5: Some((
         "ACCCTCCAGGAAAGTACCTCTGATGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_18: SequenceInfo = SequenceInfo {
-    name: "RBK_18",
-    end5: (
+    kit_name: "RBK_18",
+    end5: Some((
         "CCAAACCCAACAACCTAGATAGGCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_19: SequenceInfo = SequenceInfo {
-    name: "RBK_19",
-    end5: (
+    kit_name: "RBK_19",
+    end5: Some((
         "GTTCCTCGTGCAGTGTCAAGAGATGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_20: SequenceInfo = SequenceInfo {
-    name: "RBK_20",
-    end5: (
+    kit_name: "RBK_20",
+    end5: Some((
         "TTGCGTCCTGTTACGAGAACTCATGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_21: SequenceInfo = SequenceInfo {
-    name: "RBK_21",
-    end5: (
+    kit_name: "RBK_21",
+    end5: Some((
         "GAGCCTCTCATTGTCCGTTCTCTAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_22: SequenceInfo = SequenceInfo {
-    name: "RBK_22",
-    end5: (
+    kit_name: "RBK_22",
+    end5: Some((
         "ACCACTGCCATGTATCAAAGTACGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_23: SequenceInfo = SequenceInfo {
-    name: "RBK_23",
-    end5: (
+    kit_name: "RBK_23",
+    end5: Some((
         "CTTACTACCCAGTGAACCTCCTCGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_24: SequenceInfo = SequenceInfo {
-    name: "RBK_24",
-    end5: (
+    kit_name: "RBK_24",
+    end5: Some((
         "GCATAGTTCTGCATGATGGGTTAGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_25: SequenceInfo = SequenceInfo {
-    name: "RBK_25",
-    end5: (
+    kit_name: "RBK_25",
+    end5: Some((
         "GTAAGTTGGGTATGCAACGCAATGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_26: SequenceInfo = SequenceInfo {
-    name: "RBK_26",
-    end5: (
+    kit_name: "RBK_26",
+    end5: Some((
         "CATACAGCGACTACGCATTCTCATGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_27: SequenceInfo = SequenceInfo {
-    name: "RBK_27",
-    end5: (
+    kit_name: "RBK_27",
+    end5: Some((
         "CGACGGTTAGATTCACCTCTTACAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_28: SequenceInfo = SequenceInfo {
-    name: "RBK_28",
-    end5: (
+    kit_name: "RBK_28",
+    end5: Some((
         "TGAAACCTAAGAAGGCACCGTATCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_29: SequenceInfo = SequenceInfo {
-    name: "RBK_29",
-    end5: (
+    kit_name: "RBK_29",
+    end5: Some((
         "CTAGACACCTTGGGTTGACAGACCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_30: SequenceInfo = SequenceInfo {
-    name: "RBK_30",
-    end5: (
+    kit_name: "RBK_30",
+    end5: Some((
         "TCAGTGAGGATCTACTTCGACCCAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_31: SequenceInfo = SequenceInfo {
-    name: "RBK_31",
-    end5: (
+    kit_name: "RBK_31",
+    end5: Some((
         "TGCGTACAGCAATCAGTTACATTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_32: SequenceInfo = SequenceInfo {
-    name: "RBK_32",
-    end5: (
+    kit_name: "RBK_32",
+    end5: Some((
         "CCAGTAGAAGTCCGACAACGTCATGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_33: SequenceInfo = SequenceInfo {
-    name: "RBK_33",
-    end5: (
+    kit_name: "RBK_33",
+    end5: Some((
         "CAGACTTGGTACGGTTGGGTAACTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_34: SequenceInfo = SequenceInfo {
-    name: "RBK_34",
-    end5: (
+    kit_name: "RBK_34",
+    end5: Some((
         "GGACGAAGAACTCAAGTCAAAGGCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_35: SequenceInfo = SequenceInfo {
-    name: "RBK_35",
-    end5: (
+    kit_name: "RBK_35",
+    end5: Some((
         "CTACTTACGAAGCTGAGGGACTGCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_36: SequenceInfo = SequenceInfo {
-    name: "RBK_36",
-    end5: (
+    kit_name: "RBK_36",
+    end5: Some((
         "ATGTCCCAGTTAGAGGAGGAAACAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_37: SequenceInfo = SequenceInfo {
-    name: "RBK_37",
-    end5: (
+    kit_name: "RBK_37",
+    end5: Some((
         "GCTTGCGATTGATGCTTAGTATCAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_38: SequenceInfo = SequenceInfo {
-    name: "RBK_38",
-    end5: (
+    kit_name: "RBK_38",
+    end5: Some((
         "ACCACAGGAGGACGATACAGAGAAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_39: SequenceInfo = SequenceInfo {
-    name: "RBK_39",
-    end5: (
+    kit_name: "RBK_39",
+    end5: Some((
         "CCACAGTGTCAACTAGAGCCTCTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_40: SequenceInfo = SequenceInfo {
-    name: "RBK_40",
-    end5: (
+    kit_name: "RBK_40",
+    end5: Some((
         "TAGTTTGGATGACCAAGGATAGCCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_41: SequenceInfo = SequenceInfo {
-    name: "RBK_41",
-    end5: (
+    kit_name: "RBK_41",
+    end5: Some((
         "GGAGTTCGTCCAGAGAAGTACACGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_42: SequenceInfo = SequenceInfo {
-    name: "RBK_42",
-    end5: (
+    kit_name: "RBK_42",
+    end5: Some((
         "CTACGTGTAAGGCATACCTGCCAGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_43: SequenceInfo = SequenceInfo {
-    name: "RBK_43",
-    end5: (
+    kit_name: "RBK_43",
+    end5: Some((
         "CTTTCGTTGTTGACTCGACGGTAGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_44: SequenceInfo = SequenceInfo {
-    name: "RBK_44",
-    end5: (
+    kit_name: "RBK_44",
+    end5: Some((
         "AGTAGAAAGGGTTCCTTCCCACTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_45: SequenceInfo = SequenceInfo {
-    name: "RBK_45",
-    end5: (
+    kit_name: "RBK_45",
+    end5: Some((
         "GATCCAACAGAGATGCCTTCAGTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_46: SequenceInfo = SequenceInfo {
-    name: "RBK_46",
-    end5: (
+    kit_name: "RBK_46",
+    end5: Some((
         "GCTGTGTTCCACTTCATTCTCCTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_47: SequenceInfo = SequenceInfo {
-    name: "RBK_47",
-    end5: (
+    kit_name: "RBK_47",
+    end5: Some((
         "GTGCAACTTTCCCACAGGTAGTTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_48: SequenceInfo = SequenceInfo {
-    name: "RBK_48",
-    end5: (
+    kit_name: "RBK_48",
+    end5: Some((
         "CATCTGGAACGTGGTACACCTGTAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_49: SequenceInfo = SequenceInfo {
-    name: "RBK_49",
-    end5: (
+    kit_name: "RBK_49",
+    end5: Some((
         "ACTGGTGCAGCTTTGAACATCTAGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_50: SequenceInfo = SequenceInfo {
-    name: "RBK_50",
-    end5: (
+    kit_name: "RBK_50",
+    end5: Some((
         "ATGGACTTTGGTAACTTCCTGCGTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_51: SequenceInfo = SequenceInfo {
-    name: "RBK_51",
-    end5: (
+    kit_name: "RBK_51",
+    end5: Some((
         "GTTGAATGAGCCTACTGGGTCCTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_52: SequenceInfo = SequenceInfo {
-    name: "RBK_52",
-    end5: (
+    kit_name: "RBK_52",
+    end5: Some((
         "TGAGAGACAAGATTGTTCGTGGACGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_53: SequenceInfo = SequenceInfo {
-    name: "RBK_53",
-    end5: (
+    kit_name: "RBK_53",
+    end5: Some((
         "AGATTCAGACCGTCTCATGCAAAGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_54: SequenceInfo = SequenceInfo {
-    name: "RBK_54",
-    end5: (
+    kit_name: "RBK_54",
+    end5: Some((
         "CAAGAGCTTTGACTAAGGAGCATGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_55: SequenceInfo = SequenceInfo {
-    name: "RBK_55",
-    end5: (
+    kit_name: "RBK_55",
+    end5: Some((
         "TGGAAGATGAGACCCTGATCTACGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_56: SequenceInfo = SequenceInfo {
-    name: "RBK_56",
-    end5: (
+    kit_name: "RBK_56",
+    end5: Some((
         "TCACTACTCAACAGGTGGCATGAAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_57: SequenceInfo = SequenceInfo {
-    name: "RBK_57",
-    end5: (
+    kit_name: "RBK_57",
+    end5: Some((
         "GCTAGGTCAATCTCCTTCGGAAGTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_58: SequenceInfo = SequenceInfo {
-    name: "RBK_58",
-    end5: (
+    kit_name: "RBK_58",
+    end5: Some((
         "CAGGTTACTCCTCCGTGAGTCTGAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_59: SequenceInfo = SequenceInfo {
-    name: "RBK_59",
-    end5: (
+    kit_name: "RBK_59",
+    end5: Some((
         "TCAATCAAGAAGGGAAAGCAAGGTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_60: SequenceInfo = SequenceInfo {
-    name: "RBK_60",
-    end5: (
+    kit_name: "RBK_60",
+    end5: Some((
         "CATGTTCAACCAAGGCTTCTATGGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_61: SequenceInfo = SequenceInfo {
-    name: "RBK_61",
-    end5: (
+    kit_name: "RBK_61",
+    end5: Some((
         "AGAGGGTACTATGTGCCTCAGCACGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_62: SequenceInfo = SequenceInfo {
-    name: "RBK_62",
-    end5: (
+    kit_name: "RBK_62",
+    end5: Some((
         "CACCCACACTTACTTCAGGACGTAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_63: SequenceInfo = SequenceInfo {
-    name: "RBK_63",
-    end5: (
+    kit_name: "RBK_63",
+    end5: Some((
         "TTCTGAAGTTCCTGGGTCTTGAACGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_64: SequenceInfo = SequenceInfo {
-    name: "RBK_64",
-    end5: (
+    kit_name: "RBK_64",
+    end5: Some((
         "GACAGACACCGTTCATCGACTTTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_65: SequenceInfo = SequenceInfo {
-    name: "RBK_65",
-    end5: (
+    kit_name: "RBK_65",
+    end5: Some((
         "TTCTCAGTCTTCCTCCAGACAAGGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_66: SequenceInfo = SequenceInfo {
-    name: "RBK_66",
-    end5: (
+    kit_name: "RBK_66",
+    end5: Some((
         "CCGATCCTTGTGGCTTCTAACTTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_67: SequenceInfo = SequenceInfo {
-    name: "RBK_67",
-    end5: (
+    kit_name: "RBK_67",
+    end5: Some((
         "GTTTGTCATACTCGTGTGCTCACCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_68: SequenceInfo = SequenceInfo {
-    name: "RBK_68",
-    end5: (
+    kit_name: "RBK_68",
+    end5: Some((
         "GAATCTAAGCAAACACGAAGGTGGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_69: SequenceInfo = SequenceInfo {
-    name: "RBK_69",
-    end5: (
+    kit_name: "RBK_69",
+    end5: Some((
         "TACAGTCCGAGCCTCATGTGATCTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_70: SequenceInfo = SequenceInfo {
-    name: "RBK_70",
-    end5: (
+    kit_name: "RBK_70",
+    end5: Some((
         "ACCGAGATCCTACGAATGGAGTGTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_71: SequenceInfo = SequenceInfo {
-    name: "RBK_71",
-    end5: (
+    kit_name: "RBK_71",
+    end5: Some((
         "CCTGGGAGCATCAGGTAGTAACAGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_72: SequenceInfo = SequenceInfo {
-    name: "RBK_72",
-    end5: (
+    kit_name: "RBK_72",
+    end5: Some((
         "TAGCTGACTGTCTTCCATACCGACGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_73: SequenceInfo = SequenceInfo {
-    name: "RBK_73",
-    end5: (
+    kit_name: "RBK_73",
+    end5: Some((
         "AAGAAACAGGATGACAGAACCCTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_74: SequenceInfo = SequenceInfo {
-    name: "RBK_74",
-    end5: (
+    kit_name: "RBK_74",
+    end5: Some((
         "TACAAGCATCCCAACACTTCCACTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_75: SequenceInfo = SequenceInfo {
-    name: "RBK_75",
-    end5: (
+    kit_name: "RBK_75",
+    end5: Some((
         "GACCATTGTGATGAACCCTGTTGTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_76: SequenceInfo = SequenceInfo {
-    name: "RBK_76",
-    end5: (
+    kit_name: "RBK_76",
+    end5: Some((
         "ATGCTTGTTACATCAACCCTGGACGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_77: SequenceInfo = SequenceInfo {
-    name: "RBK_77",
-    end5: (
+    kit_name: "RBK_77",
+    end5: Some((
         "CGACCTGTTTCTCAGGGATACAACGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_78: SequenceInfo = SequenceInfo {
-    name: "RBK_78",
-    end5: (
+    kit_name: "RBK_78",
+    end5: Some((
         "AACAACCGAACCTTTGAATCAGAAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_79: SequenceInfo = SequenceInfo {
-    name: "RBK_79",
-    end5: (
+    kit_name: "RBK_79",
+    end5: Some((
         "TCTCGGAGATAGTTCTCACTGCTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_80: SequenceInfo = SequenceInfo {
-    name: "RBK_80",
-    end5: (
+    kit_name: "RBK_80",
+    end5: Some((
         "CGGATGAACATAGGATAGCGATTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_81: SequenceInfo = SequenceInfo {
-    name: "RBK_81",
-    end5: (
+    kit_name: "RBK_81",
+    end5: Some((
         "CCTCATCTTGTGAAGTTGTTTCGGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_82: SequenceInfo = SequenceInfo {
-    name: "RBK_82",
-    end5: (
+    kit_name: "RBK_82",
+    end5: Some((
         "ACGGTATGTCGAGTTCCAGGACTAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_83: SequenceInfo = SequenceInfo {
-    name: "RBK_83",
-    end5: (
+    kit_name: "RBK_83",
+    end5: Some((
         "TGGCTTGATCTAGGTAAGGTCGAAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_84: SequenceInfo = SequenceInfo {
-    name: "RBK_84",
-    end5: (
+    kit_name: "RBK_84",
+    end5: Some((
         "GTAGTGGACCTAGAACCTGTGCCAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_85: SequenceInfo = SequenceInfo {
-    name: "RBK_85",
-    end5: (
+    kit_name: "RBK_85",
+    end5: Some((
         "AACGGAGGAGTTAGTTGGATGATCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_86: SequenceInfo = SequenceInfo {
-    name: "RBK_86",
-    end5: (
+    kit_name: "RBK_86",
+    end5: Some((
         "AGGTGATCCCAACAAGCGTAAGTAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_87: SequenceInfo = SequenceInfo {
-    name: "RBK_87",
-    end5: (
+    kit_name: "RBK_87",
+    end5: Some((
         "TACATGCTCCTGTTGTTAGGGAGGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_88: SequenceInfo = SequenceInfo {
-    name: "RBK_88",
-    end5: (
+    kit_name: "RBK_88",
+    end5: Some((
         "TCTTCTACTACCGATCCGAAGCAGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_89: SequenceInfo = SequenceInfo {
-    name: "RBK_89",
-    end5: (
+    kit_name: "RBK_89",
+    end5: Some((
         "ACAGCATCAATGTTTGGCTAGTTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_90: SequenceInfo = SequenceInfo {
-    name: "RBK_90",
-    end5: (
+    kit_name: "RBK_90",
+    end5: Some((
         "GATGTAGAGGGTACGGTTTGAGGCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_91: SequenceInfo = SequenceInfo {
-    name: "RBK_91",
-    end5: (
+    kit_name: "RBK_91",
+    end5: Some((
         "GGCTCCATAGGAACTCACGCTACTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_92: SequenceInfo = SequenceInfo {
-    name: "RBK_92",
-    end5: (
+    kit_name: "RBK_92",
+    end5: Some((
         "TTGTGAGTGGAAAGATACAGGACCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_93: SequenceInfo = SequenceInfo {
-    name: "RBK_93",
-    end5: (
+    kit_name: "RBK_93",
+    end5: Some((
         "AGTTTCCATCACTTCAGACTTGGGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_94: SequenceInfo = SequenceInfo {
-    name: "RBK_94",
-    end5: (
+    kit_name: "RBK_94",
+    end5: Some((
         "GATTGTCCTCAAACTGCCACCTACGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_95: SequenceInfo = SequenceInfo {
-    name: "RBK_95",
-    end5: (
+    kit_name: "RBK_95",
+    end5: Some((
         "CCTGTCTGGAAGAAGAATGGACTTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
 };
 const RBK_96: SequenceInfo = SequenceInfo {
-    name: "RBK_96",
-    end5: (
+    kit_name: "RBK_96",
+    end5: Some((
         "CTGAACGGTCATAGAGTCCACCATGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
         RBK_END5,
-    ),
+    )),
     end3: None,
     rev_com_end5: None,
     rev_com_end3: None,
@@ -2044,11 +2110,11 @@ CRTA:                      5'-CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGT-3'
 CRTA_REV_COM:   3'-TTTTTTTTTTTGAACGCCCGCCGCCTGAGAGGAGACTTCTATCTCGCTGTCCGTTCA-5'
 */
 const PCS: SequenceInfo = SequenceInfo {
-    name: "PCS",
-    end5: (
+    kit_name: "PCS",
+    end5: Some((
         "TTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
         PCS_END5,
-    ),
+    )),
     end3: Some(("CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGT", PCS_END3)),
     rev_com_end5: Some((
         "ACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
@@ -2059,459 +2125,456 @@ const PCS: SequenceInfo = SequenceInfo {
         PCS_REV_COM_END3,
     )),
 };
-const PCB_1: SequenceInfo = SequenceInfo {
-    name: "PCB_1",
-    end5: (
-        "AAGAAAGTTGTCGGTGTCTTTGTGTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+const PCB: SequenceInfo = SequenceInfo {
+    kit_name: "PCB_1",
+    end5: Some((
+        "TTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
         PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTCACAAAGACACCGACAACTTTCTT",
-        PCB_END3,
     )),
+    end3: Some(("CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGT", PCB_END3)),
     rev_com_end5: Some((
-        "AAGAAAGTTGTCGGTGTCTTTGTGACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+        "ACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
         PCB_REV_COM_END5,
     )),
     rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAACACAAAGACACCGACAACTTTCTT",
+        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAA",
         PCB_REV_COM_END3,
     )),
 };
-const PCB_2: SequenceInfo = SequenceInfo {
-    name: "PCB_2",
-    end5: (
-        "TCGATTCCGTTTGTAGTCGTCTGTTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTACAGACGACTACAAACGGAATCGA",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "TCGATTCCGTTTGTAGTCGTCTGTACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAACAGACGACTACAAACGGAATCGA",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_3: SequenceInfo = SequenceInfo {
-    name: "PCB_3",
-    end5: (
-        "GAGTCTTGTGTCCCAGTTACCAGGTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTCCTGGTAACTGGGACACAAGACTC",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "GAGTCTTGTGTCCCAGTTACCAGGACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAACCTGGTAACTGGGACACAAGACTC",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_4: SequenceInfo = SequenceInfo {
-    name: "PCB_4",
-    end5: (
-        "TTCGGATTCTATCGTGTTTCCCTATTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTTAGGGAAACACGATAGAATCCGAA",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "TTCGGATTCTATCGTGTTTCCCTAACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAATAGGGAAACACGATAGAATCCGAA",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_5: SequenceInfo = SequenceInfo {
-    name: "PCB_5",
-    end5: (
-        "CTTGTCCAGGGTTTGTGTAACCTTTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTAAGGTTACACAAACCCTGGACAAG",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "CTTGTCCAGGGTTTGTGTAACCTTACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAAAGGTTACACAAACCCTGGACAAG",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_6: SequenceInfo = SequenceInfo {
-    name: "PCB_6",
-    end5: (
-        "TTCTCGCAAAGGCAGAAAGTAGTCTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTGACTACTTTCTGCCTTTGCGAGAA",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "TTCTCGCAAAGGCAGAAAGTAGTCACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAGACTACTTTCTGCCTTTGCGAGAA",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_7: SequenceInfo = SequenceInfo {
-    name: "PCB_7",
-    end5: (
-        "GTGTTACCGTGGGAATGAATCCTTTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTAAGGATTCATTCCCACGGTAACAC",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "GTGTTACCGTGGGAATGAATCCTTACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAAAGGATTCATTCCCACGGTAACAC",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_8: SequenceInfo = SequenceInfo {
-    name: "PCB_8",
-    end5: (
-        "TTCAGGGAACAAACCAAGTTACGTTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTACGTAACTTGGTTTGTTCCCTGAA",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "TTCAGGGAACAAACCAAGTTACGTACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAACGTAACTTGGTTTGTTCCCTGAA",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_9: SequenceInfo = SequenceInfo {
-    name: "PCB_9",
-    end5: (
-        "AACTAGGCACAGCGAGTCTTGGTTTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTAACCAAGACTCGCTGTGCCTAGTT",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "AACTAGGCACAGCGAGTCTTGGTTACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAAACCAAGACTCGCTGTGCCTAGTT",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_10: SequenceInfo = SequenceInfo {
-    name: "PCB_10",
-    end5: (
-        "AAGCGTTGAAACCTTTGTCCTCTCTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTGAGAGGACAAAGGTTTCAACGCTT",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "AAGCGTTGAAACCTTTGTCCTCTCACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAGAGAGGACAAAGGTTTCAACGCTT",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_11: SequenceInfo = SequenceInfo {
-    name: "PCB_11",
-    end5: (
-        "GTTTCATCTATCGGAGGGAATGGATTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTTCCATTCCCTCCGATAGATGAAAC",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "GTTTCATCTATCGGAGGGAATGGAACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAATCCATTCCCTCCGATAGATGAAAC",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_12: SequenceInfo = SequenceInfo {
-    name: "PCB_12",
-    end5: (
-        "CAGGTAGAAAGAAGCAGAATCGGATTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTTCCGATTCTGCTTCTTTCTACCTG",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "CAGGTAGAAAGAAGCAGAATCGGAACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAATCCGATTCTGCTTCTTTCTACCTG",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_13: SequenceInfo = SequenceInfo {
-    name: "PCB_13",
-    end5: (
-        "AGAACGACTTCCATACTCGTGTGATTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTTCACACGAGTATGGAAGTCGTTCT",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "AGAACGACTTCCATACTCGTGTGAACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAATCACACGAGTATGGAAGTCGTTCT",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_14: SequenceInfo = SequenceInfo {
-    name: "PCB_14",
-    end5: (
-        "AACGAGTCTCTTGGGACCCATAGATTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTTCTATGGGTCCCAAGAGACTCGTT",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "AACGAGTCTCTTGGGACCCATAGAACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAATCTATGGGTCCCAAGAGACTCGTT",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_15: SequenceInfo = SequenceInfo {
-    name: "PCB_15",
-    end5: (
-        "AGGTCTACCTCGCTAACACCACTGTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTCAGTGGTGTTAGCGAGGTAGACCT",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "AGGTCTACCTCGCTAACACCACTGACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAACAGTGGTGTTAGCGAGGTAGACCT",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_16: SequenceInfo = SequenceInfo {
-    name: "PCB_16",
-    end5: (
-        "CGTCAACTGACAGTGGTTCGTACTTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTAGTACGAACCACTGTCAGTTGACG",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "CGTCAACTGACAGTGGTTCGTACTACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAAGTACGAACCACTGTCAGTTGACG",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_17: SequenceInfo = SequenceInfo {
-    name: "PCB_17",
-    end5: (
-        "ACCCTCCAGGAAAGTACCTCTGATTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTATCAGAGGTACTTTCCTGGAGGGT",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "ACCCTCCAGGAAAGTACCTCTGATACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAATCAGAGGTACTTTCCTGGAGGGT",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_18: SequenceInfo = SequenceInfo {
-    name: "PCB_18",
-    end5: (
-        "CCAAACCCAACAACCTAGATAGGCTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTGCCTATCTAGGTTGTTGGGTTTGG",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "CCAAACCCAACAACCTAGATAGGCACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAGCCTATCTAGGTTGTTGGGTTTGG",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_19: SequenceInfo = SequenceInfo {
-    name: "PCB_19",
-    end5: (
-        "GTTCCTCGTGCAGTGTCAAGAGATTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTATCTCTTGACACTGCACGAGGAAC",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "GTTCCTCGTGCAGTGTCAAGAGATACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAATCTCTTGACACTGCACGAGGAAC",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_20: SequenceInfo = SequenceInfo {
-    name: "PCB_20",
-    end5: (
-        "TTGCGTCCTGTTACGAGAACTCATTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTATGAGTTCTCGTAACAGGACGCAA",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "TTGCGTCCTGTTACGAGAACTCATACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAATGAGTTCTCGTAACAGGACGCAA",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_21: SequenceInfo = SequenceInfo {
-    name: "PCB_21",
-    end5: (
-        "GAGCCTCTCATTGTCCGTTCTCTATTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTTAGAGAACGGACAATGAGAGGCTC",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "GAGCCTCTCATTGTCCGTTCTCTAACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAATAGAGAACGGACAATGAGAGGCTC",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_22: SequenceInfo = SequenceInfo {
-    name: "PCB_22",
-    end5: (
-        "ACCACTGCCATGTATCAAAGTACGTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTCGTACTTTGATACATGGCAGTGGT",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "ACCACTGCCATGTATCAAAGTACGACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAACGTACTTTGATACATGGCAGTGGT",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_23: SequenceInfo = SequenceInfo {
-    name: "PCB_23",
-    end5: (
-        "CTTACTACCCAGTGAACCTCCTCGTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTCGAGGAGGTTCACTGGGTAGTAAG",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "CTTACTACCCAGTGAACCTCCTCGACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAACGAGGAGGTTCACTGGGTAGTAAG",
-        PCB_REV_COM_END3,
-    )),
-};
-const PCB_24: SequenceInfo = SequenceInfo {
-    name: "PCB_24",
-    end5: (
-        "GCATAGTTCTGCATGATGGGTTAGTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
-        PCB_END5,
-    ),
-    end3: Some((
-        "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTCTAACCCATCATGCAGAACTATGC",
-        PCB_END3,
-    )),
-    rev_com_end5: Some((
-        "GCATAGTTCTGCATGATGGGTTAGACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
-        PCB_REV_COM_END5,
-    )),
-    rev_com_end3: Some((
-        "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAACTAACCCATCATGCAGAACTATGC",
-        PCB_REV_COM_END3,
-    )),
-};
+// const PCB_2: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_2",
+//     end5: Some((
+//         "TCGATTCCGTTTGTAGTCGTCTGTTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTACAGACGACTACAAACGGAATCGA",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "TCGATTCCGTTTGTAGTCGTCTGTACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAACAGACGACTACAAACGGAATCGA",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_3: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_3",
+//     end5: Some((
+//         "GAGTCTTGTGTCCCAGTTACCAGGTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTCCTGGTAACTGGGACACAAGACTC",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "GAGTCTTGTGTCCCAGTTACCAGGACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAACCTGGTAACTGGGACACAAGACTC",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_4: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_4",
+//     end5: Some((
+//         "TTCGGATTCTATCGTGTTTCCCTATTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTTAGGGAAACACGATAGAATCCGAA",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "TTCGGATTCTATCGTGTTTCCCTAACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAATAGGGAAACACGATAGAATCCGAA",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_5: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_5",
+//     end5: Some((
+//         "CTTGTCCAGGGTTTGTGTAACCTTTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTAAGGTTACACAAACCCTGGACAAG",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "CTTGTCCAGGGTTTGTGTAACCTTACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAAAGGTTACACAAACCCTGGACAAG",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_6: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_6",
+//     end5: Some((
+//         "TTCTCGCAAAGGCAGAAAGTAGTCTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTGACTACTTTCTGCCTTTGCGAGAA",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "TTCTCGCAAAGGCAGAAAGTAGTCACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAGACTACTTTCTGCCTTTGCGAGAA",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_7: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_7",
+//     end5: Some((
+//         "GTGTTACCGTGGGAATGAATCCTTTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTAAGGATTCATTCCCACGGTAACAC",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "GTGTTACCGTGGGAATGAATCCTTACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAAAGGATTCATTCCCACGGTAACAC",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_8: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_8",
+//     end5: Some((
+//         "TTCAGGGAACAAACCAAGTTACGTTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTACGTAACTTGGTTTGTTCCCTGAA",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "TTCAGGGAACAAACCAAGTTACGTACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAACGTAACTTGGTTTGTTCCCTGAA",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_9: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_9",
+//     end5: Some((
+//         "AACTAGGCACAGCGAGTCTTGGTTTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTAACCAAGACTCGCTGTGCCTAGTT",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "AACTAGGCACAGCGAGTCTTGGTTACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAAACCAAGACTCGCTGTGCCTAGTT",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_10: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_10",
+//     end5: Some((
+//         "AAGCGTTGAAACCTTTGTCCTCTCTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTGAGAGGACAAAGGTTTCAACGCTT",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "AAGCGTTGAAACCTTTGTCCTCTCACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAGAGAGGACAAAGGTTTCAACGCTT",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_11: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_11",
+//     end5: Some((
+//         "GTTTCATCTATCGGAGGGAATGGATTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTTCCATTCCCTCCGATAGATGAAAC",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "GTTTCATCTATCGGAGGGAATGGAACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAATCCATTCCCTCCGATAGATGAAAC",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_12: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_12",
+//     end5: Some((
+//         "CAGGTAGAAAGAAGCAGAATCGGATTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTTCCGATTCTGCTTCTTTCTACCTG",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "CAGGTAGAAAGAAGCAGAATCGGAACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAATCCGATTCTGCTTCTTTCTACCTG",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_13: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_13",
+//     end5: Some((
+//         "AGAACGACTTCCATACTCGTGTGATTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTTCACACGAGTATGGAAGTCGTTCT",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "AGAACGACTTCCATACTCGTGTGAACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAATCACACGAGTATGGAAGTCGTTCT",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_14: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_14",
+//     end5: Some((
+//         "AACGAGTCTCTTGGGACCCATAGATTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTTCTATGGGTCCCAAGAGACTCGTT",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "AACGAGTCTCTTGGGACCCATAGAACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAATCTATGGGTCCCAAGAGACTCGTT",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_15: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_15",
+//     end5: Some((
+//         "AGGTCTACCTCGCTAACACCACTGTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTCAGTGGTGTTAGCGAGGTAGACCT",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "AGGTCTACCTCGCTAACACCACTGACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAACAGTGGTGTTAGCGAGGTAGACCT",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_16: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_16",
+//     end5: Some((
+//         "CGTCAACTGACAGTGGTTCGTACTTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTAGTACGAACCACTGTCAGTTGACG",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "CGTCAACTGACAGTGGTTCGTACTACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAAGTACGAACCACTGTCAGTTGACG",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_17: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_17",
+//     end5: Some((
+//         "ACCCTCCAGGAAAGTACCTCTGATTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTATCAGAGGTACTTTCCTGGAGGGT",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "ACCCTCCAGGAAAGTACCTCTGATACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAATCAGAGGTACTTTCCTGGAGGGT",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_18: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_18",
+//     end5: Some((
+//         "CCAAACCCAACAACCTAGATAGGCTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTGCCTATCTAGGTTGTTGGGTTTGG",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "CCAAACCCAACAACCTAGATAGGCACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAGCCTATCTAGGTTGTTGGGTTTGG",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_19: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_19",
+//     end5: Some((
+//         "GTTCCTCGTGCAGTGTCAAGAGATTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTATCTCTTGACACTGCACGAGGAAC",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "GTTCCTCGTGCAGTGTCAAGAGATACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAATCTCTTGACACTGCACGAGGAAC",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_20: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_20",
+//     end5: Some((
+//         "TTGCGTCCTGTTACGAGAACTCATTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTATGAGTTCTCGTAACAGGACGCAA",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "TTGCGTCCTGTTACGAGAACTCATACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAAATGAGTTCTCGTAACAGGACGCAA",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_21: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_21",
+//     end5: Some((
+//         "GAGCCTCTCATTGTCCGTTCTCTATTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTTAGAGAACGGACAATGAGAGGCTC",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "GAGCCTCTCATTGTCCGTTCTCTAACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAATAGAGAACGGACAATGAGAGGCTC",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_22: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_22",
+//     end5: Some((
+//         "ACCACTGCCATGTATCAAAGTACGTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTCGTACTTTGATACATGGCAGTGGT",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "ACCACTGCCATGTATCAAAGTACGACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAACGTACTTTGATACATGGCAGTGGT",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_23: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_23",
+//     end5: Some((
+//         "CTTACTACCCAGTGAACCTCCTCGTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTCGAGGAGGTTCACTGGGTAGTAAG",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "CTTACTACCCAGTGAACCTCCTCGACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAACGAGGAGGTTCACTGGGTAGTAAG",
+//         PCB_REV_COM_END3,
+//     )),
+// };
+// const PCB_24: SequenceInfo = SequenceInfo {
+//     kit_name: "PCB_24",
+//     end5: Some((
+//         "GCATAGTTCTGCATGATGGGTTAGTTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
+//         PCB_END5,
+//     )),
+//     end3: Some((
+//         "CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGTCTAACCCATCATGCAGAACTATGC",
+//         PCB_END3,
+//     )),
+//     rev_com_end5: Some((
+//         "GCATAGTTCTGCATGATGGGTTAGACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG",
+//         PCB_REV_COM_END5,
+//     )),
+//     rev_com_end3: Some((
+//         "CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAACTAACCCATCATGCAGAACTATGC",
+//         PCB_REV_COM_END3,
+//     )),
+// };
