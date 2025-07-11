@@ -57,7 +57,7 @@ pub static IS_MATCHED: fn(&u8, &u8) -> bool = |ref_base, read_base| {
             .map_or(false, |x| x.contains(read_base))
 };
 
-pub const SEP_LINE :&str = "---------------------------------------------\n";
+pub const SEP_LINE :&str = "----------------------------------------------------------------------\n";
 #[test]
 fn test_dege_base() {
     assert!(IS_MATCHED(&b'V', &b'A'));

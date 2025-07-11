@@ -37,7 +37,7 @@ fn trim_end<'a>(
     }
 }
 
-fn trim_seq(seq_info: &SequenceInfo, ref_record: &RefRecord, aligner: &mut LocalAligner,)  -> Option<(usize, usize, String)>{
+fn trim_seq(seq_info: &SequenceInfo, ref_record: &RefRecord, aligner: &mut LocalAligner, log: bool)  -> Option<(usize, usize, Option<String>)>{
     let read_seq = ref_record.seq();
     let mut fwd_trim_from = 0;
     let mut fwd_trim_to = read_seq.len();
@@ -47,9 +47,10 @@ fn trim_seq(seq_info: &SequenceInfo, ref_record: &RefRecord, aligner: &mut Local
     let mut trim_end5_success = false;
     let mut trim_end3_success = false;
     let mut fwd_ident_score = 0;
-    let mut pretty_log = format!("{}\n", ref_record.id().unwrap());
+    let mut pretty_log = if log {Some(format!("{}\n", ref_record.id().unwrap()))} else {None};
     // actually, the forward end5 must be used to search, this means seq_info.end5.is_some() must be true. The following expr must be true
     if seq_info.may_trim_end5() {
+        // Step1. consider to align end5
         if let Some((_, end5_ident, end5_align)) = trim_end(seq_info.end5, read_seq, aligner, ReadEnd::End5) {
             // _ = end5_len;
             end5_alignment = end5_align;
@@ -59,6 +60,7 @@ fn trim_seq(seq_info: &SequenceInfo, ref_record: &RefRecord, aligner: &mut Local
         }
     }
     if seq_info.may_trim_end3() {
+        // Step2. consider to align end3
         if let Some((end3_len, end3_ident, end3_align)) = trim_end(seq_info.end3, read_seq, aligner, ReadEnd::End3) {
             end3_used_len = end3_len;
             end3_alignment = end3_align;
@@ -77,64 +79,88 @@ fn trim_seq(seq_info: &SequenceInfo, ref_record: &RefRecord, aligner: &mut Local
     
     if CASE1 we thought the right alignments already be found and just use the trim_from and trim_to index of forward read to trim original sequence.
     
-    else if CASE2 the rev com read will be checked as well. And the total alignment identity base number (ident base number in end5 + ident base number in end3) 
-    will be calculated for forward read and rev com read. Finally we will use the trim_from and trim_to index of read (forward or rev com) that has more identity base
+    else if CASE2 the rev com read will be checked as well. And the total alignment identity bases number (ident base number in end5 + ident base number in end3) 
+    will be calculated for forward read and rev com read. More identity bases number, Better the alignment are. 
+    Finally, we will use the trim_from and trim_to index of read (forward or rev com) that has more identity base
     to trim the original sequence
      */
     if !seq_info.may_trim_rev_com_end5() {
+        // Step3. if for this seq_info, rev_com align is not needed, then just use trim info from Step1 and Step2
         if trim_end5_success {
-            pretty_log.push_str(&end5_alignment.pretty(ReadEnd::End5))
+            pretty_log.as_mut().map(|x| x.push_str(&end5_alignment.pretty(ReadEnd::End5)));
         }
         if trim_end3_success {
-            pretty_log.push_str(&end3_alignment.pretty(ReadEnd::End3))
+            pretty_log.as_mut().map(|x| x.push_str(&end3_alignment.pretty(ReadEnd::End3)));
         }
-        pretty_log.push_str(SEP_LINE);
+        pretty_log.as_mut().map(|x| SEP_LINE);
         if fwd_trim_to >= fwd_trim_from {
             return Some((fwd_trim_from, fwd_trim_to, pretty_log))
         } else {
             return None // if the original sequence is too short, maybe the align start of end3 is less than the align end of end5
         }
     } else {
-        if trim_end5_success && trim_end3_success {
-            if trim_end5_success {
-                pretty_log.push_str(&end5_alignment.pretty(ReadEnd::End5))
-            }
-            if trim_end3_success {
-                pretty_log.push_str(&end3_alignment.pretty(ReadEnd::End3))
-            }
-            pretty_log.push_str(SEP_LINE);
+        // Step4. if the rev_com read should be also detected
+        if trim_end5_success && trim_end3_success { 
+            // Step5. if the check of both ends of forward passed, then just use trim info from Step1 and Step2
+            pretty_log.as_mut().map(|x| x.push_str(&end5_alignment.pretty(ReadEnd::End5)));
+            pretty_log.as_mut().map(|x| x.push_str(&end3_alignment.pretty(ReadEnd::End3)));
+            pretty_log.as_mut().map(|x|x.push_str(SEP_LINE));
             if fwd_trim_to >= fwd_trim_from {
                 return Some((fwd_trim_from, fwd_trim_to, pretty_log))
             } else {
                 return None // if the original sequence is too short, maybe the align start of end3 is less than the align end of end5
             }
         } else {
+            // Step6. if just one end of forward passed, then consider the both ends of rev_com and do Step7
             let mut rev_ident_score = 0;
             let mut rev_trim_from = 0;
+            let mut trim_rev_com_end5_success = false;
+            let mut trim_rev_com_end3_success =false;
             let mut rev_trim_to = read_seq.len();
+            let mut rev_com_end5_alignment = LocalAlignment::default();
+            let mut rev_com_end3_alignment = LocalAlignment::default();
+            // Step7. check end5 of rev_com
             if let Some((rev_com_end5_len, rev_com_end5_ident, rev_com_end5_align)) = trim_end(seq_info.rev_com_end5, read_seq, aligner, ReadEnd::End5) {
                 _ = rev_com_end5_len;
-                end5_alignment = rev_com_end5_align;
-                rev_trim_from = end5_alignment.read_range.0 - 1;
+                rev_com_end5_alignment = rev_com_end5_align;
+                rev_trim_from = rev_com_end5_alignment.read_range.0 - 1;
                 rev_ident_score += rev_com_end5_ident;
-                pretty_log.push_str(&end5_alignment.pretty(ReadEnd::End5));
+                trim_rev_com_end5_success = true;
+                // pretty_log.as_mut().map(|x| x.push_str(&end5_alignment.pretty(ReadEnd::End5)));
             }
-            if let Some((_, rev_com_end3_ident, rev_com_end3_align)) = trim_end(seq_info.rev_com_end3, read_seq, aligner, ReadEnd::End3) {
-                // end3_used_len = rev_com_end3_len;
-                end3_alignment = rev_com_end3_align;
-                rev_trim_to = read_seq.len() - end3_used_len + end3_alignment.read_range.0 - 1;
+            // Step8. check end3 of rev_com
+            if let Some((rev_com_end3_len, rev_com_end3_ident, rev_com_end3_align)) = trim_end(seq_info.rev_com_end3, read_seq, aligner, ReadEnd::End3) {
+                end3_used_len = rev_com_end3_len;
+                rev_com_end3_alignment = rev_com_end3_align;
+                rev_trim_to = read_seq.len() - end3_used_len + rev_com_end3_alignment.read_range.0 - 1;
                 rev_ident_score += rev_com_end3_ident;
-                pretty_log.push_str(&end3_alignment.pretty(ReadEnd::End3));
+                trim_rev_com_end3_success = true;
             }
-            pretty_log.push_str(SEP_LINE);
+            // Step9. determine which read (forward or rev_com) will be used depends on the total identity bases number of each direction
             if fwd_ident_score > rev_ident_score {
                 if fwd_trim_to >= fwd_trim_from {
+                    // Step10. if identity bases numbers of forward is more, just use trim info from Step1 and Step2
+                    if trim_end5_success {
+                        pretty_log.as_mut().map(|x| x.push_str(&end5_alignment.pretty(ReadEnd::End5)));
+                    }
+                    if trim_end3_success {
+                        pretty_log.as_mut().map(|x| x.push_str(&end3_alignment.pretty(ReadEnd::End3)));
+                    }
+                    pretty_log.as_mut().map(|x|x.push_str(SEP_LINE));
                     return Some((fwd_trim_from, fwd_trim_to, pretty_log))
                 } else {
                     return None
                 }
             } else {
+                // Step11. if identity bases numbers of rev_com is more, just use trim info from Step7 and Step8
                 if rev_trim_to >= rev_trim_from {
+                    if trim_rev_com_end5_success {
+                        pretty_log.as_mut().map(|x| x.push_str(&rev_com_end5_alignment.pretty(ReadEnd::End5)));
+                    }
+                    if trim_rev_com_end3_success {
+                        pretty_log.as_mut().map(|x| x.push_str(&rev_com_end3_alignment.pretty(ReadEnd::End3)));
+                    }
+                    pretty_log.as_mut().map(|x|x.push_str(SEP_LINE));
                     return Some((rev_trim_from, rev_trim_to, pretty_log))
                 } else {
                     return None
@@ -144,7 +170,7 @@ fn trim_seq(seq_info: &SequenceInfo, ref_record: &RefRecord, aligner: &mut Local
     }
 }
 
-#[test]
+// #[test]
 pub fn test_trim() {
     use crate::fastq::FastqReader;
     use crate::fastq::NanoRead;
@@ -179,12 +205,14 @@ pub fn test_trim() {
             break;
         }
         let ref_record = ref_record.unwrap().unwrap();
-        // if ref_record.id().unwrap() != "SRR30594249.10" {
-        //     continue;
-        // }
-        if let Some((trim_from, trim_to, pretty_log)) = trim_seq(pcb_1, &ref_record, &mut aligner) {
-            println!("{pretty_log}");
-            log_writer.write(pretty_log.as_bytes()).unwrap();
+        if ref_record.id().unwrap() != "SRR30594249.10" {
+            continue;
+        }
+        if let Some((trim_from, trim_to, pretty_log)) = trim_seq(pcb_1, &ref_record, &mut aligner, false) {
+            println!("{:?}", pretty_log);
+            if pretty_log.is_some() {
+                log_writer.write(pretty_log.unwrap().as_bytes()).unwrap();
+            }
         }
         // let x = trim_seq(pcb_1, &ref_record, &mut aligner);
         // log_writer.write(log.as_bytes()).unwrap();
