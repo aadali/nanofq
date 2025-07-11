@@ -1,10 +1,9 @@
 use std::collections::{HashMap, HashSet};
-use std::hint::assert_unchecked;
-use std::io::IoSliceMut;
 use std::sync::OnceLock;
 
 static DEGE_BASES: OnceLock<HashMap<u8, HashSet<u8>>> = OnceLock::new();
 static BASES: OnceLock<HashMap<u8, u8>> = OnceLock::new();
+static Q2P_TABLE: OnceLock<[f64; 128]> = OnceLock::new();
 
 pub fn get_dege_bases() -> &'static HashMap<u8, HashSet<u8>> {
     DEGE_BASES.get_or_init(|| {
@@ -41,6 +40,15 @@ pub fn get_bases() -> &'static HashMap<u8, u8> {
     })
 }
 
+pub fn get_q2p_table() -> &'static [f64; 128] {
+    Q2P_TABLE.get_or_init(|| {
+        let mut arr = [f64::NAN; 128];
+        for q in 33..127usize {
+            arr[q] = 10.0f64.powf((q - 33) as f64 / -10.0)
+        }
+        arr
+    })
+}
 // ref_base from primer or reference can be dege base
 pub static IS_MATCHED: fn(&u8, &u8) -> bool = |ref_base, read_base| {
     ref_base == read_base
@@ -49,6 +57,7 @@ pub static IS_MATCHED: fn(&u8, &u8) -> bool = |ref_base, read_base| {
             .map_or(false, |x| x.contains(read_base))
 };
 
+pub const SEP_LINE :&str = "---------------------------------------------\n";
 #[test]
 fn test_dege_base() {
     assert!(IS_MATCHED(&b'V', &b'A'));

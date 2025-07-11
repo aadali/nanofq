@@ -1,4 +1,4 @@
-use crate::utils::{IS_MATCHED};
+use crate::utils::IS_MATCHED;
 
 static REF: &[u8; 0] = b"";
 static READ: &[u8; 0] = b"";
@@ -11,32 +11,51 @@ enum AlignmentOperation {
     Null,
 }
 
-enum SeqEnd {
+#[derive(PartialEq)]
+pub enum ReadEnd {
     End5,
     End3,
 }
 
 #[derive(Debug, Clone)]
-struct Scores {
-    match_: i32,
-    mismatch: i32,
-    gap_open: i32,
-    gap_extend: i32,
+pub struct Scores {
+    pub(crate) match_: i32,
+    pub(crate) mismatch: i32,
+    pub(crate) gap_open: i32,
+    pub(crate) gap_extend: i32,
 }
 
 #[derive(Debug)]
-struct LocalAlignment<'a> {
+pub struct LocalAlignment<'a> {
     // all index in this struct used 1-based coordinate system
     reference: &'a [u8],
-    read: &'a [u8],
-    ref_range: (usize, usize),
-    read_range: (usize, usize),
+    read_end: &'a [u8],
+    pub ref_range: (usize, usize),
+    pub read_range: (usize, usize),
     max_score: i32,
     read_map_ref_operations: Vec<AlignmentOperation>,
 }
 
 impl<'a> LocalAlignment<'a> {
-    fn pretty(&self, end: SeqEnd) -> String {
+    #[inline]
+    pub fn get_ident(&self) -> (usize, f64) {
+        let ident = self
+            .read_map_ref_operations
+            .iter()
+            .filter(|x| *x == &AlignmentOperation::Match)
+            .count();
+        (
+            ident,
+            ident as f64 / self.read_map_ref_operations.len() as f64,
+        )
+    }
+
+    #[inline]
+    pub fn get_percent(&self) -> f64 {
+        (self.ref_range.1 - self.ref_range.0 + 1) as f64 / self.reference.len() as f64
+    }
+
+    pub fn pretty(&self, end: ReadEnd) -> String {
         let mut align_ref_vec = Vec::<u8>::new();
         let mut line_vec = Vec::<u8>::new();
         let mut align_read_vec = Vec::<u8>::new();
@@ -47,14 +66,14 @@ impl<'a> LocalAlignment<'a> {
                 &AlignmentOperation::Match => {
                     align_ref_vec.push(self.reference[ref_idx]);
                     line_vec.push(b'|');
-                    align_read_vec.push(self.read[read_idx]);
+                    align_read_vec.push(self.read_end[read_idx]);
                     ref_idx += 1;
                     read_idx += 1;
                 }
                 &AlignmentOperation::Subst => {
                     align_ref_vec.push(self.reference[ref_idx]);
                     line_vec.push(b'\\');
-                    align_read_vec.push(self.read[read_idx]);
+                    align_read_vec.push(self.read_end[read_idx]);
                     ref_idx += 1;
                     read_idx += 1;
                 }
@@ -65,7 +84,7 @@ impl<'a> LocalAlignment<'a> {
                     ref_idx += 1;
                 }
                 &AlignmentOperation::Ins => {
-                    align_read_vec.push(self.read[read_idx]);
+                    align_read_vec.push(self.read_end[read_idx]);
                     line_vec.push(b'x');
                     align_ref_vec.push(b'-');
                     read_idx += 1;
@@ -80,7 +99,7 @@ impl<'a> LocalAlignment<'a> {
         let mut read_range_start = self.read_range.0 as isize;
         let mut read_range_end = self.read_range.1 as isize;
         let align_read_str = match end {
-            SeqEnd::End5 => {
+            ReadEnd::End5 => {
                 format!(
                     "{:>5} {} {:<5}",
                     self.read_range.0,
@@ -88,9 +107,9 @@ impl<'a> LocalAlignment<'a> {
                     self.read_range.1
                 )
             }
-            SeqEnd::End3 => {
-                read_range_start = 0 - (self.read.len() as isize - read_range_start + 1);
-                read_range_end = 0 - (self.read.len() as isize - read_range_end + 1);
+            ReadEnd::End3 => {
+                read_range_start = 0 - (self.read_end.len() as isize - read_range_start + 1);
+                read_range_end = 0 - (self.read_end.len() as isize - read_range_end + 1);
                 format!(
                     "{:>5} {} {:<5}",
                     read_range_start,
@@ -108,10 +127,20 @@ impl<'a> LocalAlignment<'a> {
             unsafe { std::str::from_utf8_unchecked(&align_ref_vec) },
             self.ref_range.1
         );
+        let which_end = if end == ReadEnd::End5 {
+            "Align5'End:\n"
+        } else {
+            "Align3'End:\n"
+        };
         format!(
-            "ReadAlignRange: [{}, {}]\nRefAlignRange: [{}, {}]\n{}\n{}\n{}",
+            "{}AlignPercent: {}\nIdentPercent:{}\nReadAlignRange:{}, [{}, {}]\nRefAlignRange:{}, [{}, {}]\n{}\n{}\n{}\n",
+            which_end,
+            self.get_percent(),
+            self.get_ident().1,
+            self.read_end.len(),
             read_range_start,
             read_range_end,
+            self.reference.len(),
             self.ref_range.0,
             self.ref_range.1,
             align_read_str,
@@ -125,9 +154,9 @@ impl<'a> Default for LocalAlignment<'a> {
     fn default() -> Self {
         LocalAlignment {
             reference: &REF[..],
-            read: &READ[..],
-            ref_range: (0, 0),
-            read_range: (0, 0),
+            read_end: &READ[..],
+            ref_range: (1, 1),
+            read_range: (1, 1),
             max_score: i32::MIN,
             read_map_ref_operations: vec![],
         }
@@ -135,7 +164,7 @@ impl<'a> Default for LocalAlignment<'a> {
 }
 
 #[derive(Debug, Clone)]
-struct LocalAligner {
+pub struct LocalAligner {
     row: usize,
     col: usize,
     scores: Scores,
@@ -144,11 +173,11 @@ struct LocalAligner {
 }
 
 impl LocalAligner {
-    fn new(row: usize, col: usize, scores: Scores) -> Self {
+    pub fn new(row: usize, col: usize, scores: Scores) -> Self {
         debug_assert!(scores.gap_extend < 0, "gap_extend must be negative int");
         debug_assert!(scores.gap_open < 0, "gap_open must be negative int");
         debug_assert!(scores.match_ > 0, "match must be positive int");
-        debug_assert!(scores.mismatch < 0, "mismatch must be positive int");
+        debug_assert!(scores.mismatch < 0, "mismatch must be negative int");
         let score_matrix_row = vec![0i32; col + 1];
         let mut score_matrix = vec![score_matrix_row; row + 1];
         let mut align_matrix = vec![vec![AlignmentOperation::Null; col + 1]; row + 1];
@@ -167,12 +196,12 @@ impl LocalAligner {
         }
     }
 
-    fn align<'a>(&mut self, reference: &'a [u8], read: &'a [u8]) -> LocalAlignment<'a> {
+    pub fn align<'a>(&mut self, reference: &'a [u8], read: &'a [u8]) -> LocalAlignment<'a> {
         debug_assert!(self.row >= reference.len());
         debug_assert!(self.col >= read.len());
         let mut local_alignment = LocalAlignment::default();
         local_alignment.reference = reference;
-        local_alignment.read = read;
+        local_alignment.read_end = read;
         for ref_row in 1..(reference.len() + 1) {
             for read_col in 1..(read.len() + 1) {
                 let prev_score_from_diag = self.score_matrix[ref_row - 1][read_col - 1];
@@ -229,10 +258,10 @@ impl LocalAligner {
 
         let mut trace_ref_row = local_alignment.ref_range.1;
         let mut trace_read_col = local_alignment.read_range.1;
-        println!(
-            "{}-{}",
-            local_alignment.ref_range.1, local_alignment.read_range.1
-        );
+        // println!(
+        //     "{}-{}",
+        //     local_alignment.ref_range.1, local_alignment.read_range.1
+        // );
         loop {
             let this_operation = self.align_matrix[trace_ref_row][trace_read_col];
             local_alignment.read_map_ref_operations.push(this_operation);
@@ -303,6 +332,6 @@ pub fn test_alignment() {
     // let reference = b"ATGCGA";
     let alignment = aligner.align(reference, read);
     println!("{:?}", alignment);
-    let x = alignment.pretty(SeqEnd::End5);
+    let x = alignment.pretty(ReadEnd::End5);
     println!("{x}");
 }

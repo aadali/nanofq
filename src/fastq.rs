@@ -4,18 +4,7 @@ use seq_io::fastq::{Record, RefRecord};
 use std::fs::File;
 use std::io::{BufWriter, Read, Write};
 use std::ops::{Deref, DerefMut};
-use std::sync::OnceLock;
-
-static Q2P_TABLE: OnceLock<[f64; 128]> = OnceLock::new();
-fn get_q2p_table() -> &'static [f64; 128] {
-    Q2P_TABLE.get_or_init(|| {
-        let mut arr = [f64::NAN; 128];
-        for q in 33..127usize {
-            arr[q] = 10.0f64.powf((q - 33) as f64 / -10.0)
-        }
-        arr
-    })
-}
+use crate::utils::get_q2p_table;
 
 const BUFF: usize = 1024 * 1024;
 pub type EachStats = (Box<String>, usize, (f64, f64), Option<f64>); // (f64, f64): (this_read_average_error_pro, this_read_quality)

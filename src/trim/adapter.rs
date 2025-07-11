@@ -1,6 +1,5 @@
 use clap::parser::ValueSource;
 use std::collections::HashMap;
-use std::io::repeat;
 use std::iter::repeat_n;
 use std::sync::OnceLock;
 
@@ -234,19 +233,20 @@ pub fn get_seq_info() -> &'static HashMap<&'static str, &'static SequenceInfo> {
     })
 }
 
-pub type End = (usize, f64, f64);
+pub type EndAlignPara = (usize, f64, f64);
+pub type EndConfig = Option<(&'static str, EndAlignPara)>;
 #[derive(Clone, Debug)]
 pub struct SequenceInfo {
     pub kit_name: &'static str,
-    pub end5: Option<(&'static str, End)>,
-    pub end3: Option<(&'static str, End)>,
-    pub rev_com_end5: Option<(&'static str, End)>,
-    pub rev_com_end3: Option<(&'static str, End)>,
+    pub end5: EndConfig,
+    pub end3: EndConfig,
+    pub rev_com_end5: EndConfig,
+    pub rev_com_end3: EndConfig,
 }
 
 impl SequenceInfo {
     fn single_update(
-        end: &mut End,
+        end: &mut EndAlignPara,
         len: (ValueSource, usize),
         pct: (ValueSource, f64),
         ident: (ValueSource, f64),
@@ -310,17 +310,22 @@ impl SequenceInfo {
     }
 
     #[inline]
-    pub fn maybe_trim_end3(&self) -> bool {
+    pub fn may_trim_end5(&self) -> bool {
+        self.end5.is_some()
+    }
+    
+    #[inline]
+    pub fn may_trim_end3(&self) -> bool {
         self.end3.is_some()
     }
 
     #[inline]
-    pub fn maybe_trim_rev_com_end5(&self) -> bool {
+    pub fn may_trim_rev_com_end5(&self) -> bool {
         self.rev_com_end5.is_some()
     }
 
     #[inline]
-    pub fn maybe_trim_rev_com_end3(&self) -> bool {
+    pub fn may_trim_rev_com_end3(&self) -> bool {
         self.rev_com_end3.is_some()
     }
 
@@ -355,7 +360,7 @@ impl SequenceInfo {
                 &mut this_rev_com_end5,
                 rev_com_end5_len,
                 rev_com_end5_pct,
-                rev_com_end5_pct,
+                rev_com_end5_ident,
             );
             self.rev_com_end5 = Some((self.rev_com_end5.unwrap().0, this_rev_com_end5))
         }
@@ -366,27 +371,27 @@ impl SequenceInfo {
                 &mut this_rev_com_end3,
                 rev_com_end3_len,
                 rev_com_end3_pct,
-                rev_com_end3_pct,
+                rev_com_end3_ident,
             );
             self.rev_com_end3 = Some((self.rev_com_end3.unwrap().0, this_rev_com_end3))
         }
     }
 }
 
-const LSK_END5: End = (100, 0.5, 0.75);
-const LSK_END3: End = (80, 0.5, 0.75);
-const RAD_END5: End = (180, 0.5, 0.75);
-const NBD_END5: End = (150, 0.6, 0.75);
-const NBD_END3: End = (120, 0.6, 0.75);
-const RBK_END5: End = (180, 0.5, 0.75);
-const PCS_END5: End = (150, 0.6, 0.75);
-const PCS_END3: End = (150, 0.4, 0.75);
-const PCS_REV_COM_END5: End = (150, 0.6, 0.75);
-const PCS_REV_COM_END3: End = (150, 0.4, 0.75);
-const PCB_END5: End = (180, 0.5, 0.75);
-const PCB_END3: End = (180, 0.5, 0.75);
-const PCB_REV_COM_END5: End = (180, 0.5, 0.75);
-const PCB_REV_COM_END3: End = (180, 0.5, 0.75);
+const LSK_END5: EndAlignPara = (100, 0.5, 0.75);
+const LSK_END3: EndAlignPara = (80, 0.5, 0.75);
+const RAD_END5: EndAlignPara = (180, 0.5, 0.75);
+const NBD_END5: EndAlignPara = (150, 0.6, 0.75);
+const NBD_END3: EndAlignPara = (120, 0.6, 0.75);
+const RBK_END5: EndAlignPara = (180, 0.5, 0.75);
+const PCS_END5: EndAlignPara = (150, 0.6, 0.75);
+const PCS_END3: EndAlignPara = (150, 0.4, 0.75);
+const PCS_REV_COM_END5: EndAlignPara = (150, 0.6, 0.75);
+const PCS_REV_COM_END3: EndAlignPara = (150, 0.4, 0.75);
+const PCB_END5: EndAlignPara = (180, 0.5, 0.75);
+const PCB_END3: EndAlignPara = (180, 0.5, 0.75);
+const PCB_REV_COM_END5: EndAlignPara = (180, 0.5, 0.75);
+const PCB_REV_COM_END3: EndAlignPara = (180, 0.5, 0.75);
 
 /*
 SQK-LSK114
