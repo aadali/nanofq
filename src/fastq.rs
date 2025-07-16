@@ -1,10 +1,13 @@
+use crate::alignment::{LocalAligner, LocalAlignment};
+use crate::trim::adapter::SequenceInfo;
+use crate::trim::trim_seq;
+use crate::utils::get_q2p_table;
 use ansi_term::Color;
 use seq_io::fastq;
 use seq_io::fastq::{Record, RefRecord};
 use std::fs::File;
 use std::io::{BufWriter, Read, Write};
 use std::ops::{Deref, DerefMut};
-use crate::utils::get_q2p_table;
 
 const BUFF: usize = 1024 * 1024;
 pub type EachStats = (Box<String>, usize, (f64, f64), Option<f64>); // (f64, f64): (this_read_average_error_pro, this_read_quality)
@@ -26,9 +29,7 @@ impl<'a> FilterOption<'a> {
             None => Ok(Some(BufWriter::new(File::create(
                 "/tmp/NanoFqFailed.fastq",
             )?))),
-            Some(failed_fastq_file) => {
-                Ok(Some(BufWriter::new(File::create(failed_fastq_file)?)))
-            }
+            Some(failed_fastq_file) => Ok(Some(BufWriter::new(File::create(failed_fastq_file)?))),
         }
     }
 }
@@ -41,8 +42,13 @@ pub trait NanoRead {
     fn is_passed(&self, fo: &FilterOption) -> bool;
 
     fn write(&self, writer: &mut dyn Write) -> Result<(), anyhow::Error>;
-    
-    fn sub_record_to_string(&self, start: Option<usize>, end: Option<usize>) -> Option<String>;
+
+    fn trim(
+        &self,
+        seq_info: &SequenceInfo,
+        aligner: &mut LocalAligner,
+        pretty_log: bool,
+    ) -> (Option<(&[u8], &[u8])>, Option<String>);
 }
 
 impl<'a> NanoRead for RefRecord<'a> {
@@ -124,22 +130,29 @@ impl<'a> NanoRead for RefRecord<'a> {
         Ok(())
     }
 
-     fn sub_record_to_string(&self, start: Option<usize>, end: Option<usize>) -> Option<String> {
-        let start = start.unwrap_or(0);
-        let end = end.unwrap_or(self.seq().len());
-        if end > start  {
-            let seq = &self.seq()[start..end];
-            let qual = &self.qual()[start..end];
-            unsafe {
-                Some(format!(
-                    "@{}\n{}\n+\n{}\n",
-                    std::str::from_utf8_unchecked(self.head()),
-                    std::str::from_utf8_unchecked(seq),
-                    std::str::from_utf8_unchecked(qual)
-                ))
-            }
+    fn trim(
+        &self,
+        seq_info: &SequenceInfo,
+        aligner: &mut LocalAligner,
+        pretty_log: bool,
+    ) -> (Option<(&[u8], &[u8])>, Option<String>) {
+        let (trim_from, trim_to, log_string) = trim_seq(
+            seq_info,
+            self.seq(),
+            self.id().expect("parse into read id error"),
+            aligner,
+            pretty_log,
+        );
+        if trim_from == 0 && trim_to == 0 {
+            (
+                Some((
+                    &self.seq()[trim_from..=trim_to],
+                    &self.qual()[trim_from..=trim_to],
+                )),
+                log_string,
+            )
         } else {
-            None
+            (None, log_string)
         }
     }
 }

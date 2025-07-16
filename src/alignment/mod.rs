@@ -17,7 +17,7 @@ pub enum ReadEnd {
     End3,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Scores {
     pub(crate) match_: i32,
     pub(crate) mismatch: i32,
@@ -163,7 +163,7 @@ impl<'a> Default for LocalAlignment<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LocalAligner {
     row: usize,
     col: usize,
@@ -179,7 +179,7 @@ impl LocalAligner {
         debug_assert!(scores.match_ > 0, "match must be positive int");
         debug_assert!(scores.mismatch < 0, "mismatch must be negative int");
         let score_matrix_row = vec![0i32; col + 1];
-        let mut score_matrix = vec![score_matrix_row; row + 1];
+        let score_matrix = vec![score_matrix_row; row + 1];
         let mut align_matrix = vec![vec![AlignmentOperation::Null; col + 1]; row + 1];
         for i in 0..col + 1 {
             align_matrix[0][i] = AlignmentOperation::Ins;
@@ -194,6 +194,15 @@ impl LocalAligner {
             score_matrix,
             align_matrix,
         }
+    }
+    
+    pub fn update(&mut self, row: usize, col: usize, scores: Scores){
+        let tmp = Self::new(row, col, scores);
+        self.row = tmp.row;
+        self.col = tmp.col;
+        self.scores = tmp.scores;
+        self.score_matrix = tmp.score_matrix;
+        self.align_matrix = tmp.align_matrix;
     }
 
     pub fn align<'a>(&mut self, reference: &'a [u8], read: &'a [u8]) -> LocalAlignment<'a> {

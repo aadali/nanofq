@@ -385,13 +385,13 @@ const NBD_END5: EndAlignPara = (150, 0.6, 0.75);
 const NBD_END3: EndAlignPara = (120, 0.6, 0.75);
 const RBK_END5: EndAlignPara = (180, 0.5, 0.75);
 const PCS_END5: EndAlignPara = (150, 0.6, 0.75);
-const PCS_END3: EndAlignPara = (150, 0.4, 0.75);
+const PCS_END3: EndAlignPara = (120, 0.4, 0.75);
 const PCS_REV_COM_END5: EndAlignPara = (150, 0.6, 0.75);
-const PCS_REV_COM_END3: EndAlignPara = (150, 0.4, 0.75);
-const PCB_END5: EndAlignPara = (180, 0.5, 0.75);
-const PCB_END3: EndAlignPara = (180, 0.5, 0.75);
-const PCB_REV_COM_END5: EndAlignPara = (180, 0.5, 0.75);
-const PCB_REV_COM_END3: EndAlignPara = (180, 0.5, 0.75);
+const PCS_REV_COM_END3: EndAlignPara = (120, 0.4, 0.75);
+const PCB_END5: EndAlignPara = (180, 0.6, 0.75);
+const PCB_END3: EndAlignPara = (120, 0.6, 0.75);
+const PCB_REV_COM_END5: EndAlignPara = (180, 0.6, 0.75);
+const PCB_REV_COM_END3: EndAlignPara = (120, 0.6, 0.75);
 
 /*
 SQK-LSK114

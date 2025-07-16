@@ -1,16 +1,23 @@
+use crate::alignment::{LocalAligner, Scores};
 use crate::fastq::{EachStats, FastqReader, FilterOption, NanoRead};
 use crate::summary::{write_stats, write_summary};
+use crate::trim::adapter::SequenceInfo;
 use clap::ArgMatches;
 use flate2::bufread::MultiGzDecoder;
 use rayon::prelude::*;
-use seq_io::fastq::{RecordSet, RefRecord};
+use seq_io::fastq::{Record, RecordSet, RefRecord};
 use std::any::Any;
+use std::cell::RefCell;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::mpsc::Receiver;
 use std::thread;
+
+thread_local! {
+    static LOCAL_ALIGNER: RefCell<LocalAligner>= RefCell::new(LocalAligner::default());
+}
 
 fn collect_fastq_dir(path: &Path) -> Result<Vec<PathBuf>, anyhow::Error> {
     assert!(path.is_dir());
@@ -107,8 +114,7 @@ fn filter_receiver(
     failed_writer: &mut BufWriter<File>,
 ) -> Result<(), anyhow::Error> {
     for record_set in receiver {
-        let mut record_vec = vec![];
-        record_set.into_iter().for_each(|x| record_vec.push(x));
+        let record_vec = record_set.into_iter().collect::<Vec<RefRecord>>();
         let vec2 = record_vec
             .par_iter()
             .map(|x| x.is_passed(fo))
@@ -116,15 +122,15 @@ fn filter_receiver(
         if retain_failed {
             for (ref_record, is_passed) in record_vec.iter().zip(&vec2) {
                 if *is_passed {
-                    ref_record.write(writer)?;
+                    NanoRead::write(ref_record, writer)?;
                 } else {
-                    ref_record.write(failed_writer)?
+                    NanoRead::write(ref_record, failed_writer)?;
                 }
             }
         } else {
             for (ref_record, is_passed) in record_vec.iter().zip(&vec2) {
                 if *is_passed {
-                    ref_record.write(writer)?;
+                    NanoRead::write(ref_record, writer)?;
                 }
             }
         }
@@ -196,13 +202,14 @@ fn filter_fastq_dir(
     }
     Ok(())
 }
+
 pub fn run_stats(stats_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
     let input = stats_cmd.get_one::<String>("input");
     let output = stats_cmd.get_one::<String>("output");
     let summary = stats_cmd.get_one::<String>("summary").unwrap();
     let topn = stats_cmd.get_one::<u16>("topn").unwrap();
-    let mut quality = stats_cmd.get_one::<Vec<f64>>("quality").unwrap();
-    let mut lengths = stats_cmd.get_one::<Vec<usize>>("length");
+    let quality = stats_cmd.get_one::<Vec<f64>>("quality").unwrap();
+    let lengths = stats_cmd.get_one::<Vec<usize>>("length");
     let gc = stats_cmd.get_flag("gc");
     let thread = stats_cmd.get_one::<u16>("thread").unwrap();
     let plot = stats_cmd.get_flag("plot");
@@ -335,5 +342,134 @@ pub fn run_filter(filter_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
             }
         }
     }
+    Ok(())
+}
+
+fn trim_receiver(
+    receiver: Receiver<RecordSet>,
+    seq_info: &SequenceInfo,
+    writer: &mut dyn Write,
+    pretty_log: bool,
+    log_writer: &mut BufWriter<File>,
+) -> Result<(), anyhow::Error> {
+    for record_set in receiver {
+        let record_vec = record_set.into_iter().collect::<Vec<RefRecord>>();
+        let trimmed_result: Vec<_> = record_vec
+            .par_iter()
+            .map(|each_ref_record| {
+                LOCAL_ALIGNER.with_borrow_mut(|local_aligner| {
+                    each_ref_record.trim(seq_info, local_aligner, pretty_log)
+                })
+            })
+            .collect();
+        if pretty_log {
+            trimmed_result.iter().zip(record_vec.iter()).for_each(
+                |((trimmed_info_opt, log_string), ref_record)| {
+                    if let Some((sub_seq, sub_qual)) = trimmed_info_opt {
+                        write!(
+                            writer,
+                            "@{}\n{}\n+{}\n",
+                            unsafe { std::str::from_utf8_unchecked(ref_record.head()) },
+                            unsafe { std::str::from_utf8_unchecked(sub_seq) },
+                            unsafe { std::str::from_utf8_unchecked(sub_qual) }
+                        )
+                        .expect(&format!(
+                            "write trimmed fastq into output file failed for {}",
+                            std::str::from_utf8(ref_record.head()).unwrap()
+                        ));
+                    }
+                    write!(
+                        log_writer,
+                        "{}",
+                        log_string.as_deref().expect(&format!(
+                            "write trimmed fastq into output file failed for {}",
+                            std::str::from_utf8(ref_record.head()).unwrap()
+                        ))
+                    )
+                    .unwrap();
+                },
+            )
+        } else {
+            trimmed_result.iter().zip(record_vec.iter()).for_each(
+                |((trimmed_info_opt, _), ref_record)| {
+                    if let Some((sub_seq, sub_qual)) = trimmed_info_opt {
+                        write!(
+                            writer,
+                            "@{}\n{}\n+{}\n",
+                            unsafe { std::str::from_utf8_unchecked(ref_record.head()) },
+                            unsafe { std::str::from_utf8_unchecked(sub_seq) },
+                            unsafe { std::str::from_utf8_unchecked(sub_qual) }
+                        )
+                        .expect(&format!(
+                            "write trimmed fastq into output file failed for {}",
+                            std::str::from_utf8(ref_record.head()).unwrap()
+                        ));
+                    }
+                },
+            )
+        }
+    }
+    Ok(())
+}
+
+fn trim<R>(
+    reader: R,
+    writer: &mut dyn Write,
+    seq_info: &SequenceInfo,
+    pretty_log: bool,
+    log_writer: &mut BufWriter<File>
+) -> Result<(), anyhow::Error>
+where
+    R: Read + Send + Any,
+{
+    let (sender, receiver) = mpsc::sync_channel(1000);
+    let _=thread::spawn(move || {
+        let mut reader = FastqReader::<R>::new(reader);
+        loop {
+            let mut record_set = RecordSet::default();
+            if reader.read_record_set(&mut record_set).is_none() {
+                break;
+            }
+            if sender.send(record_set).is_err() {
+                break;
+            }
+        }
+    });
+    trim_receiver(receiver, seq_info, writer, pretty_log, log_writer)?;
+    Ok(())
+}
+
+fn trim_fastq_dir(
+    path: &Path,
+    writer:&mut dyn Write,
+    seq_info: &SequenceInfo,
+    pretty_log: bool,
+    log_writer:&mut BufWriter<File>
+) -> Result<(), anyhow::Error> {
+    let fastqs = collect_fastq_dir(path)?;
+    for fq in fastqs {
+        if fq.to_str().unwrap().ends_with(".gz") {
+            trim(
+                MultiGzDecoder::new(BufReader::new(File::open(fq)?)),
+                writer,
+                seq_info,
+                pretty_log,
+                log_writer
+            )?
+        } else {
+            trim(
+                BufReader::new(File::open(fq)?),
+                writer,
+                seq_info,
+                pretty_log,
+                log_writer
+            )?
+        }
+    }
+    Ok(())
+}
+
+pub fn run_trim(trim_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
+    
     Ok(())
 }
