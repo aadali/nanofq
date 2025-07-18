@@ -1,15 +1,16 @@
 use crate::alignment::{LocalAligner, Scores};
 use crate::fastq::{EachStats, FastqReader, FilterOption, NanoRead};
 use crate::summary::{write_stats, write_summary};
-use crate::trim::adapter::SequenceInfo;
-use clap::ArgMatches;
+use crate::trim::adapter::{ SequenceInfo, get_seq_info};
+use crate::utils::rev_com;
+use clap::{ArgMatches};
 use flate2::bufread::MultiGzDecoder;
 use rayon::prelude::*;
 use seq_io::fastq::{Record, RecordSet, RefRecord};
 use std::any::Any;
 use std::cell::RefCell;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{ BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::mpsc::Receiver;
@@ -417,13 +418,13 @@ fn trim<R>(
     writer: &mut dyn Write,
     seq_info: &SequenceInfo,
     pretty_log: bool,
-    log_writer: &mut BufWriter<File>
+    log_writer: &mut BufWriter<File>,
 ) -> Result<(), anyhow::Error>
 where
     R: Read + Send + Any,
 {
     let (sender, receiver) = mpsc::sync_channel(1000);
-    let _=thread::spawn(move || {
+    let _ = thread::spawn(move || {
         let mut reader = FastqReader::<R>::new(reader);
         loop {
             let mut record_set = RecordSet::default();
@@ -441,10 +442,10 @@ where
 
 fn trim_fastq_dir(
     path: &Path,
-    writer:&mut dyn Write,
+    writer: &mut dyn Write,
     seq_info: &SequenceInfo,
     pretty_log: bool,
-    log_writer:&mut BufWriter<File>
+    log_writer: &mut BufWriter<File>,
 ) -> Result<(), anyhow::Error> {
     let fastqs = collect_fastq_dir(path)?;
     for fq in fastqs {
@@ -454,7 +455,7 @@ fn trim_fastq_dir(
                 writer,
                 seq_info,
                 pretty_log,
-                log_writer
+                log_writer,
             )?
         } else {
             trim(
@@ -462,7 +463,7 @@ fn trim_fastq_dir(
                 writer,
                 seq_info,
                 pretty_log,
-                log_writer
+                log_writer,
             )?
         }
     }
@@ -470,6 +471,195 @@ fn trim_fastq_dir(
 }
 
 pub fn run_trim(trim_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
-    
+    thread_local! {
+        static LOCAL_ALIGNER: RefCell<LocalAligner> = RefCell::new(LocalAligner::default());
+    }
+    let input = trim_cmd.get_one::<String>("input");
+    let output = trim_cmd.get_one::<String>("output");
+    let primers = trim_cmd.get_one::<String>("primers");
+    let kit = trim_cmd.get_one::<String>("kit");
+    let thread = *trim_cmd.get_one::<u16>("thread").unwrap();
+    let match_ = *trim_cmd.get_one::<i32>("match").unwrap();
+    let mismatch = *trim_cmd.get_one::<i32>("mismatch").unwrap();
+    let gap_open = *trim_cmd.get_one::<i32>("gap_opened").unwrap();
+    let gap_extend = *trim_cmd.get_one::<i32>("gap_extend").unwrap();
+    let end5_len = (
+        trim_cmd.value_source("end5_len").unwrap(),
+        *trim_cmd.get_one::<u32>("end5_len").unwrap() as usize,
+    );
+    let end5_pct = (
+        trim_cmd.value_source("end5_align_pct").unwrap(),
+        *trim_cmd.get_one::<f64>("end5_align_pct").unwrap(),
+    );
+    let end5_align_ident = (
+        trim_cmd.value_source("end5_align_ident").unwrap(),
+        *trim_cmd.get_one::<f64>("end5_align_ident").unwrap(),
+    );
+
+    let end3_len = (
+        trim_cmd.value_source("end3_len").unwrap(),
+        *trim_cmd.get_one::<u32>("end3_len").unwrap() as usize,
+    );
+    let end3_pct = (
+        trim_cmd.value_source("end3_align_pct").unwrap(),
+        *trim_cmd.get_one::<f64>("end3_align_pct").unwrap(),
+    );
+    let end3_align_ident = (
+        trim_cmd.value_source("end3_align_ident").unwrap(),
+        *trim_cmd.get_one::<f64>("end3_align_ident").unwrap(),
+    );
+
+    let end5_len_rc = (
+        trim_cmd.value_source("end5_len_rc").unwrap(),
+        *trim_cmd.get_one::<u32>("end5_len_rc").unwrap() as usize,
+    );
+    let end5_pct_rc = (
+        trim_cmd.value_source("end5_align_pct_rc").unwrap(),
+        *trim_cmd.get_one::<f64>("end5_align_pct_rc").unwrap(),
+    );
+    let end5_align_ident_rc = (
+        trim_cmd.value_source("end5_align_ident_rc").unwrap(),
+        *trim_cmd.get_one::<f64>("end5_align_ident_rc").unwrap(),
+    );
+
+    let end3_len_rc = (
+        trim_cmd.value_source("end3_len_rc").unwrap(),
+        *trim_cmd.get_one::<u32>("end3_len_rc").unwrap() as usize,
+    );
+    let end3_pct_rc = (
+        trim_cmd.value_source("end3_align_pct_rc").unwrap(),
+        *trim_cmd.get_one::<f64>("end3_align_pct_rc").unwrap(),
+    );
+    let end3_align_ident_rc = (
+        trim_cmd.value_source("end3_align_ident_rc").unwrap(),
+        *trim_cmd.get_one::<f64>("end3_align_ident_rc").unwrap(),
+    );
+    let scores = Scores {
+        match_,
+        mismatch,
+        gap_open,
+        gap_extend,
+    };
+    let rev_com_used = trim_cmd.get_flag("rev_com_not_used");
+    let mut real_primers = String::new();
+    let mut fwd_primer_rc = String::new();
+    let mut rev_primer_rc = String::new();
+    let mut all_kit_seq_info = get_seq_info();
+    let mut seq_info = SequenceInfo::default();
+    let ref_seq_info = if let Some(primers) = primers {
+        real_primers = primers.clone();
+        let fields: Vec<_> = real_primers
+            .splitn(2, ",")
+            .into_iter()
+            .filter(|x| x.len() > 1)
+            .collect();
+        let fwd_primer = fields[0];
+        let rev_primer = fields[1];
+        fwd_primer_rc = rev_com(fwd_primer);
+        rev_primer_rc = rev_com(rev_primer);
+        seq_info = SequenceInfo {
+            kit_name: "customer",
+            end5: Some((fwd_primer, (end5_len.1, end5_pct.1, end5_align_ident.1))),
+            end3: Some((&rev_primer_rc, (end3_len.1, end3_pct.1, end3_align_ident.1))),
+            rev_com_end5: if rev_com_used {
+                Some((
+                    &rev_primer,
+                    (end5_len_rc.1, end5_pct_rc.1, end5_align_ident_rc.1),
+                ))
+            } else {
+                None
+            },
+            rev_com_end3: if rev_com_used {
+                Some((
+                    &fwd_primer_rc,
+                    (end3_len_rc.1, end3_pct_rc.1, end3_align_ident_rc.1),
+                ))
+            } else {
+                None
+            },
+        };
+        &seq_info
+    } else {
+        let kit_str = kit.unwrap().as_str();
+        let seq_info = all_kit_seq_info.get_mut(kit_str).unwrap();
+        seq_info.update(
+            end5_len,
+            end5_pct,
+            end5_align_ident,
+            end3_len,
+            end3_pct,
+            end3_align_ident,
+            end5_len_rc,
+            end5_pct_rc,
+            end5_align_ident_rc,
+            end3_len_rc,
+            end3_pct_rc,
+            end3_align_ident_rc,
+        );
+        seq_info
+    };
+    let (row, col) = ref_seq_info.get_dim();
+
+    let log = trim_cmd.get_one::<String>("log");
+    let pretty_log = if log.is_some() { true } else { false };
+    let mut log_writer = match log {
+        None => BufWriter::new(File::create("/tmp/NanoFqTrimmed.log")?),
+        Some(log_file) => BufWriter::new(File::create(log_file)?),
+    };
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(thread as usize)
+        .start_handler(move |idx| {
+            LOCAL_ALIGNER.with_borrow_mut(|local_aligner: &mut LocalAligner| {
+                local_aligner.update(row, col, scores)
+            })
+        })
+        .build_global()?;
+    let mut writer: Box<dyn Write> = match output {
+        None => Box::new(BufWriter::new(std::io::stdout())),
+        Some(output_file_path) => Box::new(BufWriter::new(File::create(output_file_path)?)),
+    };
+
+    match input {
+        None => trim(
+            std::io::stdin(),
+            &mut writer,
+            ref_seq_info,
+            pretty_log,
+            &mut log_writer,
+        )?,
+        Some(input_path) => {
+            let ends_with_gz = input_path.ends_with(".gz");
+            let input_path = Path::new(input_path);
+            if input_path.is_file() {
+                if ends_with_gz {
+                    let mut reader = MultiGzDecoder::new(BufReader::new(File::open(input_path)?));
+                    trim(
+                        reader,
+                        &mut writer,
+                        ref_seq_info,
+                        pretty_log,
+                        &mut log_writer,
+                    )?
+                } else {
+                    let mut reader = BufReader::new(File::open(input_path)?);
+                    trim(
+                        reader,
+                        &mut writer,
+                        ref_seq_info,
+                        pretty_log,
+                        &mut log_writer,
+                    )?
+                }
+            } else {
+                trim_fastq_dir(
+                    input_path,
+                    &mut writer,
+                    ref_seq_info,
+                    pretty_log,
+                    &mut log_writer,
+                )?
+            }
+        }
+    }
     Ok(())
 }

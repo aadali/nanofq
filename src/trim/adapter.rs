@@ -1,250 +1,256 @@
 use clap::parser::ValueSource;
 use std::collections::HashMap;
 use std::iter::repeat_n;
-use std::sync::OnceLock;
 
-static SEQ_INFO: OnceLock<HashMap<&str, &SequenceInfo>> = OnceLock::new();
-
-pub fn get_seq_info() -> &'static HashMap<&'static str, &'static SequenceInfo> {
-    SEQ_INFO.get_or_init(|| {
-        let mut seq_info = HashMap::from([
-            ("LSK", &LSK),
-            ("RAD", &RAD),
-            ("ULK", &ULK),
-            ("NBD_1", &NBD_1),
-            ("NBD_2", &NBD_2),
-            ("NBD_3", &NBD_3),
-            ("NBD_4", &NBD_4),
-            ("NBD_5", &NBD_5),
-            ("NBD_6", &NBD_6),
-            ("NBD_7", &NBD_7),
-            ("NBD_8", &NBD_8),
-            ("NBD_9", &NBD_9),
-            ("NBD_10", &NBD_10),
-            ("NBD_11", &NBD_11),
-            ("NBD_12", &NBD_12),
-            ("NBD_13", &NBD_13),
-            ("NBD_14", &NBD_14),
-            ("NBD_15", &NBD_15),
-            ("NBD_16", &NBD_16),
-            ("NBD_17", &NBD_17),
-            ("NBD_18", &NBD_18),
-            ("NBD_19", &NBD_19),
-            ("NBD_20", &NBD_20),
-            ("NBD_21", &NBD_21),
-            ("NBD_22", &NBD_22),
-            ("NBD_23", &NBD_23),
-            ("NBD_24", &NBD_24),
-            ("NBD_25", &NBD_25),
-            ("NBD_26", &NBD_26),
-            ("NBD_27", &NBD_27),
-            ("NBD_28", &NBD_28),
-            ("NBD_29", &NBD_29),
-            ("NBD_30", &NBD_30),
-            ("NBD_31", &NBD_31),
-            ("NBD_32", &NBD_32),
-            ("NBD_33", &NBD_33),
-            ("NBD_34", &NBD_34),
-            ("NBD_35", &NBD_35),
-            ("NBD_36", &NBD_36),
-            ("NBD_37", &NBD_37),
-            ("NBD_38", &NBD_38),
-            ("NBD_39", &NBD_39),
-            ("NBD_40", &NBD_40),
-            ("NBD_41", &NBD_41),
-            ("NBD_42", &NBD_42),
-            ("NBD_43", &NBD_43),
-            ("NBD_44", &NBD_44),
-            ("NBD_45", &NBD_45),
-            ("NBD_46", &NBD_46),
-            ("NBD_47", &NBD_47),
-            ("NBD_48", &NBD_48),
-            ("NBD_49", &NBD_49),
-            ("NBD_50", &NBD_50),
-            ("NBD_51", &NBD_51),
-            ("NBD_52", &NBD_52),
-            ("NBD_53", &NBD_53),
-            ("NBD_54", &NBD_54),
-            ("NBD_55", &NBD_55),
-            ("NBD_56", &NBD_56),
-            ("NBD_57", &NBD_57),
-            ("NBD_58", &NBD_58),
-            ("NBD_59", &NBD_59),
-            ("NBD_60", &NBD_60),
-            ("NBD_61", &NBD_61),
-            ("NBD_62", &NBD_62),
-            ("NBD_63", &NBD_63),
-            ("NBD_64", &NBD_64),
-            ("NBD_65", &NBD_65),
-            ("NBD_66", &NBD_66),
-            ("NBD_67", &NBD_67),
-            ("NBD_68", &NBD_68),
-            ("NBD_69", &NBD_69),
-            ("NBD_70", &NBD_70),
-            ("NBD_71", &NBD_71),
-            ("NBD_72", &NBD_72),
-            ("NBD_73", &NBD_73),
-            ("NBD_74", &NBD_74),
-            ("NBD_75", &NBD_75),
-            ("NBD_76", &NBD_76),
-            ("NBD_77", &NBD_77),
-            ("NBD_78", &NBD_78),
-            ("NBD_79", &NBD_79),
-            ("NBD_80", &NBD_80),
-            ("NBD_81", &NBD_81),
-            ("NBD_82", &NBD_82),
-            ("NBD_83", &NBD_83),
-            ("NBD_84", &NBD_84),
-            ("NBD_85", &NBD_85),
-            ("NBD_86", &NBD_86),
-            ("NBD_87", &NBD_87),
-            ("NBD_88", &NBD_88),
-            ("NBD_89", &NBD_89),
-            ("NBD_90", &NBD_90),
-            ("NBD_91", &NBD_91),
-            ("NBD_92", &NBD_92),
-            ("NBD_93", &NBD_93),
-            ("NBD_94", &NBD_94),
-            ("NBD_95", &NBD_95),
-            ("NBD_96", &NBD_96),
-            ("RBK_1", &RBK_1),
-            ("RBK_2", &RBK_2),
-            ("RBK_3", &RBK_3),
-            ("RBK_4", &RBK_4),
-            ("RBK_5", &RBK_5),
-            ("RBK_6", &RBK_6),
-            ("RBK_7", &RBK_7),
-            ("RBK_8", &RBK_8),
-            ("RBK_9", &RBK_9),
-            ("RBK_10", &RBK_10),
-            ("RBK_11", &RBK_11),
-            ("RBK_12", &RBK_12),
-            ("RBK_13", &RBK_13),
-            ("RBK_14", &RBK_14),
-            ("RBK_15", &RBK_15),
-            ("RBK_16", &RBK_16),
-            ("RBK_17", &RBK_17),
-            ("RBK_18", &RBK_18),
-            ("RBK_19", &RBK_19),
-            ("RBK_20", &RBK_20),
-            ("RBK_21", &RBK_21),
-            ("RBK_22", &RBK_22),
-            ("RBK_23", &RBK_23),
-            ("RBK_24", &RBK_24),
-            ("RBK_25", &RBK_25),
-            ("RBK_26", &RBK_26),
-            ("RBK_27", &RBK_27),
-            ("RBK_28", &RBK_28),
-            ("RBK_29", &RBK_29),
-            ("RBK_30", &RBK_30),
-            ("RBK_31", &RBK_31),
-            ("RBK_32", &RBK_32),
-            ("RBK_33", &RBK_33),
-            ("RBK_34", &RBK_34),
-            ("RBK_35", &RBK_35),
-            ("RBK_36", &RBK_36),
-            ("RBK_37", &RBK_37),
-            ("RBK_38", &RBK_38),
-            ("RBK_39", &RBK_39),
-            ("RBK_40", &RBK_40),
-            ("RBK_41", &RBK_41),
-            ("RBK_42", &RBK_42),
-            ("RBK_43", &RBK_43),
-            ("RBK_44", &RBK_44),
-            ("RBK_45", &RBK_45),
-            ("RBK_46", &RBK_46),
-            ("RBK_47", &RBK_47),
-            ("RBK_48", &RBK_48),
-            ("RBK_49", &RBK_49),
-            ("RBK_50", &RBK_50),
-            ("RBK_51", &RBK_51),
-            ("RBK_52", &RBK_52),
-            ("RBK_53", &RBK_53),
-            ("RBK_54", &RBK_54),
-            ("RBK_55", &RBK_55),
-            ("RBK_56", &RBK_56),
-            ("RBK_57", &RBK_57),
-            ("RBK_58", &RBK_58),
-            ("RBK_59", &RBK_59),
-            ("RBK_60", &RBK_60),
-            ("RBK_61", &RBK_61),
-            ("RBK_62", &RBK_62),
-            ("RBK_63", &RBK_63),
-            ("RBK_64", &RBK_64),
-            ("RBK_65", &RBK_65),
-            ("RBK_66", &RBK_66),
-            ("RBK_67", &RBK_67),
-            ("RBK_68", &RBK_68),
-            ("RBK_69", &RBK_69),
-            ("RBK_70", &RBK_70),
-            ("RBK_71", &RBK_71),
-            ("RBK_72", &RBK_72),
-            ("RBK_73", &RBK_73),
-            ("RBK_74", &RBK_74),
-            ("RBK_75", &RBK_75),
-            ("RBK_76", &RBK_76),
-            ("RBK_77", &RBK_77),
-            ("RBK_78", &RBK_78),
-            ("RBK_79", &RBK_79),
-            ("RBK_80", &RBK_80),
-            ("RBK_81", &RBK_81),
-            ("RBK_82", &RBK_82),
-            ("RBK_83", &RBK_83),
-            ("RBK_84", &RBK_84),
-            ("RBK_85", &RBK_85),
-            ("RBK_86", &RBK_86),
-            ("RBK_87", &RBK_87),
-            ("RBK_88", &RBK_88),
-            ("RBK_89", &RBK_89),
-            ("RBK_90", &RBK_90),
-            ("RBK_91", &RBK_91),
-            ("RBK_92", &RBK_92),
-            ("RBK_93", &RBK_93),
-            ("RBK_94", &RBK_94),
-            ("RBK_95", &RBK_95),
-            ("RBK_96", &RBK_96),
-            ("PCS", &PCS),
-            ("PCB", &PCB),
-            // ("PCB_2", &PCB_2),
-            // ("PCB_3", &PCB_3),
-            // ("PCB_4", &PCB_4),
-            // ("PCB_5", &PCB_5),
-            // ("PCB_6", &PCB_6),
-            // ("PCB_7", &PCB_7),
-            // ("PCB_8", &PCB_8),
-            // ("PCB_9", &PCB_9),
-            // ("PCB_10", &PCB_10),
-            // ("PCB_11", &PCB_11),
-            // ("PCB_12", &PCB_12),
-            // ("PCB_13", &PCB_13),
-            // ("PCB_14", &PCB_14),
-            // ("PCB_15", &PCB_15),
-            // ("PCB_16", &PCB_16),
-            // ("PCB_17", &PCB_17),
-            // ("PCB_18", &PCB_18),
-            // ("PCB_19", &PCB_19),
-            // ("PCB_20", &PCB_20),
-            // ("PCB_21", &PCB_21),
-            // ("PCB_22", &PCB_22),
-            // ("PCB_23", &PCB_23),
-            // ("PCB_24", &PCB_24),
-        ]);
-        seq_info
-    })
+pub fn get_seq_info<'a>() -> HashMap<&'a str, SequenceInfo<'a>> {
+    HashMap::from([
+        ("LSK", LSK),
+        ("RAD", RAD),
+        ("ULK", ULK),
+        ("NBD_1", NBD_1),
+        ("NBD_2", NBD_2),
+        ("NBD_3", NBD_3),
+        ("NBD_4", NBD_4),
+        ("NBD_5", NBD_5),
+        ("NBD_6", NBD_6),
+        ("NBD_7", NBD_7),
+        ("NBD_8", NBD_8),
+        ("NBD_9", NBD_9),
+        ("NBD_10", NBD_10),
+        ("NBD_11", NBD_11),
+        ("NBD_12", NBD_12),
+        ("NBD_13", NBD_13),
+        ("NBD_14", NBD_14),
+        ("NBD_15", NBD_15),
+        ("NBD_16", NBD_16),
+        ("NBD_17", NBD_17),
+        ("NBD_18", NBD_18),
+        ("NBD_19", NBD_19),
+        ("NBD_20", NBD_20),
+        ("NBD_21", NBD_21),
+        ("NBD_22", NBD_22),
+        ("NBD_23", NBD_23),
+        ("NBD_24", NBD_24),
+        ("NBD_25", NBD_25),
+        ("NBD_26", NBD_26),
+        ("NBD_27", NBD_27),
+        ("NBD_28", NBD_28),
+        ("NBD_29", NBD_29),
+        ("NBD_30", NBD_30),
+        ("NBD_31", NBD_31),
+        ("NBD_32", NBD_32),
+        ("NBD_33", NBD_33),
+        ("NBD_34", NBD_34),
+        ("NBD_35", NBD_35),
+        ("NBD_36", NBD_36),
+        ("NBD_37", NBD_37),
+        ("NBD_38", NBD_38),
+        ("NBD_39", NBD_39),
+        ("NBD_40", NBD_40),
+        ("NBD_41", NBD_41),
+        ("NBD_42", NBD_42),
+        ("NBD_43", NBD_43),
+        ("NBD_44", NBD_44),
+        ("NBD_45", NBD_45),
+        ("NBD_46", NBD_46),
+        ("NBD_47", NBD_47),
+        ("NBD_48", NBD_48),
+        ("NBD_49", NBD_49),
+        ("NBD_50", NBD_50),
+        ("NBD_51", NBD_51),
+        ("NBD_52", NBD_52),
+        ("NBD_53", NBD_53),
+        ("NBD_54", NBD_54),
+        ("NBD_55", NBD_55),
+        ("NBD_56", NBD_56),
+        ("NBD_57", NBD_57),
+        ("NBD_58", NBD_58),
+        ("NBD_59", NBD_59),
+        ("NBD_60", NBD_60),
+        ("NBD_61", NBD_61),
+        ("NBD_62", NBD_62),
+        ("NBD_63", NBD_63),
+        ("NBD_64", NBD_64),
+        ("NBD_65", NBD_65),
+        ("NBD_66", NBD_66),
+        ("NBD_67", NBD_67),
+        ("NBD_68", NBD_68),
+        ("NBD_69", NBD_69),
+        ("NBD_70", NBD_70),
+        ("NBD_71", NBD_71),
+        ("NBD_72", NBD_72),
+        ("NBD_73", NBD_73),
+        ("NBD_74", NBD_74),
+        ("NBD_75", NBD_75),
+        ("NBD_76", NBD_76),
+        ("NBD_77", NBD_77),
+        ("NBD_78", NBD_78),
+        ("NBD_79", NBD_79),
+        ("NBD_80", NBD_80),
+        ("NBD_81", NBD_81),
+        ("NBD_82", NBD_82),
+        ("NBD_83", NBD_83),
+        ("NBD_84", NBD_84),
+        ("NBD_85", NBD_85),
+        ("NBD_86", NBD_86),
+        ("NBD_87", NBD_87),
+        ("NBD_88", NBD_88),
+        ("NBD_89", NBD_89),
+        ("NBD_90", NBD_90),
+        ("NBD_91", NBD_91),
+        ("NBD_92", NBD_92),
+        ("NBD_93", NBD_93),
+        ("NBD_94", NBD_94),
+        ("NBD_95", NBD_95),
+        ("NBD_96", NBD_96),
+        ("RBK", RBK_1),
+        // ("RBK_2", &RBK_2),
+        // ("RBK_3", &RBK_3),
+        // ("RBK_4", &RBK_4),
+        // ("RBK_5", &RBK_5),
+        // ("RBK_6", &RBK_6),
+        // ("RBK_7", &RBK_7),
+        // ("RBK_8", &RBK_8),
+        // ("RBK_9", &RBK_9),
+        // ("RBK_10", &RBK_10),
+        // ("RBK_11", &RBK_11),
+        // ("RBK_12", &RBK_12),
+        // ("RBK_13", &RBK_13),
+        // ("RBK_14", &RBK_14),
+        // ("RBK_15", &RBK_15),
+        // ("RBK_16", &RBK_16),
+        // ("RBK_17", &RBK_17),
+        // ("RBK_18", &RBK_18),
+        // ("RBK_19", &RBK_19),
+        // ("RBK_20", &RBK_20),
+        // ("RBK_21", &RBK_21),
+        // ("RBK_22", &RBK_22),
+        // ("RBK_23", &RBK_23),
+        // ("RBK_24", &RBK_24),
+        // ("RBK_25", &RBK_25),
+        // ("RBK_26", &RBK_26),
+        // ("RBK_27", &RBK_27),
+        // ("RBK_28", &RBK_28),
+        // ("RBK_29", &RBK_29),
+        // ("RBK_30", &RBK_30),
+        // ("RBK_31", &RBK_31),
+        // ("RBK_32", &RBK_32),
+        // ("RBK_33", &RBK_33),
+        // ("RBK_34", &RBK_34),
+        // ("RBK_35", &RBK_35),
+        // ("RBK_36", &RBK_36),
+        // ("RBK_37", &RBK_37),
+        // ("RBK_38", &RBK_38),
+        // ("RBK_39", &RBK_39),
+        // ("RBK_40", &RBK_40),
+        // ("RBK_41", &RBK_41),
+        // ("RBK_42", &RBK_42),
+        // ("RBK_43", &RBK_43),
+        // ("RBK_44", &RBK_44),
+        // ("RBK_45", &RBK_45),
+        // ("RBK_46", &RBK_46),
+        // ("RBK_47", &RBK_47),
+        // ("RBK_48", &RBK_48),
+        // ("RBK_49", &RBK_49),
+        // ("RBK_50", &RBK_50),
+        // ("RBK_51", &RBK_51),
+        // ("RBK_52", &RBK_52),
+        // ("RBK_53", &RBK_53),
+        // ("RBK_54", &RBK_54),
+        // ("RBK_55", &RBK_55),
+        // ("RBK_56", &RBK_56),
+        // ("RBK_57", &RBK_57),
+        // ("RBK_58", &RBK_58),
+        // ("RBK_59", &RBK_59),
+        // ("RBK_60", &RBK_60),
+        // ("RBK_61", &RBK_61),
+        // ("RBK_62", &RBK_62),
+        // ("RBK_63", &RBK_63),
+        // ("RBK_64", &RBK_64),
+        // ("RBK_65", &RBK_65),
+        // ("RBK_66", &RBK_66),
+        // ("RBK_67", &RBK_67),
+        // ("RBK_68", &RBK_68),
+        // ("RBK_69", &RBK_69),
+        // ("RBK_70", &RBK_70),
+        // ("RBK_71", &RBK_71),
+        // ("RBK_72", &RBK_72),
+        // ("RBK_73", &RBK_73),
+        // ("RBK_74", &RBK_74),
+        // ("RBK_75", &RBK_75),
+        // ("RBK_76", &RBK_76),
+        // ("RBK_77", &RBK_77),
+        // ("RBK_78", &RBK_78),
+        // ("RBK_79", &RBK_79),
+        // ("RBK_80", &RBK_80),
+        // ("RBK_81", &RBK_81),
+        // ("RBK_82", &RBK_82),
+        // ("RBK_83", &RBK_83),
+        // ("RBK_84", &RBK_84),
+        // ("RBK_85", &RBK_85),
+        // ("RBK_86", &RBK_86),
+        // ("RBK_87", &RBK_87),
+        // ("RBK_88", &RBK_88),
+        // ("RBK_89", &RBK_89),
+        // ("RBK_90", &RBK_90),
+        // ("RBK_91", &RBK_91),
+        // ("RBK_92", &RBK_92),
+        // ("RBK_93", &RBK_93),
+        // ("RBK_94", &RBK_94),
+        // ("RBK_95", &RBK_95),
+        // ("RBK_96", &RBK_96),
+        ("PCS", PCS),
+        ("PCB", PCB),
+        // ("PCB_2", &PCB_2),
+        // ("PCB_3", &PCB_3),
+        // ("PCB_4", &PCB_4),
+        // ("PCB_5", &PCB_5),
+        // ("PCB_6", &PCB_6),
+        // ("PCB_7", &PCB_7),
+        // ("PCB_8", &PCB_8),
+        // ("PCB_9", &PCB_9),
+        // ("PCB_10", &PCB_10),
+        // ("PCB_11", &PCB_11),
+        // ("PCB_12", &PCB_12),
+        // ("PCB_13", &PCB_13),
+        // ("PCB_14", &PCB_14),
+        // ("PCB_15", &PCB_15),
+        // ("PCB_16", &PCB_16),
+        // ("PCB_17", &PCB_17),
+        // ("PCB_18", &PCB_18),
+        // ("PCB_19", &PCB_19),
+        // ("PCB_20", &PCB_20),
+        // ("PCB_21", &PCB_21),
+        // ("PCB_22", &PCB_22),
+        // ("PCB_23", &PCB_23),
+        // ("PCB_24", &PCB_24),
+    ])
 }
 
 pub type EndAlignPara = (usize, f64, f64);
-pub type EndConfig = Option<(&'static str, EndAlignPara)>;
+pub type EndConfig<'a> = Option<(&'a str, EndAlignPara)>;
 #[derive(Clone, Debug)]
-pub struct SequenceInfo {
+pub struct SequenceInfo<'a> {
     pub kit_name: &'static str,
-    pub end5: EndConfig,
-    pub end3: EndConfig,
-    pub rev_com_end5: EndConfig,
-    pub rev_com_end3: EndConfig,
+    pub end5: EndConfig<'a>,
+    pub end3: EndConfig<'a>,
+    pub rev_com_end5: EndConfig<'a>,
+    pub rev_com_end3: EndConfig<'a>,
 }
 
-impl SequenceInfo {
+impl<'a> Default for SequenceInfo<'a> {
+    fn default() -> Self {
+        SequenceInfo {
+            kit_name: "customer",
+            end5: None,
+            end3: None,
+            rev_com_end5: None,
+            rev_com_end3: None,
+        }
+    }
+}
+
+impl<'a> SequenceInfo<'a> {
     fn single_update(
         end: &mut EndAlignPara,
         len: (ValueSource, usize),
@@ -268,7 +274,7 @@ impl SequenceInfo {
         info.push_str(self.kit_name);
         info.push('\n');
         if self.end5.is_some() {
-            let end5 = self.end5.unwrap();
+            let end5 = self.end5.as_ref().unwrap();
             info.push_str(&format!(
                 "Expect sequence1 in 5'end: {}, length: {}, config: {:?}\n",
                 end5.0,
@@ -277,7 +283,7 @@ impl SequenceInfo {
             ));
         }
         if self.end3.is_some() {
-            let end3 = self.end3.unwrap();
+            let end3 = self.end3.as_ref().unwrap();
             info.push_str(&format!(
                 "Expect sequence1 in 3'end: {}, length: {}, config: {:?}\n",
                 end3.0,
@@ -287,7 +293,7 @@ impl SequenceInfo {
         }
 
         if self.rev_com_end5.is_some() {
-            let rev_com_end5 = self.rev_com_end5.unwrap();
+            let rev_com_end5 = self.rev_com_end5.as_ref().unwrap();
             info.push_str(&format!(
                 "Expect sequence2 in 5'end: {}, length: {}, config: {:?}\n",
                 rev_com_end5.0,
@@ -296,7 +302,7 @@ impl SequenceInfo {
             ));
         }
         if self.rev_com_end3.is_some() {
-            let rev_com_end3 = self.rev_com_end3.unwrap();
+            let rev_com_end3 = self.rev_com_end3.as_ref().unwrap();
             info.push_str(&format!(
                 "Expect sequence2 in 3'end: {}, length: {}, config: {:?}\n",
                 rev_com_end3.0,
@@ -309,11 +315,39 @@ impl SequenceInfo {
         info
     }
 
+    pub fn get_dim(&self) -> (usize, usize) {
+        let mut ref_lengths = vec![];
+        let mut reads_lengths = vec![];
+        if let Some(end5) = self.end5.as_ref() {
+            ref_lengths.push(end5.0.len());
+            reads_lengths.push(end5.1.0);
+        }
+
+        if let Some(end3) = self.end3.as_ref() {
+            ref_lengths.push(end3.0.len());
+            reads_lengths.push(end3.1.0);
+        }
+
+        if let Some(rev_com_end5) = self.rev_com_end5.as_ref() {
+            ref_lengths.push(rev_com_end5.0.len());
+            reads_lengths.push(rev_com_end5.1.0);
+        }
+
+        if let Some(rev_com_end3) = self.rev_com_end3.as_ref() {
+            ref_lengths.push(rev_com_end3.0.len());
+            reads_lengths.push(rev_com_end3.1.0);
+        }
+        (
+            *ref_lengths.iter().max().unwrap(),
+            *reads_lengths.iter().max().unwrap(),
+        )
+    }
+
     #[inline]
     pub fn may_trim_end5(&self) -> bool {
         self.end5.is_some()
     }
-    
+
     #[inline]
     pub fn may_trim_end3(&self) -> bool {
         self.end3.is_some()
@@ -345,35 +379,38 @@ impl SequenceInfo {
         rev_com_end3_ident: (ValueSource, f64),
     ) {
         if self.end5.is_some() {
-            let mut this_end5 = self.end5.unwrap().1.clone();
+            let mut this_end5 = self.end5.as_ref().unwrap().1.clone();
             Self::single_update(&mut this_end5, end5_len, end5_pct, end5_ident);
-            self.end5 = Some((self.end5.unwrap().0, this_end5))
+            self.end5.as_mut().map(|x| x.1 = this_end5);
         }
         if self.end3.is_some() {
-            let mut this_end3 = self.end3.unwrap().1.clone();
+            let mut this_end3 = self.end3.as_ref().unwrap().1.clone();
             Self::single_update(&mut this_end3, end3_len, end3_pct, end3_ident);
-            self.end3 = Some((self.end3.unwrap().0, this_end3));
+            self.end3.as_mut().map(|x| x.1 = this_end3);
+            // self.end3 = Some((self.end3.unwrap().0, this_end3));
         }
         if self.rev_com_end5.is_some() {
-            let mut this_rev_com_end5 = self.rev_com_end5.unwrap().1.clone();
+            let mut this_rev_com_end5 = self.rev_com_end5.as_ref().unwrap().1.clone();
             Self::single_update(
                 &mut this_rev_com_end5,
                 rev_com_end5_len,
                 rev_com_end5_pct,
                 rev_com_end5_ident,
             );
-            self.rev_com_end5 = Some((self.rev_com_end5.unwrap().0, this_rev_com_end5))
+            self.rev_com_end5.as_mut().map(|x| x.1 = this_rev_com_end5);
+            // self.rev_com_end5 = Some((self.rev_com_end5.unwrap().0, this_rev_com_end5))
         }
 
         if self.rev_com_end3.is_some() {
-            let mut this_rev_com_end3 = self.rev_com_end3.unwrap().1.clone();
+            let mut this_rev_com_end3 = self.rev_com_end3.as_ref().unwrap().1.clone();
             Self::single_update(
                 &mut this_rev_com_end3,
                 rev_com_end3_len,
                 rev_com_end3_pct,
                 rev_com_end3_ident,
             );
-            self.rev_com_end3 = Some((self.rev_com_end3.unwrap().0, this_rev_com_end3))
+            self.rev_com_end3.as_mut().map(|x| x.1 = this_rev_com_end3);
+            // self.rev_com_end3 = Some((self.rev_com_end3.unwrap().0, this_rev_com_end3))
         }
     }
 }
@@ -383,7 +420,7 @@ const LSK_END3: EndAlignPara = (80, 0.5, 0.75);
 const RAD_END5: EndAlignPara = (180, 0.5, 0.75);
 const NBD_END5: EndAlignPara = (150, 0.6, 0.75);
 const NBD_END3: EndAlignPara = (120, 0.6, 0.75);
-const RBK_END5: EndAlignPara = (180, 0.5, 0.75);
+const RBK_END5: EndAlignPara = (180, 0.6, 0.75);
 const PCS_END5: EndAlignPara = (150, 0.6, 0.75);
 const PCS_END3: EndAlignPara = (120, 0.4, 0.75);
 const PCS_REV_COM_END5: EndAlignPara = (150, 0.6, 0.75);
@@ -1130,963 +1167,964 @@ Example for Rapid Barcode01
 const RBK_1: SequenceInfo = SequenceInfo {
     kit_name: "RBK_1",
     end5: Some((
-        "AAGAAAGTTGTCGGTGTCTTTGTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_2: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_2",
-    end5: Some((
-        "TCGATTCCGTTTGTAGTCGTCTGTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_3: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_3",
-    end5: Some((
-        "GAGTCTTGTGTCCCAGTTACCAGGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_4: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_4",
-    end5: Some((
-        "TTCGGATTCTATCGTGTTTCCCTAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_5: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_5",
-    end5: Some((
-        "CTTGTCCAGGGTTTGTGTAACCTTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_6: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_6",
-    end5: Some((
-        "TTCTCGCAAAGGCAGAAAGTAGTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_7: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_7",
-    end5: Some((
-        "GTGTTACCGTGGGAATGAATCCTTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_8: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_8",
-    end5: Some((
-        "TTCAGGGAACAAACCAAGTTACGTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_9: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_9",
-    end5: Some((
-        "AACTAGGCACAGCGAGTCTTGGTTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_10: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_10",
-    end5: Some((
-        "AAGCGTTGAAACCTTTGTCCTCTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_11: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_11",
-    end5: Some((
-        "GTTTCATCTATCGGAGGGAATGGAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_12: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_12",
-    end5: Some((
-        "CAGGTAGAAAGAAGCAGAATCGGAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_13: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_13",
-    end5: Some((
-        "AGAACGACTTCCATACTCGTGTGAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_14: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_14",
-    end5: Some((
-        "AACGAGTCTCTTGGGACCCATAGAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_15: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_15",
-    end5: Some((
-        "AGGTCTACCTCGCTAACACCACTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_16: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_16",
-    end5: Some((
-        "CGTCAACTGACAGTGGTTCGTACTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_17: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_17",
-    end5: Some((
-        "ACCCTCCAGGAAAGTACCTCTGATGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_18: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_18",
-    end5: Some((
-        "CCAAACCCAACAACCTAGATAGGCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_19: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_19",
-    end5: Some((
-        "GTTCCTCGTGCAGTGTCAAGAGATGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_20: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_20",
-    end5: Some((
-        "TTGCGTCCTGTTACGAGAACTCATGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_21: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_21",
-    end5: Some((
-        "GAGCCTCTCATTGTCCGTTCTCTAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_22: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_22",
-    end5: Some((
-        "ACCACTGCCATGTATCAAAGTACGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_23: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_23",
-    end5: Some((
-        "CTTACTACCCAGTGAACCTCCTCGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_24: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_24",
-    end5: Some((
-        "GCATAGTTCTGCATGATGGGTTAGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_25: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_25",
-    end5: Some((
-        "GTAAGTTGGGTATGCAACGCAATGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_26: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_26",
-    end5: Some((
-        "CATACAGCGACTACGCATTCTCATGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_27: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_27",
-    end5: Some((
-        "CGACGGTTAGATTCACCTCTTACAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_28: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_28",
-    end5: Some((
-        "TGAAACCTAAGAAGGCACCGTATCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_29: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_29",
-    end5: Some((
-        "CTAGACACCTTGGGTTGACAGACCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_30: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_30",
-    end5: Some((
-        "TCAGTGAGGATCTACTTCGACCCAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_31: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_31",
-    end5: Some((
-        "TGCGTACAGCAATCAGTTACATTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_32: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_32",
-    end5: Some((
-        "CCAGTAGAAGTCCGACAACGTCATGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_33: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_33",
-    end5: Some((
-        "CAGACTTGGTACGGTTGGGTAACTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_34: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_34",
-    end5: Some((
-        "GGACGAAGAACTCAAGTCAAAGGCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_35: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_35",
-    end5: Some((
-        "CTACTTACGAAGCTGAGGGACTGCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_36: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_36",
-    end5: Some((
-        "ATGTCCCAGTTAGAGGAGGAAACAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_37: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_37",
-    end5: Some((
-        "GCTTGCGATTGATGCTTAGTATCAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_38: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_38",
-    end5: Some((
-        "ACCACAGGAGGACGATACAGAGAAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_39: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_39",
-    end5: Some((
-        "CCACAGTGTCAACTAGAGCCTCTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_40: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_40",
-    end5: Some((
-        "TAGTTTGGATGACCAAGGATAGCCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_41: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_41",
-    end5: Some((
-        "GGAGTTCGTCCAGAGAAGTACACGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_42: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_42",
-    end5: Some((
-        "CTACGTGTAAGGCATACCTGCCAGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_43: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_43",
-    end5: Some((
-        "CTTTCGTTGTTGACTCGACGGTAGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_44: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_44",
-    end5: Some((
-        "AGTAGAAAGGGTTCCTTCCCACTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_45: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_45",
-    end5: Some((
-        "GATCCAACAGAGATGCCTTCAGTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_46: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_46",
-    end5: Some((
-        "GCTGTGTTCCACTTCATTCTCCTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_47: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_47",
-    end5: Some((
-        "GTGCAACTTTCCCACAGGTAGTTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_48: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_48",
-    end5: Some((
-        "CATCTGGAACGTGGTACACCTGTAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_49: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_49",
-    end5: Some((
-        "ACTGGTGCAGCTTTGAACATCTAGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_50: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_50",
-    end5: Some((
-        "ATGGACTTTGGTAACTTCCTGCGTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_51: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_51",
-    end5: Some((
-        "GTTGAATGAGCCTACTGGGTCCTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_52: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_52",
-    end5: Some((
-        "TGAGAGACAAGATTGTTCGTGGACGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_53: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_53",
-    end5: Some((
-        "AGATTCAGACCGTCTCATGCAAAGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_54: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_54",
-    end5: Some((
-        "CAAGAGCTTTGACTAAGGAGCATGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_55: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_55",
-    end5: Some((
-        "TGGAAGATGAGACCCTGATCTACGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_56: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_56",
-    end5: Some((
-        "TCACTACTCAACAGGTGGCATGAAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_57: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_57",
-    end5: Some((
-        "GCTAGGTCAATCTCCTTCGGAAGTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_58: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_58",
-    end5: Some((
-        "CAGGTTACTCCTCCGTGAGTCTGAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_59: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_59",
-    end5: Some((
-        "TCAATCAAGAAGGGAAAGCAAGGTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_60: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_60",
-    end5: Some((
-        "CATGTTCAACCAAGGCTTCTATGGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_61: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_61",
-    end5: Some((
-        "AGAGGGTACTATGTGCCTCAGCACGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_62: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_62",
-    end5: Some((
-        "CACCCACACTTACTTCAGGACGTAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_63: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_63",
-    end5: Some((
-        "TTCTGAAGTTCCTGGGTCTTGAACGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_64: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_64",
-    end5: Some((
-        "GACAGACACCGTTCATCGACTTTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_65: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_65",
-    end5: Some((
-        "TTCTCAGTCTTCCTCCAGACAAGGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_66: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_66",
-    end5: Some((
-        "CCGATCCTTGTGGCTTCTAACTTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_67: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_67",
-    end5: Some((
-        "GTTTGTCATACTCGTGTGCTCACCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_68: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_68",
-    end5: Some((
-        "GAATCTAAGCAAACACGAAGGTGGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_69: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_69",
-    end5: Some((
-        "TACAGTCCGAGCCTCATGTGATCTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_70: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_70",
-    end5: Some((
-        "ACCGAGATCCTACGAATGGAGTGTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_71: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_71",
-    end5: Some((
-        "CCTGGGAGCATCAGGTAGTAACAGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_72: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_72",
-    end5: Some((
-        "TAGCTGACTGTCTTCCATACCGACGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_73: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_73",
-    end5: Some((
-        "AAGAAACAGGATGACAGAACCCTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_74: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_74",
-    end5: Some((
-        "TACAAGCATCCCAACACTTCCACTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_75: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_75",
-    end5: Some((
-        "GACCATTGTGATGAACCCTGTTGTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_76: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_76",
-    end5: Some((
-        "ATGCTTGTTACATCAACCCTGGACGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_77: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_77",
-    end5: Some((
-        "CGACCTGTTTCTCAGGGATACAACGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_78: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_78",
-    end5: Some((
-        "AACAACCGAACCTTTGAATCAGAAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_79: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_79",
-    end5: Some((
-        "TCTCGGAGATAGTTCTCACTGCTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_80: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_80",
-    end5: Some((
-        "CGGATGAACATAGGATAGCGATTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_81: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_81",
-    end5: Some((
-        "CCTCATCTTGTGAAGTTGTTTCGGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_82: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_82",
-    end5: Some((
-        "ACGGTATGTCGAGTTCCAGGACTAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_83: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_83",
-    end5: Some((
-        "TGGCTTGATCTAGGTAAGGTCGAAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_84: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_84",
-    end5: Some((
-        "GTAGTGGACCTAGAACCTGTGCCAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_85: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_85",
-    end5: Some((
-        "AACGGAGGAGTTAGTTGGATGATCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_86: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_86",
-    end5: Some((
-        "AGGTGATCCCAACAAGCGTAAGTAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_87: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_87",
-    end5: Some((
-        "TACATGCTCCTGTTGTTAGGGAGGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_88: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_88",
-    end5: Some((
-        "TCTTCTACTACCGATCCGAAGCAGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_89: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_89",
-    end5: Some((
-        "ACAGCATCAATGTTTGGCTAGTTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_90: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_90",
-    end5: Some((
-        "GATGTAGAGGGTACGGTTTGAGGCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_91: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_91",
-    end5: Some((
-        "GGCTCCATAGGAACTCACGCTACTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_92: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_92",
-    end5: Some((
-        "TTGTGAGTGGAAAGATACAGGACCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_93: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_93",
-    end5: Some((
-        "AGTTTCCATCACTTCAGACTTGGGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_94: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_94",
-    end5: Some((
-        "GATTGTCCTCAAACTGCCACCTACGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_95: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_95",
-    end5: Some((
-        "CCTGTCTGGAAGAAGAATGGACTTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
-const RBK_96: SequenceInfo = SequenceInfo {
-    kit_name: "RBK_96",
-    end5: Some((
-        "CTGAACGGTCATAGAGTCCACCATGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
-        RBK_END5,
-    )),
-    end3: None,
-    rev_com_end5: None,
-    rev_com_end3: None,
-};
+        "GTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+        // "AAGAAAGTTGTCGGTGTCTTTGTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+        RBK_END5,
+    )),
+    end3: None,
+    rev_com_end5: None,
+    rev_com_end3: None,
+};
+// const RBK_2: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_2",
+//     end5: Some((
+//         "TCGATTCCGTTTGTAGTCGTCTGTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_3: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_3",
+//     end5: Some((
+//         "GAGTCTTGTGTCCCAGTTACCAGGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_4: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_4",
+//     end5: Some((
+//         "TTCGGATTCTATCGTGTTTCCCTAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_5: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_5",
+//     end5: Some((
+//         "CTTGTCCAGGGTTTGTGTAACCTTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_6: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_6",
+//     end5: Some((
+//         "TTCTCGCAAAGGCAGAAAGTAGTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_7: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_7",
+//     end5: Some((
+//         "GTGTTACCGTGGGAATGAATCCTTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_8: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_8",
+//     end5: Some((
+//         "TTCAGGGAACAAACCAAGTTACGTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_9: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_9",
+//     end5: Some((
+//         "AACTAGGCACAGCGAGTCTTGGTTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_10: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_10",
+//     end5: Some((
+//         "AAGCGTTGAAACCTTTGTCCTCTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_11: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_11",
+//     end5: Some((
+//         "GTTTCATCTATCGGAGGGAATGGAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_12: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_12",
+//     end5: Some((
+//         "CAGGTAGAAAGAAGCAGAATCGGAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_13: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_13",
+//     end5: Some((
+//         "AGAACGACTTCCATACTCGTGTGAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_14: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_14",
+//     end5: Some((
+//         "AACGAGTCTCTTGGGACCCATAGAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_15: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_15",
+//     end5: Some((
+//         "AGGTCTACCTCGCTAACACCACTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_16: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_16",
+//     end5: Some((
+//         "CGTCAACTGACAGTGGTTCGTACTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_17: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_17",
+//     end5: Some((
+//         "ACCCTCCAGGAAAGTACCTCTGATGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_18: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_18",
+//     end5: Some((
+//         "CCAAACCCAACAACCTAGATAGGCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_19: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_19",
+//     end5: Some((
+//         "GTTCCTCGTGCAGTGTCAAGAGATGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_20: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_20",
+//     end5: Some((
+//         "TTGCGTCCTGTTACGAGAACTCATGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_21: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_21",
+//     end5: Some((
+//         "GAGCCTCTCATTGTCCGTTCTCTAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_22: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_22",
+//     end5: Some((
+//         "ACCACTGCCATGTATCAAAGTACGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_23: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_23",
+//     end5: Some((
+//         "CTTACTACCCAGTGAACCTCCTCGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_24: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_24",
+//     end5: Some((
+//         "GCATAGTTCTGCATGATGGGTTAGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_25: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_25",
+//     end5: Some((
+//         "GTAAGTTGGGTATGCAACGCAATGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_26: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_26",
+//     end5: Some((
+//         "CATACAGCGACTACGCATTCTCATGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_27: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_27",
+//     end5: Some((
+//         "CGACGGTTAGATTCACCTCTTACAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_28: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_28",
+//     end5: Some((
+//         "TGAAACCTAAGAAGGCACCGTATCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_29: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_29",
+//     end5: Some((
+//         "CTAGACACCTTGGGTTGACAGACCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_30: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_30",
+//     end5: Some((
+//         "TCAGTGAGGATCTACTTCGACCCAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_31: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_31",
+//     end5: Some((
+//         "TGCGTACAGCAATCAGTTACATTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_32: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_32",
+//     end5: Some((
+//         "CCAGTAGAAGTCCGACAACGTCATGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_33: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_33",
+//     end5: Some((
+//         "CAGACTTGGTACGGTTGGGTAACTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_34: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_34",
+//     end5: Some((
+//         "GGACGAAGAACTCAAGTCAAAGGCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_35: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_35",
+//     end5: Some((
+//         "CTACTTACGAAGCTGAGGGACTGCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_36: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_36",
+//     end5: Some((
+//         "ATGTCCCAGTTAGAGGAGGAAACAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_37: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_37",
+//     end5: Some((
+//         "GCTTGCGATTGATGCTTAGTATCAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_38: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_38",
+//     end5: Some((
+//         "ACCACAGGAGGACGATACAGAGAAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_39: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_39",
+//     end5: Some((
+//         "CCACAGTGTCAACTAGAGCCTCTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_40: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_40",
+//     end5: Some((
+//         "TAGTTTGGATGACCAAGGATAGCCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_41: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_41",
+//     end5: Some((
+//         "GGAGTTCGTCCAGAGAAGTACACGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_42: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_42",
+//     end5: Some((
+//         "CTACGTGTAAGGCATACCTGCCAGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_43: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_43",
+//     end5: Some((
+//         "CTTTCGTTGTTGACTCGACGGTAGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_44: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_44",
+//     end5: Some((
+//         "AGTAGAAAGGGTTCCTTCCCACTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_45: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_45",
+//     end5: Some((
+//         "GATCCAACAGAGATGCCTTCAGTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_46: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_46",
+//     end5: Some((
+//         "GCTGTGTTCCACTTCATTCTCCTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_47: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_47",
+//     end5: Some((
+//         "GTGCAACTTTCCCACAGGTAGTTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_48: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_48",
+//     end5: Some((
+//         "CATCTGGAACGTGGTACACCTGTAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_49: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_49",
+//     end5: Some((
+//         "ACTGGTGCAGCTTTGAACATCTAGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_50: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_50",
+//     end5: Some((
+//         "ATGGACTTTGGTAACTTCCTGCGTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_51: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_51",
+//     end5: Some((
+//         "GTTGAATGAGCCTACTGGGTCCTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_52: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_52",
+//     end5: Some((
+//         "TGAGAGACAAGATTGTTCGTGGACGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_53: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_53",
+//     end5: Some((
+//         "AGATTCAGACCGTCTCATGCAAAGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_54: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_54",
+//     end5: Some((
+//         "CAAGAGCTTTGACTAAGGAGCATGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_55: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_55",
+//     end5: Some((
+//         "TGGAAGATGAGACCCTGATCTACGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_56: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_56",
+//     end5: Some((
+//         "TCACTACTCAACAGGTGGCATGAAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_57: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_57",
+//     end5: Some((
+//         "GCTAGGTCAATCTCCTTCGGAAGTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_58: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_58",
+//     end5: Some((
+//         "CAGGTTACTCCTCCGTGAGTCTGAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_59: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_59",
+//     end5: Some((
+//         "TCAATCAAGAAGGGAAAGCAAGGTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_60: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_60",
+//     end5: Some((
+//         "CATGTTCAACCAAGGCTTCTATGGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_61: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_61",
+//     end5: Some((
+//         "AGAGGGTACTATGTGCCTCAGCACGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_62: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_62",
+//     end5: Some((
+//         "CACCCACACTTACTTCAGGACGTAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_63: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_63",
+//     end5: Some((
+//         "TTCTGAAGTTCCTGGGTCTTGAACGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_64: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_64",
+//     end5: Some((
+//         "GACAGACACCGTTCATCGACTTTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_65: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_65",
+//     end5: Some((
+//         "TTCTCAGTCTTCCTCCAGACAAGGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_66: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_66",
+//     end5: Some((
+//         "CCGATCCTTGTGGCTTCTAACTTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_67: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_67",
+//     end5: Some((
+//         "GTTTGTCATACTCGTGTGCTCACCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_68: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_68",
+//     end5: Some((
+//         "GAATCTAAGCAAACACGAAGGTGGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_69: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_69",
+//     end5: Some((
+//         "TACAGTCCGAGCCTCATGTGATCTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_70: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_70",
+//     end5: Some((
+//         "ACCGAGATCCTACGAATGGAGTGTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_71: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_71",
+//     end5: Some((
+//         "CCTGGGAGCATCAGGTAGTAACAGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_72: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_72",
+//     end5: Some((
+//         "TAGCTGACTGTCTTCCATACCGACGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_73: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_73",
+//     end5: Some((
+//         "AAGAAACAGGATGACAGAACCCTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_74: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_74",
+//     end5: Some((
+//         "TACAAGCATCCCAACACTTCCACTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_75: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_75",
+//     end5: Some((
+//         "GACCATTGTGATGAACCCTGTTGTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_76: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_76",
+//     end5: Some((
+//         "ATGCTTGTTACATCAACCCTGGACGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_77: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_77",
+//     end5: Some((
+//         "CGACCTGTTTCTCAGGGATACAACGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_78: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_78",
+//     end5: Some((
+//         "AACAACCGAACCTTTGAATCAGAAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_79: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_79",
+//     end5: Some((
+//         "TCTCGGAGATAGTTCTCACTGCTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_80: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_80",
+//     end5: Some((
+//         "CGGATGAACATAGGATAGCGATTCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_81: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_81",
+//     end5: Some((
+//         "CCTCATCTTGTGAAGTTGTTTCGGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_82: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_82",
+//     end5: Some((
+//         "ACGGTATGTCGAGTTCCAGGACTAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_83: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_83",
+//     end5: Some((
+//         "TGGCTTGATCTAGGTAAGGTCGAAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_84: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_84",
+//     end5: Some((
+//         "GTAGTGGACCTAGAACCTGTGCCAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_85: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_85",
+//     end5: Some((
+//         "AACGGAGGAGTTAGTTGGATGATCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_86: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_86",
+//     end5: Some((
+//         "AGGTGATCCCAACAAGCGTAAGTAGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_87: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_87",
+//     end5: Some((
+//         "TACATGCTCCTGTTGTTAGGGAGGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_88: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_88",
+//     end5: Some((
+//         "TCTTCTACTACCGATCCGAAGCAGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_89: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_89",
+//     end5: Some((
+//         "ACAGCATCAATGTTTGGCTAGTTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_90: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_90",
+//     end5: Some((
+//         "GATGTAGAGGGTACGGTTTGAGGCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_91: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_91",
+//     end5: Some((
+//         "GGCTCCATAGGAACTCACGCTACTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_92: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_92",
+//     end5: Some((
+//         "TTGTGAGTGGAAAGATACAGGACCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_93: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_93",
+//     end5: Some((
+//         "AGTTTCCATCACTTCAGACTTGGGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_94: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_94",
+//     end5: Some((
+//         "GATTGTCCTCAAACTGCCACCTACGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_95: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_95",
+//     end5: Some((
+//         "CCTGTCTGGAAGAAGAATGGACTTGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
+// const RBK_96: SequenceInfo = SequenceInfo {
+//     kit_name: "RBK_96",
+//     end5: Some((
+//         "CTGAACGGTCATAGAGTCCACCATGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+//         RBK_END5,
+//     )),
+//     end3: None,
+//     rev_com_end5: None,
+//     rev_com_end3: None,
+// };
 
 /*
 cDNA-PCR Sequencing Kit: SQK-PCS114

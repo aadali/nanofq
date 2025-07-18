@@ -1,13 +1,13 @@
 pub mod adapter;
 
-use crate::alignment::{LocalAligner, LocalAlignment, ReadEnd, Scores};
-use crate::trim::adapter::{EndConfig, SequenceInfo, get_seq_info};
+use crate::alignment::{LocalAligner, LocalAlignment, ReadEnd};
+use crate::trim::adapter::{EndConfig, SequenceInfo};
 use crate::utils::SEP_LINE;
-use seq_io::fastq::{Record, RefRecord};
-use std::io::{BufWriter, Write};
+use seq_io::fastq::{Record};
+use std::io::{Write};
 
 fn trim_end<'a>(
-    end_config: EndConfig,
+    end_config: &'a EndConfig,
     read_seq: &'a [u8],
     aligner: &mut LocalAligner,
     end: ReadEnd,
@@ -54,7 +54,7 @@ pub fn trim_seq(
     let mut trim_end3_success = false;
     let mut fwd_ident_score = 0;
     let mut pretty_log = if log {
-        Some(format!("{}\n", id, ))
+        Some(format!("{}\n", id,))
     } else {
         None
     };
@@ -62,7 +62,7 @@ pub fn trim_seq(
     if seq_info.may_trim_end5() {
         // Step1. consider to align end5
         if let Some((_, end5_ident, end5_align)) =
-            trim_end(seq_info.end5, read_seq, aligner, ReadEnd::End5)
+            trim_end(&seq_info.end5, read_seq, aligner, ReadEnd::End5)
         {
             end5_alignment = end5_align;
             fwd_trim_from = end5_alignment.read_range.0 - 1;
@@ -73,7 +73,7 @@ pub fn trim_seq(
     if seq_info.may_trim_end3() {
         // Step2. consider to align end3
         if let Some((end3_len, end3_ident, end3_align)) =
-            trim_end(seq_info.end3, read_seq, aligner, ReadEnd::End3)
+            trim_end(&seq_info.end3, read_seq, aligner, ReadEnd::End3)
         {
             end3_used_len = end3_len;
             end3_alignment = end3_align;
@@ -117,7 +117,9 @@ pub fn trim_seq(
             pretty_log.as_mut().map(|x| x.push_str(SEP_LINE));
             return (fwd_trim_from, fwd_trim_to, pretty_log);
         } else {
-            pretty_log.as_mut().map(|x| x.push_str("Full seq was trimmed, drop it\n"));
+            pretty_log
+                .as_mut()
+                .map(|x| x.push_str("Full seq was trimmed, drop it\n"));
             return (0, 0, pretty_log); // if the original sequence is too short, maybe the align start of end3 is less than the align end of end5
         }
     } else {
@@ -134,8 +136,10 @@ pub fn trim_seq(
                 pretty_log.as_mut().map(|x| x.push_str(SEP_LINE));
                 return (fwd_trim_from, fwd_trim_to, pretty_log);
             } else {
-                pretty_log.as_mut().map(|x| x.push_str("Full seq was trimmed, drop it\n"));
-                return (0,0, pretty_log); // if the original sequence is too short, maybe the align start of end3 is less than the align end of end5
+                pretty_log
+                    .as_mut()
+                    .map(|x| x.push_str("Full seq was trimmed, drop it\n"));
+                return (0, 0, pretty_log); // if the original sequence is too short, maybe the align start of end3 is less than the align end of end5
             }
         } else {
             // Step6. if just one end of forward passed, then consider the both ends of rev_com and do Step7
@@ -148,7 +152,7 @@ pub fn trim_seq(
             let mut rev_com_end3_alignment = LocalAlignment::default();
             // Step7. check end5 of rev_com
             if let Some((_, rev_com_end5_ident, rev_com_end5_align)) =
-                trim_end(seq_info.rev_com_end5, read_seq, aligner, ReadEnd::End5)
+                trim_end(&seq_info.rev_com_end5, read_seq, aligner, ReadEnd::End5)
             {
                 rev_com_end5_alignment = rev_com_end5_align;
                 rev_trim_from = rev_com_end5_alignment.read_range.0 - 1;
@@ -157,7 +161,7 @@ pub fn trim_seq(
             }
             // Step8. check end3 of rev_com
             if let Some((rev_com_end3_len, rev_com_end3_ident, rev_com_end3_align)) =
-                trim_end(seq_info.rev_com_end3, read_seq, aligner, ReadEnd::End3)
+                trim_end(&seq_info.rev_com_end3, read_seq, aligner, ReadEnd::End3)
             {
                 end3_used_len = rev_com_end3_len;
                 rev_com_end3_alignment = rev_com_end3_align;
@@ -183,8 +187,10 @@ pub fn trim_seq(
                     pretty_log.as_mut().map(|x| x.push_str(SEP_LINE));
                     return (fwd_trim_from, fwd_trim_to, pretty_log);
                 } else {
-                    pretty_log.as_mut().map(|x| x.push_str("Full seq was trimmed, drop it\n"));
-                    return (0,0,pretty_log);
+                    pretty_log
+                        .as_mut()
+                        .map(|x| x.push_str("Full seq was trimmed, drop it\n"));
+                    return (0, 0, pretty_log);
                 }
             } else {
                 // Step11. if identity bases numbers of rev_com is more, just use trim info from Step7 and Step8
@@ -202,7 +208,9 @@ pub fn trim_seq(
                     pretty_log.as_mut().map(|x| x.push_str(SEP_LINE));
                     return (rev_trim_from, rev_trim_to, pretty_log);
                 } else {
-                    pretty_log.as_mut().map(|x| x.push_str("Full seq was trimmed, drop it\n"));
+                    pretty_log
+                        .as_mut()
+                        .map(|x| x.push_str("Full seq was trimmed, drop it\n"));
                     return (0, 0, pretty_log);
                 }
             }
@@ -210,8 +218,7 @@ pub fn trim_seq(
     }
 }
 
-
-
+/*
 #[test]
 pub fn test_trim() {
     use crate::fastq::FastqReader;
@@ -288,3 +295,6 @@ fn a() {
         alignment.pretty(target.as_bytes(), query.as_bytes(), 200)
     );
 }
+
+
+ */

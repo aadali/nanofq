@@ -17,7 +17,7 @@ pub enum ReadEnd {
     End3,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Copy)]
 pub struct Scores {
     pub(crate) match_: i32,
     pub(crate) mismatch: i32,
@@ -195,8 +195,8 @@ impl LocalAligner {
             align_matrix,
         }
     }
-    
-    pub fn update(&mut self, row: usize, col: usize, scores: Scores){
+
+    pub fn update(&mut self, row: usize, col: usize, scores: Scores) {
         let tmp = Self::new(row, col, scores);
         self.row = tmp.row;
         self.col = tmp.col;

@@ -30,6 +30,16 @@ pub fn get_bases() -> &'static HashMap<u8, u8> {
             (b'T', b'A'),
             (b'G', b'C'),
             (b'C', b'G'),
+            (b'R', b'Y'),
+            (b'Y', b'R'),
+            (b'M', b'K'),
+            (b'K', b'M'),
+            (b'S', b'S'),
+            (b'W', b'W'),
+            (b'H', b'D'),
+            (b'B', b'V'),
+            (b'V', b'B'),
+            (b'D', b'H'),
             (b'a', b'T'),
             (b't', b'A'),
             (b'g', b'C'),
@@ -49,6 +59,14 @@ pub fn get_q2p_table() -> &'static [f64; 128] {
         arr
     })
 }
+
+pub fn rev_com(seq: &str) -> String {
+    seq.as_bytes()
+        .iter()
+        .map(|x| *get_bases().get(x).unwrap() as char)
+        .rev()
+        .collect::<String>()
+}
 // ref_base from primer or reference can be dege base
 pub static IS_MATCHED: fn(&u8, &u8) -> bool = |ref_base, read_base| {
     ref_base == read_base
@@ -57,7 +75,8 @@ pub static IS_MATCHED: fn(&u8, &u8) -> bool = |ref_base, read_base| {
             .map_or(false, |x| x.contains(read_base))
 };
 
-pub const SEP_LINE :&str = "----------------------------------------------------------------------\n";
+pub const SEP_LINE: &str =
+    "----------------------------------------------------------------------\n";
 #[test]
 fn test_dege_base() {
     assert!(IS_MATCHED(&b'V', &b'A'));
