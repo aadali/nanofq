@@ -2,7 +2,7 @@ use clap::parser::ValueSource;
 use std::collections::HashMap;
 use std::iter::repeat_n;
 
-pub fn get_seq_info<'a>() -> HashMap<&'a str, SequenceInfo<'a>> {
+pub fn get_trim_cfg<'a>() -> HashMap<&'a str, TrimConfig<'a>> {
     HashMap::from([
         ("LSK", LSK),
         ("RAD", RAD),
@@ -230,7 +230,7 @@ pub fn get_seq_info<'a>() -> HashMap<&'a str, SequenceInfo<'a>> {
 pub type EndAlignPara = (usize, f64, f64);
 pub type EndConfig<'a> = Option<(&'a str, EndAlignPara)>;
 #[derive(Clone, Debug)]
-pub struct SequenceInfo<'a> {
+pub struct TrimConfig<'a> {
     pub kit_name: &'static str,
     pub end5: EndConfig<'a>,
     pub end3: EndConfig<'a>,
@@ -238,9 +238,9 @@ pub struct SequenceInfo<'a> {
     pub rev_com_end3: EndConfig<'a>,
 }
 
-impl<'a> Default for SequenceInfo<'a> {
+impl<'a> Default for TrimConfig<'a> {
     fn default() -> Self {
-        SequenceInfo {
+        TrimConfig {
             kit_name: "customer",
             end5: None,
             end3: None,
@@ -250,7 +250,7 @@ impl<'a> Default for SequenceInfo<'a> {
     }
 }
 
-impl<'a> SequenceInfo<'a> {
+impl<'a> TrimConfig<'a> {
     fn single_update(
         end: &mut EndAlignPara,
         len: (ValueSource, usize),
@@ -438,7 +438,7 @@ LSK114 library reads structure
 
 3' end always is truncated
  */
-const LSK: SequenceInfo = SequenceInfo {
+const LSK: TrimConfig = TrimConfig {
     kit_name: "LSK",
     end5: Some(("CCTGTACTTCGTTCAGTTACGTATTGCT", LSK_END5)),
     end3: Some(("AGCAATACGTAACTGAACGAAGTACAGG", LSK_END3)),
@@ -456,7 +456,7 @@ const LSK: SequenceInfo = SequenceInfo {
       5-GCTTGGGTGTTTAACCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA-...................-3
 
 */
-const RAD: SequenceInfo = SequenceInfo {
+const RAD: TrimConfig = TrimConfig {
     kit_name: "RAD",
     end5: Some((
         "GCTTGGGTGTTTAACCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
@@ -466,7 +466,7 @@ const RAD: SequenceInfo = SequenceInfo {
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const ULK: SequenceInfo = SequenceInfo {
+const ULK: TrimConfig = TrimConfig {
     kit_name: "ULK",
     end5: Some((
         "GCTTGGGTGTTTAACCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
@@ -485,672 +485,672 @@ Example for Native Barcode01
 5-TTTTTTTTCCTGTACTTCGTTCAGTTACGTATTGCT AAGGTTAA CACAAAGACACCGACAACTTTCTT CAGCACCT ................... AGGTGCTG AAGAAAGTTGTCGGTGTCTTTGTG TTAACCTTAGCAAT ACGTAACTGAACGAAGTACAGG-3
 we use barcode_left_flanking + barcode + barcode_right_flanking as query to trim nbd reads
 */
-const NBD_1: SequenceInfo = SequenceInfo {
+const NBD_1: TrimConfig = TrimConfig {
     kit_name: "NBD_1",
     end5: Some(("AAGGTTAACACAAAGACACCGACAACTTTCTTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGAAGAAAGTTGTCGGTGTCTTTGTGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_2: SequenceInfo = SequenceInfo {
+const NBD_2: TrimConfig = TrimConfig {
     kit_name: "NBD_2",
     end5: Some(("AAGGTTAAACAGACGACTACAAACGGAATCGACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTCGATTCCGTTTGTAGTCGTCTGTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_3: SequenceInfo = SequenceInfo {
+const NBD_3: TrimConfig = TrimConfig {
     kit_name: "NBD_3",
     end5: Some(("AAGGTTAACCTGGTAACTGGGACACAAGACTCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGAGTCTTGTGTCCCAGTTACCAGGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_4: SequenceInfo = SequenceInfo {
+const NBD_4: TrimConfig = TrimConfig {
     kit_name: "NBD_4",
     end5: Some(("AAGGTTAATAGGGAAACACGATAGAATCCGAACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTTCGGATTCTATCGTGTTTCCCTATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_5: SequenceInfo = SequenceInfo {
+const NBD_5: TrimConfig = TrimConfig {
     kit_name: "NBD_5",
     end5: Some(("AAGGTTAAAAGGTTACACAAACCCTGGACAAGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCTTGTCCAGGGTTTGTGTAACCTTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_6: SequenceInfo = SequenceInfo {
+const NBD_6: TrimConfig = TrimConfig {
     kit_name: "NBD_6",
     end5: Some(("AAGGTTAAGACTACTTTCTGCCTTTGCGAGAACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTTCTCGCAAAGGCAGAAAGTAGTCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_7: SequenceInfo = SequenceInfo {
+const NBD_7: TrimConfig = TrimConfig {
     kit_name: "NBD_7",
     end5: Some(("AAGGTTAAAAGGATTCATTCCCACGGTAACACCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGTGTTACCGTGGGAATGAATCCTTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_8: SequenceInfo = SequenceInfo {
+const NBD_8: TrimConfig = TrimConfig {
     kit_name: "NBD_8",
     end5: Some(("AAGGTTAAACGTAACTTGGTTTGTTCCCTGAACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTTCAGGGAACAAACCAAGTTACGTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_9: SequenceInfo = SequenceInfo {
+const NBD_9: TrimConfig = TrimConfig {
     kit_name: "NBD_9",
     end5: Some(("AAGGTTAAAACCAAGACTCGCTGTGCCTAGTTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGAACTAGGCACAGCGAGTCTTGGTTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_10: SequenceInfo = SequenceInfo {
+const NBD_10: TrimConfig = TrimConfig {
     kit_name: "NBD_10",
     end5: Some(("AAGGTTAAGAGAGGACAAAGGTTTCAACGCTTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGAAGCGTTGAAACCTTTGTCCTCTCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_11: SequenceInfo = SequenceInfo {
+const NBD_11: TrimConfig = TrimConfig {
     kit_name: "NBD_11",
     end5: Some(("AAGGTTAATCCATTCCCTCCGATAGATGAAACCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGTTTCATCTATCGGAGGGAATGGATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_12: SequenceInfo = SequenceInfo {
+const NBD_12: TrimConfig = TrimConfig {
     kit_name: "NBD_12",
     end5: Some(("AAGGTTAATCCGATTCTGCTTCTTTCTACCTGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCAGGTAGAAAGAAGCAGAATCGGATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_13: SequenceInfo = SequenceInfo {
+const NBD_13: TrimConfig = TrimConfig {
     kit_name: "NBD_13",
     end5: Some(("AAGGTTAAAGAACGACTTCCATACTCGTGTGACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTCACACGAGTATGGAAGTCGTTCTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_14: SequenceInfo = SequenceInfo {
+const NBD_14: TrimConfig = TrimConfig {
     kit_name: "NBD_14",
     end5: Some(("AAGGTTAAAACGAGTCTCTTGGGACCCATAGACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTCTATGGGTCCCAAGAGACTCGTTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_15: SequenceInfo = SequenceInfo {
+const NBD_15: TrimConfig = TrimConfig {
     kit_name: "NBD_15",
     end5: Some(("AAGGTTAAAGGTCTACCTCGCTAACACCACTGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCAGTGGTGTTAGCGAGGTAGACCTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_16: SequenceInfo = SequenceInfo {
+const NBD_16: TrimConfig = TrimConfig {
     kit_name: "NBD_16",
     end5: Some(("AAGGTTAACGTCAACTGACAGTGGTTCGTACTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGAGTACGAACCACTGTCAGTTGACGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_17: SequenceInfo = SequenceInfo {
+const NBD_17: TrimConfig = TrimConfig {
     kit_name: "NBD_17",
     end5: Some(("AAGGTTAAACCCTCCAGGAAAGTACCTCTGATCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGATCAGAGGTACTTTCCTGGAGGGTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_18: SequenceInfo = SequenceInfo {
+const NBD_18: TrimConfig = TrimConfig {
     kit_name: "NBD_18",
     end5: Some(("AAGGTTAACCAAACCCAACAACCTAGATAGGCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGCCTATCTAGGTTGTTGGGTTTGGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_19: SequenceInfo = SequenceInfo {
+const NBD_19: TrimConfig = TrimConfig {
     kit_name: "NBD_19",
     end5: Some(("AAGGTTAAGTTCCTCGTGCAGTGTCAAGAGATCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGATCTCTTGACACTGCACGAGGAACTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_20: SequenceInfo = SequenceInfo {
+const NBD_20: TrimConfig = TrimConfig {
     kit_name: "NBD_20",
     end5: Some(("AAGGTTAATTGCGTCCTGTTACGAGAACTCATCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGATGAGTTCTCGTAACAGGACGCAATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_21: SequenceInfo = SequenceInfo {
+const NBD_21: TrimConfig = TrimConfig {
     kit_name: "NBD_21",
     end5: Some(("AAGGTTAAGAGCCTCTCATTGTCCGTTCTCTACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTAGAGAACGGACAATGAGAGGCTCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_22: SequenceInfo = SequenceInfo {
+const NBD_22: TrimConfig = TrimConfig {
     kit_name: "NBD_22",
     end5: Some(("AAGGTTAAACCACTGCCATGTATCAAAGTACGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCGTACTTTGATACATGGCAGTGGTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_23: SequenceInfo = SequenceInfo {
+const NBD_23: TrimConfig = TrimConfig {
     kit_name: "NBD_23",
     end5: Some(("AAGGTTAACTTACTACCCAGTGAACCTCCTCGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCGAGGAGGTTCACTGGGTAGTAAGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_24: SequenceInfo = SequenceInfo {
+const NBD_24: TrimConfig = TrimConfig {
     kit_name: "NBD_24",
     end5: Some(("AAGGTTAAGCATAGTTCTGCATGATGGGTTAGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCTAACCCATCATGCAGAACTATGCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_25: SequenceInfo = SequenceInfo {
+const NBD_25: TrimConfig = TrimConfig {
     kit_name: "NBD_25",
     end5: Some(("AAGGTTAAGTAAGTTGGGTATGCAACGCAATGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCATTGCGTTGCATACCCAACTTACTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_26: SequenceInfo = SequenceInfo {
+const NBD_26: TrimConfig = TrimConfig {
     kit_name: "NBD_26",
     end5: Some(("AAGGTTAACATACAGCGACTACGCATTCTCATCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGATGAGAATGCGTAGTCGCTGTATGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_27: SequenceInfo = SequenceInfo {
+const NBD_27: TrimConfig = TrimConfig {
     kit_name: "NBD_27",
     end5: Some(("AAGGTTAACGACGGTTAGATTCACCTCTTACACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTGTAAGAGGTGAATCTAACCGTCGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_28: SequenceInfo = SequenceInfo {
+const NBD_28: TrimConfig = TrimConfig {
     kit_name: "NBD_28",
     end5: Some(("AAGGTTAATGAAACCTAAGAAGGCACCGTATCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGATACGGTGCCTTCTTAGGTTTCATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_29: SequenceInfo = SequenceInfo {
+const NBD_29: TrimConfig = TrimConfig {
     kit_name: "NBD_29",
     end5: Some(("AAGGTTAACTAGACACCTTGGGTTGACAGACCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGGTCTGTCAACCCAAGGTGTCTAGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_30: SequenceInfo = SequenceInfo {
+const NBD_30: TrimConfig = TrimConfig {
     kit_name: "NBD_30",
     end5: Some(("AAGGTTAATCAGTGAGGATCTACTTCGACCCACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTGGGTCGAAGTAGATCCTCACTGATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_31: SequenceInfo = SequenceInfo {
+const NBD_31: TrimConfig = TrimConfig {
     kit_name: "NBD_31",
     end5: Some(("AAGGTTAATGCGTACAGCAATCAGTTACATTGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCAATGTAACTGATTGCTGTACGCATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_32: SequenceInfo = SequenceInfo {
+const NBD_32: TrimConfig = TrimConfig {
     kit_name: "NBD_32",
     end5: Some(("AAGGTTAACCAGTAGAAGTCCGACAACGTCATCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGATGACGTTGTCGGACTTCTACTGGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_33: SequenceInfo = SequenceInfo {
+const NBD_33: TrimConfig = TrimConfig {
     kit_name: "NBD_33",
     end5: Some(("AAGGTTAACAGACTTGGTACGGTTGGGTAACTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGAGTTACCCAACCGTACCAAGTCTGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_34: SequenceInfo = SequenceInfo {
+const NBD_34: TrimConfig = TrimConfig {
     kit_name: "NBD_34",
     end5: Some(("AAGGTTAAGGACGAAGAACTCAAGTCAAAGGCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGCCTTTGACTTGAGTTCTTCGTCCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_35: SequenceInfo = SequenceInfo {
+const NBD_35: TrimConfig = TrimConfig {
     kit_name: "NBD_35",
     end5: Some(("AAGGTTAACTACTTACGAAGCTGAGGGACTGCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGCAGTCCCTCAGCTTCGTAAGTAGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_36: SequenceInfo = SequenceInfo {
+const NBD_36: TrimConfig = TrimConfig {
     kit_name: "NBD_36",
     end5: Some(("AAGGTTAAATGTCCCAGTTAGAGGAGGAAACACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTGTTTCCTCCTCTAACTGGGACATTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_37: SequenceInfo = SequenceInfo {
+const NBD_37: TrimConfig = TrimConfig {
     kit_name: "NBD_37",
     end5: Some(("AAGGTTAAGCTTGCGATTGATGCTTAGTATCACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTGATACTAAGCATCAATCGCAAGCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_38: SequenceInfo = SequenceInfo {
+const NBD_38: TrimConfig = TrimConfig {
     kit_name: "NBD_38",
     end5: Some(("AAGGTTAAACCACAGGAGGACGATACAGAGAACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTTCTCTGTATCGTCCTCCTGTGGTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_39: SequenceInfo = SequenceInfo {
+const NBD_39: TrimConfig = TrimConfig {
     kit_name: "NBD_39",
     end5: Some(("AAGGTTAACCACAGTGTCAACTAGAGCCTCTCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGAGAGGCTCTAGTTGACACTGTGGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_40: SequenceInfo = SequenceInfo {
+const NBD_40: TrimConfig = TrimConfig {
     kit_name: "NBD_40",
     end5: Some(("AAGGTTAATAGTTTGGATGACCAAGGATAGCCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGGCTATCCTTGGTCATCCAAACTATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_41: SequenceInfo = SequenceInfo {
+const NBD_41: TrimConfig = TrimConfig {
     kit_name: "NBD_41",
     end5: Some(("AAGGTTAAGGAGTTCGTCCAGAGAAGTACACGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCGTGTACTTCTCTGGACGAACTCCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_42: SequenceInfo = SequenceInfo {
+const NBD_42: TrimConfig = TrimConfig {
     kit_name: "NBD_42",
     end5: Some(("AAGGTTAACTACGTGTAAGGCATACCTGCCAGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCTGGCAGGTATGCCTTACACGTAGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_43: SequenceInfo = SequenceInfo {
+const NBD_43: TrimConfig = TrimConfig {
     kit_name: "NBD_43",
     end5: Some(("AAGGTTAACTTTCGTTGTTGACTCGACGGTAGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCTACCGTCGAGTCAACAACGAAAGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_44: SequenceInfo = SequenceInfo {
+const NBD_44: TrimConfig = TrimConfig {
     kit_name: "NBD_44",
     end5: Some(("AAGGTTAAAGTAGAAAGGGTTCCTTCCCACTCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGAGTGGGAAGGAACCCTTTCTACTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_45: SequenceInfo = SequenceInfo {
+const NBD_45: TrimConfig = TrimConfig {
     kit_name: "NBD_45",
     end5: Some(("AAGGTTAAGATCCAACAGAGATGCCTTCAGTGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCACTGAAGGCATCTCTGTTGGATCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_46: SequenceInfo = SequenceInfo {
+const NBD_46: TrimConfig = TrimConfig {
     kit_name: "NBD_46",
     end5: Some(("AAGGTTAAGCTGTGTTCCACTTCATTCTCCTGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCAGGAGAATGAAGTGGAACACAGCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_47: SequenceInfo = SequenceInfo {
+const NBD_47: TrimConfig = TrimConfig {
     kit_name: "NBD_47",
     end5: Some(("AAGGTTAAGTGCAACTTTCCCACAGGTAGTTCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGAACTACCTGTGGGAAAGTTGCACTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_48: SequenceInfo = SequenceInfo {
+const NBD_48: TrimConfig = TrimConfig {
     kit_name: "NBD_48",
     end5: Some(("AAGGTTAACATCTGGAACGTGGTACACCTGTACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTACAGGTGTACCACGTTCCAGATGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_49: SequenceInfo = SequenceInfo {
+const NBD_49: TrimConfig = TrimConfig {
     kit_name: "NBD_49",
     end5: Some(("AAGGTTAAACTGGTGCAGCTTTGAACATCTAGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCTAGATGTTCAAAGCTGCACCAGTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_50: SequenceInfo = SequenceInfo {
+const NBD_50: TrimConfig = TrimConfig {
     kit_name: "NBD_50",
     end5: Some(("AAGGTTAAATGGACTTTGGTAACTTCCTGCGTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGACGCAGGAAGTTACCAAAGTCCATTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_51: SequenceInfo = SequenceInfo {
+const NBD_51: TrimConfig = TrimConfig {
     kit_name: "NBD_51",
     end5: Some(("AAGGTTAAGTTGAATGAGCCTACTGGGTCCTCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGAGGACCCAGTAGGCTCATTCAACTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_52: SequenceInfo = SequenceInfo {
+const NBD_52: TrimConfig = TrimConfig {
     kit_name: "NBD_52",
     end5: Some(("AAGGTTAATGAGAGACAAGATTGTTCGTGGACCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGTCCACGAACAATCTTGTCTCTCATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_53: SequenceInfo = SequenceInfo {
+const NBD_53: TrimConfig = TrimConfig {
     kit_name: "NBD_53",
     end5: Some(("AAGGTTAAAGATTCAGACCGTCTCATGCAAAGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCTTTGCATGAGACGGTCTGAATCTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_54: SequenceInfo = SequenceInfo {
+const NBD_54: TrimConfig = TrimConfig {
     kit_name: "NBD_54",
     end5: Some(("AAGGTTAACAAGAGCTTTGACTAAGGAGCATGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCATGCTCCTTAGTCAAAGCTCTTGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_55: SequenceInfo = SequenceInfo {
+const NBD_55: TrimConfig = TrimConfig {
     kit_name: "NBD_55",
     end5: Some(("AAGGTTAATGGAAGATGAGACCCTGATCTACGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCGTAGATCAGGGTCTCATCTTCCATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_56: SequenceInfo = SequenceInfo {
+const NBD_56: TrimConfig = TrimConfig {
     kit_name: "NBD_56",
     end5: Some(("AAGGTTAATCACTACTCAACAGGTGGCATGAACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTTCATGCCACCTGTTGAGTAGTGATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_57: SequenceInfo = SequenceInfo {
+const NBD_57: TrimConfig = TrimConfig {
     kit_name: "NBD_57",
     end5: Some(("AAGGTTAAGCTAGGTCAATCTCCTTCGGAAGTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGACTTCCGAAGGAGATTGACCTAGCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_58: SequenceInfo = SequenceInfo {
+const NBD_58: TrimConfig = TrimConfig {
     kit_name: "NBD_58",
     end5: Some(("AAGGTTAACAGGTTACTCCTCCGTGAGTCTGACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTCAGACTCACGGAGGAGTAACCTGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_59: SequenceInfo = SequenceInfo {
+const NBD_59: TrimConfig = TrimConfig {
     kit_name: "NBD_59",
     end5: Some(("AAGGTTAATCAATCAAGAAGGGAAAGCAAGGTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGACCTTGCTTTCCCTTCTTGATTGATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_60: SequenceInfo = SequenceInfo {
+const NBD_60: TrimConfig = TrimConfig {
     kit_name: "NBD_60",
     end5: Some(("AAGGTTAACATGTTCAACCAAGGCTTCTATGGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCCATAGAAGCCTTGGTTGAACATGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_61: SequenceInfo = SequenceInfo {
+const NBD_61: TrimConfig = TrimConfig {
     kit_name: "NBD_61",
     end5: Some(("AAGGTTAAAGAGGGTACTATGTGCCTCAGCACCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGTGCTGAGGCACATAGTACCCTCTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_62: SequenceInfo = SequenceInfo {
+const NBD_62: TrimConfig = TrimConfig {
     kit_name: "NBD_62",
     end5: Some(("AAGGTTAACACCCACACTTACTTCAGGACGTACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTACGTCCTGAAGTAAGTGTGGGTGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_63: SequenceInfo = SequenceInfo {
+const NBD_63: TrimConfig = TrimConfig {
     kit_name: "NBD_63",
     end5: Some(("AAGGTTAATTCTGAAGTTCCTGGGTCTTGAACCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGTTCAAGACCCAGGAACTTCAGAATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_64: SequenceInfo = SequenceInfo {
+const NBD_64: TrimConfig = TrimConfig {
     kit_name: "NBD_64",
     end5: Some(("AAGGTTAAGACAGACACCGTTCATCGACTTTCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGAAAGTCGATGAACGGTGTCTGTCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_65: SequenceInfo = SequenceInfo {
+const NBD_65: TrimConfig = TrimConfig {
     kit_name: "NBD_65",
     end5: Some(("AAGGTTAATTCTCAGTCTTCCTCCAGACAAGGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCCTTGTCTGGAGGAAGACTGAGAATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_66: SequenceInfo = SequenceInfo {
+const NBD_66: TrimConfig = TrimConfig {
     kit_name: "NBD_66",
     end5: Some(("AAGGTTAACCGATCCTTGTGGCTTCTAACTTCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGAAGTTAGAAGCCACAAGGATCGGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_67: SequenceInfo = SequenceInfo {
+const NBD_67: TrimConfig = TrimConfig {
     kit_name: "NBD_67",
     end5: Some(("AAGGTTAAGTTTGTCATACTCGTGTGCTCACCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGGTGAGCACACGAGTATGACAAACTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_68: SequenceInfo = SequenceInfo {
+const NBD_68: TrimConfig = TrimConfig {
     kit_name: "NBD_68",
     end5: Some(("AAGGTTAAGAATCTAAGCAAACACGAAGGTGGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCCACCTTCGTGTTTGCTTAGATTCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_69: SequenceInfo = SequenceInfo {
+const NBD_69: TrimConfig = TrimConfig {
     kit_name: "NBD_69",
     end5: Some(("AAGGTTAATACAGTCCGAGCCTCATGTGATCTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGAGATCACATGAGGCTCGGACTGTATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_70: SequenceInfo = SequenceInfo {
+const NBD_70: TrimConfig = TrimConfig {
     kit_name: "NBD_70",
     end5: Some(("AAGGTTAAACCGAGATCCTACGAATGGAGTGTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGACACTCCATTCGTAGGATCTCGGTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_71: SequenceInfo = SequenceInfo {
+const NBD_71: TrimConfig = TrimConfig {
     kit_name: "NBD_71",
     end5: Some(("AAGGTTAACCTGGGAGCATCAGGTAGTAACAGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCTGTTACTACCTGATGCTCCCAGGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_72: SequenceInfo = SequenceInfo {
+const NBD_72: TrimConfig = TrimConfig {
     kit_name: "NBD_72",
     end5: Some(("AAGGTTAATAGCTGACTGTCTTCCATACCGACCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGTCGGTATGGAAGACAGTCAGCTATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_73: SequenceInfo = SequenceInfo {
+const NBD_73: TrimConfig = TrimConfig {
     kit_name: "NBD_73",
     end5: Some(("AAGGTTAAAAGAAACAGGATGACAGAACCCTCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGAGGGTTCTGTCATCCTGTTTCTTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_74: SequenceInfo = SequenceInfo {
+const NBD_74: TrimConfig = TrimConfig {
     kit_name: "NBD_74",
     end5: Some(("AAGGTTAATACAAGCATCCCAACACTTCCACTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGAGTGGAAGTGTTGGGATGCTTGTATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_75: SequenceInfo = SequenceInfo {
+const NBD_75: TrimConfig = TrimConfig {
     kit_name: "NBD_75",
     end5: Some(("AAGGTTAAGACCATTGTGATGAACCCTGTTGTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGACAACAGGGTTCATCACAATGGTCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_76: SequenceInfo = SequenceInfo {
+const NBD_76: TrimConfig = TrimConfig {
     kit_name: "NBD_76",
     end5: Some(("AAGGTTAAATGCTTGTTACATCAACCCTGGACCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGTCCAGGGTTGATGTAACAAGCATTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_77: SequenceInfo = SequenceInfo {
+const NBD_77: TrimConfig = TrimConfig {
     kit_name: "NBD_77",
     end5: Some(("AAGGTTAACGACCTGTTTCTCAGGGATACAACCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGTTGTATCCCTGAGAAACAGGTCGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_78: SequenceInfo = SequenceInfo {
+const NBD_78: TrimConfig = TrimConfig {
     kit_name: "NBD_78",
     end5: Some(("AAGGTTAAAACAACCGAACCTTTGAATCAGAACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTTCTGATTCAAAGGTTCGGTTGTTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_79: SequenceInfo = SequenceInfo {
+const NBD_79: TrimConfig = TrimConfig {
     kit_name: "NBD_79",
     end5: Some(("AAGGTTAATCTCGGAGATAGTTCTCACTGCTGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCAGCAGTGAGAACTATCTCCGAGATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_80: SequenceInfo = SequenceInfo {
+const NBD_80: TrimConfig = TrimConfig {
     kit_name: "NBD_80",
     end5: Some(("AAGGTTAACGGATGAACATAGGATAGCGATTCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGAATCGCTATCCTATGTTCATCCGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_81: SequenceInfo = SequenceInfo {
+const NBD_81: TrimConfig = TrimConfig {
     kit_name: "NBD_81",
     end5: Some(("AAGGTTAACCTCATCTTGTGAAGTTGTTTCGGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCCGAAACAACTTCACAAGATGAGGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_82: SequenceInfo = SequenceInfo {
+const NBD_82: TrimConfig = TrimConfig {
     kit_name: "NBD_82",
     end5: Some(("AAGGTTAAACGGTATGTCGAGTTCCAGGACTACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTAGTCCTGGAACTCGACATACCGTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_83: SequenceInfo = SequenceInfo {
+const NBD_83: TrimConfig = TrimConfig {
     kit_name: "NBD_83",
     end5: Some(("AAGGTTAATGGCTTGATCTAGGTAAGGTCGAACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTTCGACCTTACCTAGATCAAGCCATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_84: SequenceInfo = SequenceInfo {
+const NBD_84: TrimConfig = TrimConfig {
     kit_name: "NBD_84",
     end5: Some(("AAGGTTAAGTAGTGGACCTAGAACCTGTGCCACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTGGCACAGGTTCTAGGTCCACTACTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_85: SequenceInfo = SequenceInfo {
+const NBD_85: TrimConfig = TrimConfig {
     kit_name: "NBD_85",
     end5: Some(("AAGGTTAAAACGGAGGAGTTAGTTGGATGATCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGATCATCCAACTAACTCCTCCGTTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_86: SequenceInfo = SequenceInfo {
+const NBD_86: TrimConfig = TrimConfig {
     kit_name: "NBD_86",
     end5: Some(("AAGGTTAAAGGTGATCCCAACAAGCGTAAGTACAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGTACTTACGCTTGTTGGGATCACCTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_87: SequenceInfo = SequenceInfo {
+const NBD_87: TrimConfig = TrimConfig {
     kit_name: "NBD_87",
     end5: Some(("AAGGTTAATACATGCTCCTGTTGTTAGGGAGGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCCTCCCTAACAACAGGAGCATGTATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_88: SequenceInfo = SequenceInfo {
+const NBD_88: TrimConfig = TrimConfig {
     kit_name: "NBD_88",
     end5: Some(("AAGGTTAATCTTCTACTACCGATCCGAAGCAGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCTGCTTCGGATCGGTAGTAGAAGATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_89: SequenceInfo = SequenceInfo {
+const NBD_89: TrimConfig = TrimConfig {
     kit_name: "NBD_89",
     end5: Some(("AAGGTTAAACAGCATCAATGTTTGGCTAGTTGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCAACTAGCCAAACATTGATGCTGTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_90: SequenceInfo = SequenceInfo {
+const NBD_90: TrimConfig = TrimConfig {
     kit_name: "NBD_90",
     end5: Some(("AAGGTTAAGATGTAGAGGGTACGGTTTGAGGCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGCCTCAAACCGTACCCTCTACATCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_91: SequenceInfo = SequenceInfo {
+const NBD_91: TrimConfig = TrimConfig {
     kit_name: "NBD_91",
     end5: Some(("AAGGTTAAGGCTCCATAGGAACTCACGCTACTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGAGTAGCGTGAGTTCCTATGGAGCCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_92: SequenceInfo = SequenceInfo {
+const NBD_92: TrimConfig = TrimConfig {
     kit_name: "NBD_92",
     end5: Some(("AAGGTTAATTGTGAGTGGAAAGATACAGGACCCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGGTCCTGTATCTTTCCACTCACAATTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_93: SequenceInfo = SequenceInfo {
+const NBD_93: TrimConfig = TrimConfig {
     kit_name: "NBD_93",
     end5: Some(("AAGGTTAAAGTTTCCATCACTTCAGACTTGGGCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGCCCAAGTCTGAAGTGATGGAAACTTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_94: SequenceInfo = SequenceInfo {
+const NBD_94: TrimConfig = TrimConfig {
     kit_name: "NBD_94",
     end5: Some(("AAGGTTAAGATTGTCCTCAAACTGCCACCTACCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGGTAGGTGGCAGTTTGAGGACAATCTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_95: SequenceInfo = SequenceInfo {
+const NBD_95: TrimConfig = TrimConfig {
     kit_name: "NBD_95",
     end5: Some(("AAGGTTAACCTGTCTGGAAGAAGAATGGACTTCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGAAGTCCATTCTTCTTCCAGACAGGTTAACCTTAGCAAT", NBD_END3)),
     rev_com_end5: None,
     rev_com_end3: None,
 };
-const NBD_96: SequenceInfo = SequenceInfo {
+const NBD_96: TrimConfig = TrimConfig {
     kit_name: "NBD_96",
     end5: Some(("AAGGTTAACTGAACGGTCATAGAGTCCACCATCAGCACCT", NBD_END5)),
     end3: Some(("AGGTGCTGATGGTGGACTCTATGACCGTTCAGTTAACCTTAGCAAT", NBD_END3)),
@@ -1164,7 +1164,7 @@ Example for Rapid Barcode01
   |L_F             |Rapid Barcode01         |R_F                                               | insert Seq
 5-GCTTGGGTGTTTAACC AAGAAAGTTGTCGGTGTCTTTGTG GTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA .................-3
 */
-const RBK_1: SequenceInfo = SequenceInfo {
+const RBK_1: TrimConfig = TrimConfig {
     kit_name: "RBK_1",
     end5: Some((
         "GTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
@@ -2152,7 +2152,7 @@ The full structure of CRTA is like below:
 CRTA:                      5'-CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGT-3'
 CRTA_REV_COM:   3'-TTTTTTTTTTTGAACGCCCGCCGCCTGAGAGGAGACTTCTATCTCGCTGTCCGTTCA-5'
 */
-const PCS: SequenceInfo = SequenceInfo {
+const PCS: TrimConfig = TrimConfig {
     kit_name: "PCS",
     end5: Some((
         "TTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",
@@ -2168,7 +2168,7 @@ const PCS: SequenceInfo = SequenceInfo {
         PCS_REV_COM_END3,
     )),
 };
-const PCB: SequenceInfo = SequenceInfo {
+const PCB: TrimConfig = TrimConfig {
     kit_name: "PCB_1",
     end5: Some((
         "TTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG",

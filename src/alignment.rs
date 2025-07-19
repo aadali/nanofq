@@ -259,9 +259,9 @@ impl LocalAligner {
                     this_score_from_up,
                     0,
                 ]
-                .iter()
-                .max()
-                .unwrap();
+                    .iter()
+                    .max()
+                    .unwrap();
                 if this_cell_score > local_alignment.max_score {
                     local_alignment.max_score = this_cell_score;
                     local_alignment.ref_range.1 = ref_row;
@@ -339,6 +339,7 @@ fn test_max() {
     println!("{x}");
 }
 
+#[test]
 pub fn test_alignment() {
     let scores = Scores {
         match_: 3,

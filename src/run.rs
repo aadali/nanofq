@@ -1,9 +1,9 @@
 use crate::alignment::{LocalAligner, Scores};
 use crate::fastq::{EachStats, FastqReader, FilterOption, NanoRead};
 use crate::summary::{write_stats, write_summary};
-use crate::trim::adapter::{ SequenceInfo, get_seq_info};
+use crate::trim::adapter::{TrimConfig, get_trim_cfg};
 use crate::utils::rev_com;
-use clap::{ArgMatches};
+use clap::ArgMatches;
 use flate2::bufread::MultiGzDecoder;
 use rayon::prelude::*;
 use seq_io::fastq::{Record, RecordSet, RefRecord};
@@ -348,7 +348,7 @@ pub fn run_filter(filter_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
 
 fn trim_receiver(
     receiver: Receiver<RecordSet>,
-    seq_info: &SequenceInfo,
+    trim_cfg: &TrimConfig,
     writer: &mut dyn Write,
     min_len: usize,
     pretty_log: bool,
@@ -360,7 +360,7 @@ fn trim_receiver(
             .par_iter()
             .map(|each_ref_record| {
                 LOCAL_ALIGNER.with_borrow_mut(|local_aligner| {
-                    each_ref_record.trim(seq_info, local_aligner, min_len, pretty_log)
+                    each_ref_record.trim(trim_cfg, local_aligner, min_len, pretty_log)
                 })
             })
             .collect();
@@ -417,7 +417,7 @@ fn trim_receiver(
 fn trim<R>(
     reader: R,
     writer: &mut dyn Write,
-    seq_info: &SequenceInfo,
+    trim_cfg: &TrimConfig,
     min_len: usize,
     pretty_log: bool,
     log_writer: &mut BufWriter<File>,
@@ -438,14 +438,14 @@ where
             }
         }
     });
-    trim_receiver(receiver, seq_info, writer, min_len, pretty_log, log_writer)?;
+    trim_receiver(receiver, trim_cfg, writer, min_len, pretty_log, log_writer)?;
     Ok(())
 }
 
 fn trim_fastq_dir(
     path: &Path,
     writer: &mut dyn Write,
-    seq_info: &SequenceInfo,
+    trim_cfg: &TrimConfig,
     min_len: usize,
     pretty_log: bool,
     log_writer: &mut BufWriter<File>,
@@ -456,7 +456,7 @@ fn trim_fastq_dir(
             trim(
                 MultiGzDecoder::new(BufReader::new(File::open(fq)?)),
                 writer,
-                seq_info,
+                trim_cfg,
                 min_len,
                 pretty_log,
                 log_writer,
@@ -465,7 +465,7 @@ fn trim_fastq_dir(
             trim(
                 BufReader::new(File::open(fq)?),
                 writer,
-                seq_info,
+                trim_cfg,
                 min_len,
                 pretty_log,
                 log_writer,
@@ -547,9 +547,9 @@ pub fn run_trim(trim_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
     let mut real_primers = String::new();
     let mut fwd_primer_rc = String::new();
     let mut rev_primer_rc = String::new();
-    let mut all_kit_seq_info = get_seq_info();
-    let mut seq_info = SequenceInfo::default();
-    let ref_seq_info = if let Some(primers) = primers {
+    let mut all_kit_trim_cfg = get_trim_cfg();
+    let mut trim_cfg = TrimConfig::default();
+    let ref_trim_cfg = if let Some(primers) = primers {
         real_primers = primers.clone();
         let fields: Vec<_> = real_primers
             .splitn(2, ",")
@@ -560,7 +560,7 @@ pub fn run_trim(trim_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
         let rev_primer = fields[1];
         fwd_primer_rc = rev_com(fwd_primer);
         rev_primer_rc = rev_com(rev_primer);
-        seq_info = SequenceInfo {
+        trim_cfg = TrimConfig {
             kit_name: "customer",
             end5: Some((fwd_primer, (end5_len.1, end5_pct.1, end5_align_ident.1))),
             end3: Some((&rev_primer_rc, (end3_len.1, end3_pct.1, end3_align_ident.1))),
@@ -581,11 +581,11 @@ pub fn run_trim(trim_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
                 None
             },
         };
-        &seq_info
+        &trim_cfg
     } else {
         let kit_str = kit.unwrap().as_str();
-        let seq_info = all_kit_seq_info.get_mut(kit_str).unwrap();
-        seq_info.update(
+        let kit_trim_cfg = all_kit_trim_cfg.get_mut(kit_str).unwrap();
+        kit_trim_cfg.update(
             end5_len,
             end5_pct,
             end5_align_ident,
@@ -599,9 +599,9 @@ pub fn run_trim(trim_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
             end3_pct_rc,
             end3_align_ident_rc,
         );
-        seq_info
+        kit_trim_cfg
     };
-    let (row, col) = ref_seq_info.get_dim();
+    let (row, col) = ref_trim_cfg.get_dim();
     let log = trim_cmd.get_one::<String>("log");
     let pretty_log = if log.is_some() { true } else { false };
     let mut log_writer = match log {
@@ -609,7 +609,7 @@ pub fn run_trim(trim_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
         Some(log_file) => BufWriter::new(File::create(log_file)?),
     };
     if pretty_log {
-        write!(log_writer, "{}", ref_seq_info.get_info())?
+        write!(log_writer, "{}", ref_trim_cfg.get_info())?
     }
     if thread == 1 {
         LOCAL_ALIGNER.with_borrow_mut(|local_aligner: &mut LocalAligner| {
@@ -633,7 +633,7 @@ pub fn run_trim(trim_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
         None => trim(
             std::io::stdin(),
             &mut writer,
-            ref_seq_info,
+            ref_trim_cfg,
             min_len,
             pretty_log,
             &mut log_writer,
@@ -647,7 +647,7 @@ pub fn run_trim(trim_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
                     trim(
                         reader,
                         &mut writer,
-                        ref_seq_info,
+                        ref_trim_cfg,
                         min_len,
                         pretty_log,
                         &mut log_writer,
@@ -657,7 +657,7 @@ pub fn run_trim(trim_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
                     trim(
                         reader,
                         &mut writer,
-                        ref_seq_info,
+                        ref_trim_cfg,
                         min_len,
                         pretty_log,
                         &mut log_writer,
@@ -667,7 +667,7 @@ pub fn run_trim(trim_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
                 trim_fastq_dir(
                     input_path,
                     &mut writer,
-                    ref_seq_info,
+                    ref_trim_cfg,
                     min_len,
                     pretty_log,
                     &mut log_writer,

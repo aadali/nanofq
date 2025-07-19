@@ -1,16 +1,16 @@
 pub mod adapter;
 
 use crate::alignment::{LocalAligner, LocalAlignment, ReadEnd};
-use crate::trim::adapter::{EndConfig, SequenceInfo};
+use crate::trim::adapter::{EndConfig, TrimConfig};
 use crate::utils::SEP_LINE;
 
 fn trim_end<'a>(
-    end_config: &'a EndConfig,
+    end_cfg: &'a EndConfig,
     read_seq: &'a [u8],
     aligner: &mut LocalAligner,
     end: ReadEnd,
 ) -> Option<(usize, usize, LocalAlignment<'a>)> {
-    if let Some(end_config) = end_config {
+    if let Some(end_config) = end_cfg {
         let end_reference = end_config.0.as_bytes();
         let end_align_para = end_config.1;
         let read_end_seq = if read_seq.len() > end_align_para.0 {
@@ -22,7 +22,7 @@ fn trim_end<'a>(
         } else {
             read_seq
         };
-        let mut alignment = aligner.align(end_reference, read_end_seq);
+        let alignment = aligner.align(end_reference, read_end_seq);
         let (ident, ident_pct) = alignment.get_ident();
         let align_pct = alignment.get_percent();
         if align_pct > end_align_para.1 && ident_pct > end_align_para.2 {
@@ -35,7 +35,7 @@ fn trim_end<'a>(
     }
 }
 
-fn trim_return(
+fn get_trim_return(
     trim_from: usize,
     trim_to: usize,
     min_len: usize,
@@ -62,7 +62,7 @@ fn trim_return(
     }
 }
 pub fn trim_seq(
-    seq_info: &SequenceInfo,
+    trim_cfg: &TrimConfig,
     seq: &[u8],
     id: &str,
     aligner: &mut LocalAligner,
@@ -83,11 +83,11 @@ pub fn trim_seq(
     } else {
         None
     };
-    // actually, the forward end5 must be used to search, this means seq_info.end5.is_some() must be true. The following expr must be true
-    if seq_info.may_trim_end5() {
+    // actually, the forward end5 will always be used to search, this means trim_cfg.end5.is_some() must be true. The following expr always be true
+    if trim_cfg.may_trim_end5() {
         // Step1. consider to align end5
         if let Some((_, end5_ident, end5_align)) =
-            trim_end(&seq_info.end5, read_seq, aligner, ReadEnd::End5)
+            trim_end(&trim_cfg.end5, read_seq, aligner, ReadEnd::End5)
         {
             end5_alignment = end5_align;
             fwd_trim_from = end5_alignment.read_range.1;
@@ -95,10 +95,10 @@ pub fn trim_seq(
             fwd_ident_score += end5_ident;
         }
     }
-    if seq_info.may_trim_end3() {
+    if trim_cfg.may_trim_end3() {
         // Step2. consider to align end3
         if let Some((end3_len, end3_ident, end3_align)) =
-            trim_end(&seq_info.end3, read_seq, aligner, ReadEnd::End3)
+            trim_end(&trim_cfg.end3, read_seq, aligner, ReadEnd::End3)
         {
             end3_used_len = end3_len;
             end3_alignment = end3_align;
@@ -109,8 +109,8 @@ pub fn trim_seq(
     }
     // if rev_com_end5 is used, so the rev_com_end3 must be used as well
     debug_assert_eq!(
-        seq_info.may_trim_rev_com_end5(),
-        seq_info.may_trim_rev_com_end3(),
+        trim_cfg.may_trim_rev_com_end5(),
+        trim_cfg.may_trim_rev_com_end3(),
         "rev_com end5 and rev_com end3 must be fit"
     );
     /*
@@ -126,8 +126,8 @@ pub fn trim_seq(
     Finally, we will use the trim_from and trim_to index of read (forward or rev com) that has more identity base
     to trim the original sequence
      */
-    if !seq_info.may_trim_rev_com_end5() {
-        // Step3. if for this seq_info, rev_com align is not needed, then just use trim info from Step1 and Step2
+    if !trim_cfg.may_trim_rev_com_end5() {
+        // Step3. if for this trim_cfg, rev_com align is not needed, then just use trim info from Step1 and Step2
         if trim_end5_success {
             pretty_log
                 .as_mut()
@@ -138,7 +138,7 @@ pub fn trim_seq(
                 .as_mut()
                 .map(|x| x.push_str(&end3_alignment.pretty(ReadEnd::End3)));
         }
-        let (a, b) = trim_return(fwd_trim_from, fwd_trim_to, min_len, &mut pretty_log);
+        let (a, b) = get_trim_return(fwd_trim_from, fwd_trim_to, min_len, &mut pretty_log);
         (a, b, pretty_log)
     } else {
         // Step4. if the rev_com read should be also detected
@@ -150,7 +150,7 @@ pub fn trim_seq(
             pretty_log
                 .as_mut()
                 .map(|x| x.push_str(&end3_alignment.pretty(ReadEnd::End3)));
-            let (a, b) = trim_return(fwd_trim_from, fwd_trim_to, min_len, &mut pretty_log);
+            let (a, b) = get_trim_return(fwd_trim_from, fwd_trim_to, min_len, &mut pretty_log);
             (a, b, pretty_log)
         } else {
             // Step6. if just one end of forward passed, then consider the both ends of rev_com and do Step7
@@ -163,7 +163,7 @@ pub fn trim_seq(
             let mut rev_com_end3_alignment = LocalAlignment::default();
             // Step7. check end5 of rev_com
             if let Some((_, rev_com_end5_ident, rev_com_end5_align)) =
-                trim_end(&seq_info.rev_com_end5, read_seq, aligner, ReadEnd::End5)
+                trim_end(&trim_cfg.rev_com_end5, read_seq, aligner, ReadEnd::End5)
             {
                 rev_com_end5_alignment = rev_com_end5_align;
                 rev_trim_from = rev_com_end5_alignment.read_range.1;
@@ -172,7 +172,7 @@ pub fn trim_seq(
             }
             // Step8. check end3 of rev_com
             if let Some((rev_com_end3_len, rev_com_end3_ident, rev_com_end3_align)) =
-                trim_end(&seq_info.rev_com_end3, read_seq, aligner, ReadEnd::End3)
+                trim_end(&trim_cfg.rev_com_end3, read_seq, aligner, ReadEnd::End3)
             {
                 end3_used_len = rev_com_end3_len;
                 rev_com_end3_alignment = rev_com_end3_align;
@@ -194,7 +194,7 @@ pub fn trim_seq(
                         .map(|x| x.push_str(&end3_alignment.pretty(ReadEnd::End3)));
                 }
                 // Step10. if identity bases numbers of forward is more, just use trim info from Step1 and Step2
-                let (a, b) = trim_return(fwd_trim_from, fwd_trim_to, min_len, &mut pretty_log);
+                let (a, b) = get_trim_return(fwd_trim_from, fwd_trim_to, min_len, &mut pretty_log);
                 (a, b, pretty_log)
             } else {
                 // Step11. if identity bases numbers of rev_com is more, just use trim info from Step7 and Step8
@@ -208,7 +208,7 @@ pub fn trim_seq(
                         .as_mut()
                         .map(|x| x.push_str(&rev_com_end3_alignment.pretty(ReadEnd::End3)));
                 }
-                let (a, b) = trim_return(rev_trim_from, rev_trim_to, min_len, &mut pretty_log);
+                let (a, b) = get_trim_return(rev_trim_from, rev_trim_to, min_len, &mut pretty_log);
                 (a, b, pretty_log)
             }
         }

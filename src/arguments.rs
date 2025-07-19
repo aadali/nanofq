@@ -1,4 +1,4 @@
-use crate::trim::adapter::get_seq_info;
+use crate::trim::adapter::get_trim_cfg;
 use ansi_term::Color;
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, value_parser};
 use std::fmt::Display;
@@ -302,8 +302,8 @@ pub fn parse_arguments() -> ArgMatches {
                 .help("Which kit you used. Each kit has it's own search parameter, but can be changed by [search parameter]. \
 you can choice one from [LSK, RAD, ULK, RBK, PCS, PCB, NBD_1, NBD_2, ..., NBD_95, NBD_96]. NBD_{number} means kit name with barcode number.")
                 .value_parser(|x: &str| {
-                    get_seq_info().contains_key(x);
-                    if get_seq_info().contains_key(x) {
+                    get_trim_cfg().contains_key(x);
+                    if get_trim_cfg().contains_key(x) {
                         return Result::<String, anyhow::Error>::Ok(x.to_string())
                     } else {
                         eprintln!("Error: invalid \'{}\' for \'--kit <kit>\'", x);

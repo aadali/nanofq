@@ -1,5 +1,5 @@
 use crate::alignment::{LocalAligner};
-use crate::trim::adapter::SequenceInfo;
+use crate::trim::adapter::TrimConfig;
 use crate::trim::trim_seq;
 use crate::utils::get_q2p_table;
 use ansi_term::Color;
@@ -45,7 +45,7 @@ pub trait NanoRead {
 
     fn trim(
         &self,
-        seq_info: &SequenceInfo,
+        trim_cfg: &TrimConfig,
         aligner: &mut LocalAligner,
         min_len: usize,
         pretty_log: bool,
@@ -133,13 +133,13 @@ impl<'a> NanoRead for RefRecord<'a> {
 
     fn trim(
         &self,
-        seq_info: &SequenceInfo,
+        trim_cfg: &TrimConfig,
         aligner: &mut LocalAligner,
         min_len: usize,
         pretty_log: bool,
     ) -> (Option<(&[u8], &[u8])>, Option<String>) {
         let (trim_from, trim_to, log_string) = trim_seq(
-            seq_info,
+            trim_cfg,
             self.seq(),
             &format!(
                 "{}: {}",
