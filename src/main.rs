@@ -1,4 +1,4 @@
-// #![allow(unused_assignments)]
+#![allow(unused_assignments)]
 // #![allow(unused_mut)]
 // #![allow(dead_code)]
 // #![allow(unused_imports)]

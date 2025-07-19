@@ -10,7 +10,7 @@ use seq_io::fastq::{Record, RecordSet, RefRecord};
 use std::any::Any;
 use std::cell::RefCell;
 use std::fs::File;
-use std::io::{ BufReader, BufWriter, Read, Write};
+use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::mpsc::Receiver;
@@ -213,8 +213,8 @@ pub fn run_stats(stats_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
     let lengths = stats_cmd.get_one::<Vec<usize>>("length");
     let gc = stats_cmd.get_flag("gc");
     let thread = stats_cmd.get_one::<u16>("thread").unwrap();
-    let plot = stats_cmd.get_flag("plot");
-    let format = stats_cmd
+    let _plot = stats_cmd.get_flag("plot");
+    let _format = stats_cmd
         .get_many::<String>("format")
         .unwrap()
         .collect::<Vec<&String>>();
@@ -223,27 +223,26 @@ pub fn run_stats(stats_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
         .num_threads(*thread as usize)
         .build_global()?;
 
-    let mut stats_result = Vec::<EachStats>::new();
-    match input {
+    let mut stats_result = match input {
         // None => stats_result = stats_stdin(*thread as usize, gc),
-        None => stats_result = stats(std::io::stdin(), *thread as usize, gc),
+        None => stats(std::io::stdin(), *thread as usize, gc),
         Some(input) => {
             let input_path = Path::new(input);
             if input_path.is_file() {
                 if input_path.to_str().unwrap().ends_with(".gz") {
-                    stats_result = stats(
+                    stats(
                         MultiGzDecoder::new(BufReader::new(File::open(input)?)),
                         *thread as usize,
                         gc,
-                    );
+                    )
                 } else {
-                    stats_result = stats(BufReader::new(File::open(input)?), *thread as usize, gc);
+                    stats(BufReader::new(File::open(input)?), *thread as usize, gc)
                 }
             } else {
-                stats_result = stats_fastq_dir(input_path, *thread as usize, gc);
+                stats_fastq_dir(input_path, *thread as usize, gc)
             }
         }
-    }
+    };
 
     match output {
         None => write_stats(&stats_result, &mut std::io::stdout(), gc)?,
@@ -613,14 +612,14 @@ pub fn run_trim(trim_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
     }
     if thread == 1 {
         LOCAL_ALIGNER.with_borrow_mut(|local_aligner: &mut LocalAligner| {
-            local_aligner.update(row+1, col+1, scores)
-        }) ;
+            local_aligner.update(row + 1, col + 1, scores)
+        });
     }
     rayon::ThreadPoolBuilder::new()
         .num_threads(thread as usize)
         .start_handler(move |_| {
             LOCAL_ALIGNER.with_borrow_mut(|local_aligner: &mut LocalAligner| {
-                local_aligner.update(row+1, col+1, scores)
+                local_aligner.update(row + 1, col + 1, scores)
             })
         })
         .build_global()?;

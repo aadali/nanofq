@@ -257,4 +257,4 @@ pub fn write_stats<W: Write>(
     Ok(())
 }
 
-pub fn plot() {}
+pub fn _plot() {}
