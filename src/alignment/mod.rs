@@ -132,11 +132,24 @@ impl<'a> LocalAlignment<'a> {
         } else {
             "Align3'End:\n"
         };
+        // format!(
+        //     "{}AlignPercent: {}\nIdentPercent:{}\nReadAlignRange:{}, [{}, {}]\nRefAlignRange:{}, [{}, {}]\n{}\n{}\n{}\n",
+        //     which_end,
+        //     self.get_percent(),
+        //     self.get_ident().1,
+        //     self.read_end.len(),
+        //     read_range_start,
+        //     read_range_end,
+        //     self.reference.len(),
+        //     self.ref_range.0,
+        //     self.ref_range.1,
+        //     align_read_str,
+        //     line,
+        //     align_ref_string
+        // )
         format!(
-            "{}AlignPercent: {}\nIdentPercent:{}\nReadAlignRange:{}, [{}, {}]\nRefAlignRange:{}, [{}, {}]\n{}\n{}\n{}\n",
+            "{}ReadAlignRange:{}, [{}, {}]\nRefAlignRange:{}, [{}, {}]\n{}\n{}\n{}\n",
             which_end,
-            self.get_percent(),
-            self.get_ident().1,
             self.read_end.len(),
             read_range_start,
             read_range_end,

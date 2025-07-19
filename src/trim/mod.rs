@@ -3,8 +3,6 @@ pub mod adapter;
 use crate::alignment::{LocalAligner, LocalAlignment, ReadEnd};
 use crate::trim::adapter::{EndConfig, SequenceInfo};
 use crate::utils::SEP_LINE;
-use seq_io::fastq::{Record};
-use std::io::{Write};
 
 fn trim_end<'a>(
     end_config: &'a EndConfig,
@@ -37,12 +35,39 @@ fn trim_end<'a>(
     }
 }
 
+fn trim_return(
+    trim_from: usize,
+    trim_to: usize,
+    min_len: usize,
+    log: &mut Option<String>,
+) -> (usize, usize) {
+    if trim_to > trim_from {
+        if trim_to - trim_from > min_len {
+            log.as_mut().map(|x| x.push_str(SEP_LINE));
+            (trim_from, trim_to)
+        } else {
+            log.as_mut().map(|x| {
+                x.push_str(&format!(
+                    "{} is too short after trimming, drop it\n{}",
+                    trim_to - trim_from,
+                    SEP_LINE
+                ))
+            });
+            (0, 0)
+        }
+    } else {
+        log.as_mut()
+            .map(|x| x.push_str(&format!("Full length is trimmed, drop it\n{}", SEP_LINE)));
+        (0, 0)
+    }
+}
 pub fn trim_seq(
     seq_info: &SequenceInfo,
     seq: &[u8],
     id: &str,
     aligner: &mut LocalAligner,
     log: bool,
+    min_len: usize,
 ) -> (usize, usize, Option<String>) {
     let read_seq = seq;
     let mut fwd_trim_from = 0;
@@ -65,7 +90,7 @@ pub fn trim_seq(
             trim_end(&seq_info.end5, read_seq, aligner, ReadEnd::End5)
         {
             end5_alignment = end5_align;
-            fwd_trim_from = end5_alignment.read_range.0 - 1;
+            fwd_trim_from = end5_alignment.read_range.1;
             trim_end5_success = true;
             fwd_ident_score += end5_ident;
         }
@@ -113,15 +138,8 @@ pub fn trim_seq(
                 .as_mut()
                 .map(|x| x.push_str(&end3_alignment.pretty(ReadEnd::End3)));
         }
-        if fwd_trim_to >= fwd_trim_from {
-            pretty_log.as_mut().map(|x| x.push_str(SEP_LINE));
-            return (fwd_trim_from, fwd_trim_to, pretty_log);
-        } else {
-            pretty_log
-                .as_mut()
-                .map(|x| x.push_str("Full seq was trimmed, drop it\n"));
-            return (0, 0, pretty_log); // if the original sequence is too short, maybe the align start of end3 is less than the align end of end5
-        }
+        let (a, b) = trim_return(fwd_trim_from, fwd_trim_to, min_len, &mut pretty_log);
+        (a, b, pretty_log)
     } else {
         // Step4. if the rev_com read should be also detected
         if trim_end5_success && trim_end3_success {
@@ -132,15 +150,8 @@ pub fn trim_seq(
             pretty_log
                 .as_mut()
                 .map(|x| x.push_str(&end3_alignment.pretty(ReadEnd::End3)));
-            if fwd_trim_to >= fwd_trim_from {
-                pretty_log.as_mut().map(|x| x.push_str(SEP_LINE));
-                return (fwd_trim_from, fwd_trim_to, pretty_log);
-            } else {
-                pretty_log
-                    .as_mut()
-                    .map(|x| x.push_str("Full seq was trimmed, drop it\n"));
-                return (0, 0, pretty_log); // if the original sequence is too short, maybe the align start of end3 is less than the align end of end5
-            }
+            let (a, b) = trim_return(fwd_trim_from, fwd_trim_to, min_len, &mut pretty_log);
+            (a, b, pretty_log)
         } else {
             // Step6. if just one end of forward passed, then consider the both ends of rev_com and do Step7
             let mut rev_ident_score = 0;
@@ -155,7 +166,7 @@ pub fn trim_seq(
                 trim_end(&seq_info.rev_com_end5, read_seq, aligner, ReadEnd::End5)
             {
                 rev_com_end5_alignment = rev_com_end5_align;
-                rev_trim_from = rev_com_end5_alignment.read_range.0 - 1;
+                rev_trim_from = rev_com_end5_alignment.read_range.1;
                 rev_ident_score += rev_com_end5_ident;
                 trim_rev_com_end5_success = true;
             }
@@ -172,129 +183,34 @@ pub fn trim_seq(
             }
             // Step9. determine which read (forward or rev_com) will be used depends on the total identity bases number of each direction
             if fwd_ident_score > rev_ident_score {
-                if fwd_trim_to >= fwd_trim_from {
-                    // Step10. if identity bases numbers of forward is more, just use trim info from Step1 and Step2
-                    if trim_end5_success {
-                        pretty_log
-                            .as_mut()
-                            .map(|x| x.push_str(&end5_alignment.pretty(ReadEnd::End5)));
-                    }
-                    if trim_end3_success {
-                        pretty_log
-                            .as_mut()
-                            .map(|x| x.push_str(&end3_alignment.pretty(ReadEnd::End3)));
-                    }
-                    pretty_log.as_mut().map(|x| x.push_str(SEP_LINE));
-                    return (fwd_trim_from, fwd_trim_to, pretty_log);
-                } else {
+                if trim_end5_success {
                     pretty_log
                         .as_mut()
-                        .map(|x| x.push_str("Full seq was trimmed, drop it\n"));
-                    return (0, 0, pretty_log);
+                        .map(|x| x.push_str(&end5_alignment.pretty(ReadEnd::End5)));
                 }
+                if trim_end3_success {
+                    pretty_log
+                        .as_mut()
+                        .map(|x| x.push_str(&end3_alignment.pretty(ReadEnd::End3)));
+                }
+                // Step10. if identity bases numbers of forward is more, just use trim info from Step1 and Step2
+                let (a, b) = trim_return(fwd_trim_from, fwd_trim_to, min_len, &mut pretty_log);
+                (a, b, pretty_log)
             } else {
                 // Step11. if identity bases numbers of rev_com is more, just use trim info from Step7 and Step8
-                if rev_trim_to >= rev_trim_from {
-                    if trim_rev_com_end5_success {
-                        pretty_log
-                            .as_mut()
-                            .map(|x| x.push_str(&rev_com_end5_alignment.pretty(ReadEnd::End5)));
-                    }
-                    if trim_rev_com_end3_success {
-                        pretty_log
-                            .as_mut()
-                            .map(|x| x.push_str(&rev_com_end3_alignment.pretty(ReadEnd::End3)));
-                    }
-                    pretty_log.as_mut().map(|x| x.push_str(SEP_LINE));
-                    return (rev_trim_from, rev_trim_to, pretty_log);
-                } else {
+                if trim_rev_com_end5_success {
                     pretty_log
                         .as_mut()
-                        .map(|x| x.push_str("Full seq was trimmed, drop it\n"));
-                    return (0, 0, pretty_log);
+                        .map(|x| x.push_str(&rev_com_end5_alignment.pretty(ReadEnd::End5)));
                 }
+                if trim_rev_com_end3_success {
+                    pretty_log
+                        .as_mut()
+                        .map(|x| x.push_str(&rev_com_end3_alignment.pretty(ReadEnd::End3)));
+                }
+                let (a, b) = trim_return(rev_trim_from, rev_trim_to, min_len, &mut pretty_log);
+                (a, b, pretty_log)
             }
         }
     }
 }
-
-/*
-#[test]
-pub fn test_trim() {
-    use crate::fastq::FastqReader;
-    use crate::fastq::NanoRead;
-    let mut reader = FastqReader::new(std::fs::File::open("/Users/aadali/test_data/nbd114.24/barcode01.fastq").unwrap());
-    // let mut reader = FastqReader::new(
-    //     // std::fs::File::open("/Users/aadali/test_data/pcb114.24/SRR30594249.fastq").unwrap(),
-    //     std::fs::File::open("/Users/aadali/test_data/pcb114.24/sub_SRR30594249.fastq").unwrap(),
-    // );
-    // let nbd_1 = get_seq_info()["NBD_1"];
-    // let pcb_1 = get_seq_info()["PCB"];
-    let nbd_1= get_seq_info()["NBD_1"];
-    // let mut writer = BufWriter::new(
-    //     // std::fs::File::create("/Users/aadali/test_data/nbd114.24/trimmed.barcode01.fastq").unwrap(),
-    //     std::fs::File::create("/Users/aadali/test_data/pcb114.24/trimmed.barcode01.fastq").unwrap(),
-    // );
-    let mut log_writer = BufWriter::new(
-        std::fs::File::create("/Users/aadali/test_data/nbd114.24/nbd1_trimmed.log").unwrap(),
-        // std::fs::File::create("/Users/aadali/test_data/pcb114.24/trimmed2.log").unwrap(),
-    );
-    // log_writer.write(pcb_1.get_info().as_bytes()).unwrap();
-    log_writer.write(nbd_1.get_info().as_bytes()).unwrap();
-    // let mut aligner = Aligner::with_capacity(200, 100, -5, -1, MatchParams {match_score:3, mismatch_score:-3});
-    // let mut aligner = Aligner::with_capacity(200, 100, -5, -1, score);
-    let mut aligner = LocalAligner::new(
-        90,
-        180,
-        Scores {
-            match_: 3,
-            mismatch: -3,
-            gap_open: -5,
-            gap_extend: -1,
-        },
-    );
-    // let mut aligner = Aligner::
-    loop {
-        let ref_record = reader.next();
-        if ref_record.is_none() {
-            break;
-        }
-        let ref_record = ref_record.unwrap().unwrap();
-        // if ref_record.id().unwrap() != "SRR30594249.10" {
-        //     continue;
-        // }
-         let (trim_from, trim_to, pretty_log) =trim_seq(nbd_1, ref_record.seq(), ref_record.id().unwrap(), &mut aligner, true);
-        {
-            // println!("{:?}", pretty_log);
-            if pretty_log.is_some() {
-                log_writer.write(pretty_log.unwrap().as_bytes()).unwrap();
-            }
-        }
-        // let x = trim_seq(pcb_1, &ref_record, &mut aligner);
-        // log_writer.write(log.as_bytes()).unwrap();
-        // if trimmed_fq.is_some() {
-        //     writer.write(trimmed_fq.unwrap().as_bytes()).unwrap();
-        // }
-    }
-}
-
-#[test]
-fn a() {
-    use crate::utils::IS_MATCHED;
-    use bio::alignment::pairwise::Aligner;
-    let score = |a: u8, b: u8| {
-        if IS_MATCHED(&b, &a) { 3 } else { -3 }
-    };
-    // let mut aligner = Aligner::with_capacity(200, 100, -5, -1, MatchParams {match_score:3, mismatch_score:-3});
-    let mut aligner = Aligner::with_capacity(200, 200, -5, -1, score);
-    let target = "CTGTGCATGATTATTTACTGGTTCAGTTATCCAGCCGATATTGCAGCCTGGCGCTGGCGCCGTTGACAAAGTTGTCGGTGTCTTTGTGACTTGCCTGCTCGCTCTCTTTCAGAGGAAGTCCGCCGCCCGCAAGTTTTTTTTTTTTTTTTTTTTTTTTTGT";
-    let query = "AAGAAAGTTGTCGGTGTCTTTGTGACTTGCCTGTCGCTCTATCTTCAGAGGAGAGTCCGCCGCCCGCAAG";
-    let alignment = aligner.local(target.as_bytes(), query.as_bytes());
-    println!(
-        "{}",
-        alignment.pretty(target.as_bytes(), query.as_bytes(), 200)
-    );
-}
-
-
- */

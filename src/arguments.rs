@@ -91,7 +91,7 @@ fn positive_number_parse<T: FromStr + PartialOrd + Display>(
             }
             value
         }
-        Err(err) => {
+        Err(_) => {
             let num_type = if float { "float" } else { "int" };
             eprintln!(
                 "{}",
@@ -299,8 +299,8 @@ pub fn parse_arguments() -> ArgMatches {
             Arg::new("kit")
                 .short('k')
                 .long("kit")
-                .help("Which kit you used. Each kit has it's own search parameter, but can be changed by [search parameter]. NBD_{number} means kit name with barcode number.")
-                .default_value("LSK")
+                .help("Which kit you used. Each kit has it's own search parameter, but can be changed by [search parameter]. \
+you can choice one from [LSK, RAD, ULK, RBK, PCS, PCB, NBD_1, NBD_2, ..., NBD_95, NBD_96]. NBD_{number} means kit name with barcode number.")
                 .value_parser(|x: &str| {
                     get_seq_info().contains_key(x);
                     if get_seq_info().contains_key(x) {
@@ -342,6 +342,14 @@ pub fn parse_arguments() -> ArgMatches {
         )
         .arg( thread_arg.clone() )
         .arg(
+            Arg::new("min_len")
+                .short('L')
+                .long("min_len")
+                .default_value("50")
+                .value_parser(value_parser!(u32).range(1..))
+                .help("if the length of trimmed read is less than this value, do not output it into trimmed fastq")
+        )
+        .arg(
             Arg::new("match")
                 .short('m')
                 .long("match")
@@ -377,8 +385,8 @@ pub fn parse_arguments() -> ArgMatches {
             Arg::new("rev_com_not_used")
                 .long("rev_com_not_used")
                 .action(ArgAction::SetTrue)
-                .help("whether used rev com sequences of primers to query in read if primers is used. If it's false, \
-                we will assume that fwd primer is in 5'end of read and rev_com of rev primer is in 3'end of read")
+                .help("whether used rev com sequences of primers to query in read if primers is used. If it's set, \
+                we will assume that fwd primer is in 5'end of read and rev_com of rev primer is in 3'end of read. [default: false]")
         )
         .arg(
             Arg::new("end5_len")

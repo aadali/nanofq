@@ -71,7 +71,7 @@ where
         FastqReader::new(reader).stats(gc)
     } else {
         let (sender, receiver) = mpsc::sync_channel(1000);
-        let handle = thread::spawn(move || {
+        let _ = thread::spawn(move || {
             let mut reader = FastqReader::<R>::new(reader);
             loop {
                 let mut record_set = RecordSet::default();
@@ -154,7 +154,7 @@ where
         FastqReader::new(reader).filter(writer, fo, retain_failed, failed_writer)?
     } else {
         let (sender, receiver) = mpsc::sync_channel(1000);
-        let handle = thread::spawn(move || {
+        let _ = thread::spawn(move || {
             let mut reader = FastqReader::<R>::new(reader);
             loop {
                 let mut record_set = RecordSet::default();
@@ -311,7 +311,7 @@ pub fn run_filter(filter_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
             let input_path = Path::new(input_path);
             if input_path.is_file() {
                 if ends_with_gz {
-                    let mut reader = MultiGzDecoder::new(BufReader::new(File::open(input_path)?));
+                    let reader = MultiGzDecoder::new(BufReader::new(File::open(input_path)?));
                     filter(
                         reader,
                         *thread as usize,
@@ -321,7 +321,7 @@ pub fn run_filter(filter_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
                         &mut failed_writer,
                     )?
                 } else {
-                    let mut reader = BufReader::new(File::open(input_path)?);
+                    let reader = BufReader::new(File::open(input_path)?);
                     filter(
                         reader,
                         *thread as usize,
@@ -350,6 +350,7 @@ fn trim_receiver(
     receiver: Receiver<RecordSet>,
     seq_info: &SequenceInfo,
     writer: &mut dyn Write,
+    min_len: usize,
     pretty_log: bool,
     log_writer: &mut BufWriter<File>,
 ) -> Result<(), anyhow::Error> {
@@ -359,7 +360,7 @@ fn trim_receiver(
             .par_iter()
             .map(|each_ref_record| {
                 LOCAL_ALIGNER.with_borrow_mut(|local_aligner| {
-                    each_ref_record.trim(seq_info, local_aligner, pretty_log)
+                    each_ref_record.trim(seq_info, local_aligner, min_len, pretty_log)
                 })
             })
             .collect();
@@ -369,7 +370,7 @@ fn trim_receiver(
                     if let Some((sub_seq, sub_qual)) = trimmed_info_opt {
                         write!(
                             writer,
-                            "@{}\n{}\n+{}\n",
+                            "@{}\n{}\n+\n{}\n",
                             unsafe { std::str::from_utf8_unchecked(ref_record.head()) },
                             unsafe { std::str::from_utf8_unchecked(sub_seq) },
                             unsafe { std::str::from_utf8_unchecked(sub_qual) }
@@ -396,7 +397,7 @@ fn trim_receiver(
                     if let Some((sub_seq, sub_qual)) = trimmed_info_opt {
                         write!(
                             writer,
-                            "@{}\n{}\n+{}\n",
+                            "@{}\n{}\n+\n{}\n",
                             unsafe { std::str::from_utf8_unchecked(ref_record.head()) },
                             unsafe { std::str::from_utf8_unchecked(sub_seq) },
                             unsafe { std::str::from_utf8_unchecked(sub_qual) }
@@ -417,6 +418,7 @@ fn trim<R>(
     reader: R,
     writer: &mut dyn Write,
     seq_info: &SequenceInfo,
+    min_len: usize,
     pretty_log: bool,
     log_writer: &mut BufWriter<File>,
 ) -> Result<(), anyhow::Error>
@@ -436,7 +438,7 @@ where
             }
         }
     });
-    trim_receiver(receiver, seq_info, writer, pretty_log, log_writer)?;
+    trim_receiver(receiver, seq_info, writer, min_len, pretty_log, log_writer)?;
     Ok(())
 }
 
@@ -444,6 +446,7 @@ fn trim_fastq_dir(
     path: &Path,
     writer: &mut dyn Write,
     seq_info: &SequenceInfo,
+    min_len: usize,
     pretty_log: bool,
     log_writer: &mut BufWriter<File>,
 ) -> Result<(), anyhow::Error> {
@@ -454,6 +457,7 @@ fn trim_fastq_dir(
                 MultiGzDecoder::new(BufReader::new(File::open(fq)?)),
                 writer,
                 seq_info,
+                min_len,
                 pretty_log,
                 log_writer,
             )?
@@ -462,6 +466,7 @@ fn trim_fastq_dir(
                 BufReader::new(File::open(fq)?),
                 writer,
                 seq_info,
+                min_len,
                 pretty_log,
                 log_writer,
             )?
@@ -471,13 +476,11 @@ fn trim_fastq_dir(
 }
 
 pub fn run_trim(trim_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
-    thread_local! {
-        static LOCAL_ALIGNER: RefCell<LocalAligner> = RefCell::new(LocalAligner::default());
-    }
     let input = trim_cmd.get_one::<String>("input");
     let output = trim_cmd.get_one::<String>("output");
     let primers = trim_cmd.get_one::<String>("primers");
     let kit = trim_cmd.get_one::<String>("kit");
+    let min_len = *trim_cmd.get_one::<u32>("min_len").unwrap() as usize;
     let thread = *trim_cmd.get_one::<u16>("thread").unwrap();
     let match_ = *trim_cmd.get_one::<i32>("match").unwrap();
     let mismatch = *trim_cmd.get_one::<i32>("mismatch").unwrap();
@@ -540,7 +543,7 @@ pub fn run_trim(trim_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
         gap_open,
         gap_extend,
     };
-    let rev_com_used = trim_cmd.get_flag("rev_com_not_used");
+    let rev_com_used = !trim_cmd.get_flag("rev_com_not_used");
     let mut real_primers = String::new();
     let mut fwd_primer_rc = String::new();
     let mut rev_primer_rc = String::new();
@@ -599,18 +602,25 @@ pub fn run_trim(trim_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
         seq_info
     };
     let (row, col) = ref_seq_info.get_dim();
-
     let log = trim_cmd.get_one::<String>("log");
     let pretty_log = if log.is_some() { true } else { false };
     let mut log_writer = match log {
         None => BufWriter::new(File::create("/tmp/NanoFqTrimmed.log")?),
         Some(log_file) => BufWriter::new(File::create(log_file)?),
     };
+    if pretty_log {
+        write!(log_writer, "{}", ref_seq_info.get_info())?
+    }
+    if thread == 1 {
+        LOCAL_ALIGNER.with_borrow_mut(|local_aligner: &mut LocalAligner| {
+            local_aligner.update(row+1, col+1, scores)
+        }) ;
+    }
     rayon::ThreadPoolBuilder::new()
         .num_threads(thread as usize)
-        .start_handler(move |idx| {
+        .start_handler(move |_| {
             LOCAL_ALIGNER.with_borrow_mut(|local_aligner: &mut LocalAligner| {
-                local_aligner.update(row, col, scores)
+                local_aligner.update(row+1, col+1, scores)
             })
         })
         .build_global()?;
@@ -624,6 +634,7 @@ pub fn run_trim(trim_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
             std::io::stdin(),
             &mut writer,
             ref_seq_info,
+            min_len,
             pretty_log,
             &mut log_writer,
         )?,
@@ -632,20 +643,22 @@ pub fn run_trim(trim_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
             let input_path = Path::new(input_path);
             if input_path.is_file() {
                 if ends_with_gz {
-                    let mut reader = MultiGzDecoder::new(BufReader::new(File::open(input_path)?));
+                    let reader = MultiGzDecoder::new(BufReader::new(File::open(input_path)?));
                     trim(
                         reader,
                         &mut writer,
                         ref_seq_info,
+                        min_len,
                         pretty_log,
                         &mut log_writer,
                     )?
                 } else {
-                    let mut reader = BufReader::new(File::open(input_path)?);
+                    let reader = BufReader::new(File::open(input_path)?);
                     trim(
                         reader,
                         &mut writer,
                         ref_seq_info,
+                        min_len,
                         pretty_log,
                         &mut log_writer,
                     )?
@@ -655,6 +668,7 @@ pub fn run_trim(trim_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
                     input_path,
                     &mut writer,
                     ref_seq_info,
+                    min_len,
                     pretty_log,
                     &mut log_writer,
                 )?

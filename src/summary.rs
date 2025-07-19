@@ -195,7 +195,7 @@ pub fn get_summary(
 
     contents.push_str(&top_n_lengths_reads);
     contents.push_str(&format!(
-        "#Top {n} longest reads\nnth\tReadName\tReadLen\tReadQuality\n"
+        "#Top {n} highest quality reads\nnth\tReadName\tReadLen\tReadQuality\n"
     ));
     stats_vec
         .iter()

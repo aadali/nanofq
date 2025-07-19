@@ -415,14 +415,14 @@ impl<'a> SequenceInfo<'a> {
     }
 }
 
-const LSK_END5: EndAlignPara = (100, 0.5, 0.75);
-const LSK_END3: EndAlignPara = (80, 0.5, 0.75);
-const RAD_END5: EndAlignPara = (180, 0.5, 0.75);
-const NBD_END5: EndAlignPara = (150, 0.6, 0.75);
-const NBD_END3: EndAlignPara = (120, 0.6, 0.75);
-const RBK_END5: EndAlignPara = (180, 0.6, 0.75);
+const LSK_END5: EndAlignPara = (100, 0.75, 0.8);
+const LSK_END3: EndAlignPara = (80, 0.6, 0.8);
+const RAD_END5: EndAlignPara = (180, 0.75, 0.8);
+const NBD_END5: EndAlignPara = (150, 0.75, 0.8);
+const NBD_END3: EndAlignPara = (120, 0.6, 0.8);
+const RBK_END5: EndAlignPara = (180, 0.75, 0.8);
 const PCS_END5: EndAlignPara = (150, 0.6, 0.75);
-const PCS_END3: EndAlignPara = (120, 0.4, 0.75);
+const PCS_END3: EndAlignPara = (120, 0.6, 0.75);
 const PCS_REV_COM_END5: EndAlignPara = (150, 0.6, 0.75);
 const PCS_REV_COM_END3: EndAlignPara = (120, 0.4, 0.75);
 const PCB_END5: EndAlignPara = (180, 0.6, 0.75);

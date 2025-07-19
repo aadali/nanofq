@@ -1,4 +1,4 @@
-use crate::alignment::{LocalAligner, LocalAlignment};
+use crate::alignment::{LocalAligner};
 use crate::trim::adapter::SequenceInfo;
 use crate::trim::trim_seq;
 use crate::utils::get_q2p_table;
@@ -47,6 +47,7 @@ pub trait NanoRead {
         &self,
         seq_info: &SequenceInfo,
         aligner: &mut LocalAligner,
+        min_len: usize,
         pretty_log: bool,
     ) -> (Option<(&[u8], &[u8])>, Option<String>);
 }
@@ -134,25 +135,31 @@ impl<'a> NanoRead for RefRecord<'a> {
         &self,
         seq_info: &SequenceInfo,
         aligner: &mut LocalAligner,
+        min_len: usize,
         pretty_log: bool,
     ) -> (Option<(&[u8], &[u8])>, Option<String>) {
         let (trim_from, trim_to, log_string) = trim_seq(
             seq_info,
             self.seq(),
-            self.id().expect("parse into read id error"),
+            &format!(
+                "{}: {}",
+                self.id().expect("parse into read id error"),
+                self.seq().len()
+            ),
             aligner,
             pretty_log,
+            min_len,
         );
         if trim_from == 0 && trim_to == 0 {
+            (None, log_string)
+        } else {
             (
                 Some((
-                    &self.seq()[trim_from..=trim_to],
-                    &self.qual()[trim_from..=trim_to],
+                    &self.seq()[trim_from..trim_to],
+                    &self.qual()[trim_from..trim_to],
                 )),
                 log_string,
             )
-        } else {
-            (None, log_string)
         }
     }
 }
