@@ -612,14 +612,14 @@ pub fn run_trim(trim_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
     }
     if thread == 1 {
         LOCAL_ALIGNER.with_borrow_mut(|local_aligner: &mut LocalAligner| {
-            local_aligner.update(row + 1, col + 1, scores)
+            local_aligner.update((row + 1, col + 1), scores)
         });
     }
     rayon::ThreadPoolBuilder::new()
         .num_threads(thread as usize)
         .start_handler(move |_| {
             LOCAL_ALIGNER.with_borrow_mut(|local_aligner: &mut LocalAligner| {
-                local_aligner.update(row + 1, col + 1, scores)
+                local_aligner.update((row + 1, col + 1), scores)
             })
         })
         .build_global()?;

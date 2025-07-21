@@ -62,6 +62,10 @@ impl<'a> LocalAlignment<'a> {
         let mut ref_idx = self.ref_range.0 - 1;
         let mut read_idx = self.read_range.0 - 1;
         for operation in &self.read_map_ref_operations {
+            // ‘|’ for a match,
+            // ‘\’ (a single backslash) for a mismatch,
+            // ‘+’ for an insertion,
+            // ‘x’ for a deletion
             match operation {
                 &AlignmentOperation::Match => {
                     align_ref_vec.push(self.reference[ref_idx]);
@@ -85,7 +89,7 @@ impl<'a> LocalAlignment<'a> {
                 }
                 &AlignmentOperation::Ins => {
                     align_read_vec.push(self.read_end[read_idx]);
-                    line_vec.push(b'x');
+                    line_vec.push(b'+');
                     align_ref_vec.push(b'-');
                     read_idx += 1;
                 }
@@ -178,19 +182,19 @@ impl<'a> Default for LocalAlignment<'a> {
 
 #[derive(Debug, Clone, Default)]
 pub struct LocalAligner {
-    row: usize,
-    col: usize,
+    dim: (usize, usize), // (row, col)
     scores: Scores,
     score_matrix: Vec<Vec<i32>>,
     align_matrix: Vec<Vec<AlignmentOperation>>,
 }
 
 impl LocalAligner {
-    pub fn new(row: usize, col: usize, scores: Scores) -> Self {
+    pub fn new(dim: (usize, usize), scores: Scores) -> Self {
         debug_assert!(scores.gap_extend < 0, "gap_extend must be negative int");
         debug_assert!(scores.gap_open < 0, "gap_open must be negative int");
         debug_assert!(scores.match_ > 0, "match must be positive int");
         debug_assert!(scores.mismatch < 0, "mismatch must be negative int");
+        let (row, col) = dim;
         let score_matrix_row = vec![0i32; col + 1];
         let score_matrix = vec![score_matrix_row; row + 1];
         let mut align_matrix = vec![vec![AlignmentOperation::Null; col + 1]; row + 1];
@@ -201,26 +205,23 @@ impl LocalAligner {
             align_matrix[j][0] = AlignmentOperation::Del;
         }
         LocalAligner {
-            row,
-            col,
+            dim,
             scores,
             score_matrix,
             align_matrix,
         }
     }
 
-    pub fn update(&mut self, row: usize, col: usize, scores: Scores) {
-        let tmp = Self::new(row, col, scores);
-        self.row = tmp.row;
-        self.col = tmp.col;
+    pub fn update(&mut self, dim: (usize, usize), scores: Scores) {
+        let tmp = Self::new(dim, scores);
         self.scores = tmp.scores;
         self.score_matrix = tmp.score_matrix;
         self.align_matrix = tmp.align_matrix;
     }
 
     pub fn align<'a>(&mut self, reference: &'a [u8], read: &'a [u8]) -> LocalAlignment<'a> {
-        debug_assert!(self.row >= reference.len());
-        debug_assert!(self.col >= read.len());
+        debug_assert!(self.dim.0 >= reference.len());
+        debug_assert!(self.dim.1 >= read.len());
         let mut local_alignment = LocalAlignment::default();
         local_alignment.reference = reference;
         local_alignment.read_end = read;
@@ -347,7 +348,7 @@ pub fn test_alignment() {
         gap_open: -5,
         gap_extend: -1,
     };
-    let mut aligner = LocalAligner::new(80, 200, scores);
+    let mut aligner = LocalAligner::new((80, 200), scores);
     let reference = b"AAGGTTAACACAAAGACACCGACAACTTTCTTCAGCACCT";
     // let read = b"TTTGTTAGTCTACTTCGTTCAGTTACGTATTGCTAAAGGTTAACACAAAGACACCGACAACTTTCTTCAGCACCTGCTTACGGTTCACTACTCACGACGAT";
     let read = b"GTTAACCTACTTCGTTCAGTTACGTATTGCTAAGGTTAACACAAAGACACCGACAACTTCTTCAGCACCTGCTTACGGTTCACTACTCACGAC";
