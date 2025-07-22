@@ -1,6 +1,6 @@
 use crate::alignment::{LocalAligner, Scores};
 use crate::fastq::{EachStats, FastqReader, FilterOption, NanoRead};
-use crate::summary::{write_stats, write_summary};
+use crate::summary::{write_stats, write_summary, make_plot};
 use crate::trim::adapter::{TrimConfig, get_trim_cfg};
 use crate::utils::rev_com;
 use clap::ArgMatches;
@@ -213,8 +213,9 @@ pub fn run_stats(stats_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
     let lengths = stats_cmd.get_one::<Vec<usize>>("length");
     let gc = stats_cmd.get_flag("gc");
     let thread = stats_cmd.get_one::<u16>("thread").unwrap();
-    let _plot = stats_cmd.get_flag("plot");
-    let _format = stats_cmd
+    let plot = stats_cmd.get_one::<String>("plot");
+    let python = stats_cmd.get_one::<String>("python");
+    let format = stats_cmd
         .get_many::<String>("format")
         .unwrap()
         .collect::<Vec<&String>>();
@@ -243,16 +244,31 @@ pub fn run_stats(stats_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
             }
         }
     };
-
+    let tmp_stats_outfile = "/tmp/NanofqStatsTmpResult.tsv";
+    let python = python.map(|x| x.clone());
     match output {
-        None => write_stats(&stats_result, &mut std::io::stdout(), gc)?,
+        None => {
+            write_stats(&stats_result, &mut std::io::stdout(), gc)?;
+            if plot.is_some() {
+                let mut writer = std::fs::File::create(tmp_stats_outfile)?;
+                write_stats(&stats_result, &mut writer, gc)?;
+            }
+        },
         Some(output_file) => write_stats(
             &stats_result,
             &mut std::io::BufWriter::new(File::create(output_file).unwrap()),
             gc,
         )?,
     }
-    write_summary(&mut stats_result, lengths, quality, *topn as usize, summary);
+    let basic_stats = write_summary(&mut stats_result, lengths, quality, *topn as usize, summary);
+    let formats = format.iter().map(|x| (**x).clone()).collect::<Vec<String>>();
+    if plot.is_some() {
+        if output.is_none() {
+            make_plot(&basic_stats, plot.unwrap(), &formats, python, tmp_stats_outfile)?;
+        } else {
+            make_plot(&basic_stats, plot.unwrap(), &formats, python, output.unwrap())?;
+        }
+    }
     Ok(())
 }
 
