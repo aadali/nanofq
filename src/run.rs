@@ -2,7 +2,7 @@ use crate::alignment::{LocalAligner, Scores};
 use crate::fastq::{EachStats, FastqReader, FilterOption, NanoRead};
 use crate::summary::{write_stats, write_summary, make_plot};
 use crate::trim::adapter::{TrimConfig, get_trim_cfg};
-use crate::utils::rev_com;
+use crate::utils::{rev_com, remove_tmp_files};
 use clap::ArgMatches;
 use flate2::bufread::MultiGzDecoder;
 use rayon::prelude::*;
@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::mpsc::Receiver;
 use std::thread;
+use uuid;
 
 thread_local! {
     static LOCAL_ALIGNER: RefCell<LocalAligner>= RefCell::new(LocalAligner::default());
@@ -214,7 +215,8 @@ pub fn run_stats(stats_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
     let gc = stats_cmd.get_flag("gc");
     let thread = stats_cmd.get_one::<u16>("thread").unwrap();
     let plot = stats_cmd.get_one::<String>("plot");
-    let python = stats_cmd.get_one::<String>("python");
+    let python = stats_cmd.get_one::<String>("python").unwrap();
+    let quantile = stats_cmd.get_one::<f64>("quantile").unwrap();
     let format = stats_cmd
         .get_many::<String>("format")
         .unwrap()
@@ -244,13 +246,14 @@ pub fn run_stats(stats_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
             }
         }
     };
-    let tmp_stats_outfile = "/tmp/NanofqStatsTmpResult.tsv";
-    let python = python.map(|x| x.clone());
+
+    remove_tmp_files("/tmp/NanofqStatsTmpResult_*.tsv");
+    let tmp_stats_outfile = format!("/tmp/NanofqStatsTmpResult_{}.tsv", uuid::Uuid::new_v4());
     match output {
         None => {
             write_stats(&stats_result, &mut std::io::stdout(), gc)?;
             if plot.is_some() {
-                let mut writer = std::fs::File::create(tmp_stats_outfile)?;
+                let mut writer = std::fs::File::create(&tmp_stats_outfile)?;
                 write_stats(&stats_result, &mut writer, gc)?;
             }
         },
@@ -264,9 +267,9 @@ pub fn run_stats(stats_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
     let formats = format.iter().map(|x| (**x).clone()).collect::<Vec<String>>();
     if plot.is_some() {
         if output.is_none() {
-            make_plot(&basic_stats, plot.unwrap(), &formats, python, tmp_stats_outfile)?;
+            make_plot(&basic_stats, *quantile, plot.unwrap(), &formats, python, &tmp_stats_outfile)?;
         } else {
-            make_plot(&basic_stats, plot.unwrap(), &formats, python, output.unwrap())?;
+            make_plot(&basic_stats, *quantile, plot.unwrap(), &formats, python, output.unwrap())?;
         }
     }
     Ok(())

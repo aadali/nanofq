@@ -1,9 +1,12 @@
 use super::fastq::EachStats;
+use ansi_term;
 use rayon::prelude::*;
 use std::cmp::max_by_key;
 use std::collections::HashMap;
 use std::io::Write;
 use std::iter::Sum;
+use uuid;
+use crate::utils::remove_tmp_files;
 
 #[derive(Default, Debug)]
 pub struct BasicStatistics {
@@ -82,7 +85,7 @@ fn get_read_qual_mode(stats_vec: &Vec<EachStats>) -> f64 {
     let mut counter = HashMap::new();
     let epsilon = 0.01;
     for each_stats in stats_vec {
-        let key = (each_stats.2.1/ epsilon).round() as usize;
+        let key = (each_stats.2.1 / epsilon).round() as usize;
         counter
             .entry(key)
             .and_modify(|count| *count += 1)
@@ -269,7 +272,7 @@ pub fn write_summary(
     read_qvalues: &Vec<f64>,
     n: usize,
     output: &String,
-) -> BasicStatistics{
+) -> BasicStatistics {
     let (summary_info, basic_stats) = get_summary(stats_vec, read_lengths, read_qvalues, n);
     std::fs::write(output, &summary_info).expect(&format!(
         "write summary info into {output}. The info is:\n{summary_info}"
@@ -307,21 +310,27 @@ pub fn write_stats<W: Write>(
 
 pub fn make_plot(
     basic_statistics: &BasicStatistics,
+    quan: f64,
     prefix: &str,
     format: &Vec<String>,
-    python: Option<String>,
+    python: &String,
     stats_file: &str,
 ) -> Result<(), anyhow::Error> {
-    let script = "/tmp/NanofqStatsPlot.py";
-    let default_python = "python".to_string();
-    std::fs::write(script, PYTHON_PLOT_SCRIPT)?;
+    // remove previous tmp scripts
+    remove_tmp_files("/tmp/NanofqStatsPlot_*.py");
     let formats = format.join(",");
-    let cmd_result = std::process::Command::new(python.unwrap_or(default_python))
+    let script = &format!("/tmp/NanofqStatsPlot_{}.py", uuid::Uuid::new_v4());
+    let cmd = format!(
+        "PYTHON3 {} --input {} --quan {:.2} --n50 {} --len_bins 100 --qual_bins 100 --mode_qual {:.2} --prefix {} --format {}",
+        script, stats_file, quan, basic_statistics.n50, basic_statistics.mode_qual, prefix, formats
+    );
+    std::fs::write(script, PYTHON_PLOT_SCRIPT)?;
+    let cmd_result = std::process::Command::new(python)
         .arg(script)
         .arg("--input")
         .arg(stats_file)
         .arg("--quan")
-        .arg("0.01")
+        .arg(format!("{:2}", quan))
         .arg("--n50")
         .arg(format!("{}", basic_statistics.n50))
         .arg("--len_bins")
@@ -342,6 +351,11 @@ pub fn make_plot(
             } else {
                 println!("status: {}", output.status);
                 eprintln!("std_err: {}", std::str::from_utf8(&output.stderr)?);
+                eprintln!(
+                    "{}\n{}\nReplace PYTHON3 with your own python3 path; Matplotlib is needed",
+                    ansi_term::Color::Yellow.paint("Stats finished but make plot failed. You can use this command to make plot:"),
+                    ansi_term::Color::Green.paint(cmd)
+                );
                 std::process::exit(1);
             }
         }
@@ -366,7 +380,7 @@ def get_arguments():
     parser.add_argument("--input", help="the tsv file, col2 is length of read and col3 is quality of read",
                         required=True)
     parser.add_argument("--quan", type=float,
-                        help="the shortest and longest percent of reads will not be rendered on figure, should be in range(0.0, 1.0)",
+                        help="the shortest ratio and longest ratio of reads will not be rendered on figure, should be in range(0.0, 1.0)",
                         default=0.01)
     parser.add_argument("--n50", type=int, help="n50 of all reads", required=True)
     parser.add_argument("--mode_qual", type=float, help="the mode quality of reads", required=True)
@@ -427,7 +441,7 @@ def plot(lens_quals: list[tuple],
          len_bins: int,
          qual_bins: int,
          prefix: str,
-         formats: list[str] ):
+         formats: list[str]):
     fig, axes = plt.subplots(2, 2, figsize=(20, 12),
                              # layout="constrained",
                              sharex="col")

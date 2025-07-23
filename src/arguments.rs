@@ -108,7 +108,7 @@ pub fn parse_arguments() -> ArgMatches {
         .short('i')
         .long("input")
         .action(ArgAction::Set)
-        .value_parser(|input:&str| {
+        .value_parser(|input: &str| {
             input_value_parser(&input);
             Result::<String, anyhow::Error>::Ok(input.to_string())
         })
@@ -128,88 +128,96 @@ pub fn parse_arguments() -> ArgMatches {
         .help("How many threads will be used");
 
     let stats_cmd = Command::new("stats")
-                .about("stats nanopore fastq, output the stats result, summary and figures")
-                .arg( &input_arg )
-                .arg(output_arg.clone().help("Output the stats result into this, a tsv file or stdout. it will be truncated if it's a existing file. [default: stdout]"))
-                .arg(Arg::new("summary")
-                        .short('s')
-                        .long("summary")
-                        .action(ArgAction::Set)
-                        .default_value("./NanofqStatsSummary.txt")
-                        .help("Output stats summary into this file, it will be truncated if it exists"))
-                .arg(Arg::new("topn")
-                        .short('n')
-                        .long("topn")
-                        .action(ArgAction::Set)
-                        .default_value("5")
-                        .value_parser(value_parser!(u16))
-                        .help("Write the top N longest reads and highest quality reads info into summary file"))
-                .arg(Arg::new("quality")
-                        .short('q')
-                        .long("quality")
-                        .value_parser(|x: &str| {
-                            let mut qualities = x.split(",")
-                                .into_iter()
-                                .map(|each| {
-                                    match each.parse::<f64>() {
-                                        Ok(qual) => qual,
-                                        Err(_) => {
-                                            eprintln!("{}", Color::Red.paint("Error: parse f64 from each quality, check --quality"));
-                                            std::process::exit(1);
-                                        }
-                                    }
-                                })
-                                .collect::<Vec<f64>>();
-                            // decrease quality
-                            qualities.sort_by(|a, b| b.partial_cmp(a).unwrap());
-                            Result::<Vec<f64>, anyhow::Error>::Ok(qualities)
-                        })
-                        .default_value("25,20,18,15,12,10")
-                        .help("Count the reads number that whose quality is bigger than this value, multi value can be separated by comma"))
-                .arg(Arg::new("length")
-                        .short('l')
-                        .long("length")
-                        .value_parser(|x: &str| {
-                            let mut lengths = x.split(",")
-                                .into_iter()
-                                .map(|each| {
-                                    match each.parse::<usize>() {
-                                        Ok(len) => len,
-                                        Err(err) => {
-                                            eprintln!("{:?}", err);
-                                            eprintln!("{}", Color::Red.paint("Error: parse usize from each length, check --length"));
-                                            std::process::exit(1)
-                                        }
-                                    }
-                                })
-                                .collect::<Vec<usize>>();
-                            lengths.sort_by(|a,b| b.partial_cmp(a).unwrap());
-                            Result::<Vec<usize>, anyhow::Error>::Ok(lengths)
-                        })
-                        .help("Count the reads number that whose length is bigger than this value if you set this parameter, multi values can be separated by comma"))
-                .arg(Arg::new("gc")
-                        // .short('g')
-                        .long("gc")
-                        .action(ArgAction::SetTrue)
-                        .help("Whether to stats the gc content"))
-                .arg(thread_arg.clone())
-                .arg(
-                    Arg::new("python")
-                        .long("python")
-                        .action(ArgAction::Set)
-                        .help("the python3 path, and matplotlib is needed")
-                )
-                .arg(Arg::new("plot")
-                        .short('p')
-                        .long("plot")
-                        .help("Whether to make plot, if it's set, it should be the prefix of figure path without filename extension"))
-                .arg(Arg::new("format")
-                        .short('f')
-                        .long("format")
-                        .action(ArgAction::Append)
-                        .value_parser(["png", "pdf", "jpg", "svg"])
-                        .default_value("pdf")
-                        .help("Which format figure do you want if --plot is true, this para can be set multi times"));
+        .about("stats nanopore fastq, output the stats result, summary and figures")
+        .arg(&input_arg)
+        .arg(output_arg.clone().help("Output the stats result into this, a tsv file or stdout. it will be truncated if it's a existing file. [default: stdout]"))
+        .arg(Arg::new("summary")
+            .short('s')
+            .long("summary")
+            .action(ArgAction::Set)
+            .default_value("./NanofqStatsSummary.txt")
+            .help("Output stats summary into this file, it will be truncated if it exists"))
+        .arg(Arg::new("topn")
+            .short('n')
+            .long("topn")
+            .action(ArgAction::Set)
+            .default_value("5")
+            .value_parser(value_parser!(u16))
+            .help("Write the top N longest reads and highest quality reads info into summary file"))
+        .arg(Arg::new("quality")
+            .short('q')
+            .long("quality")
+            .value_parser(|x: &str| {
+                let mut qualities = x.split(",")
+                    .into_iter()
+                    .map(|each| {
+                        match each.parse::<f64>() {
+                            Ok(qual) => qual,
+                            Err(_) => {
+                                eprintln!("{}", Color::Red.paint("Error: parse f64 from each quality, check --quality"));
+                                std::process::exit(1);
+                            }
+                        }
+                    })
+                    .collect::<Vec<f64>>();
+                // decrease quality
+                qualities.sort_by(|a, b| b.partial_cmp(a).unwrap());
+                Result::<Vec<f64>, anyhow::Error>::Ok(qualities)
+            })
+            .default_value("25,20,18,15,12,10")
+            .help("Count the reads number that whose quality is bigger than this value, multi value can be separated by comma"))
+        .arg(Arg::new("length")
+            .short('l')
+            .long("length")
+            .value_parser(|x: &str| {
+                let mut lengths = x.split(",")
+                    .into_iter()
+                    .map(|each| {
+                        match each.parse::<usize>() {
+                            Ok(len) => len,
+                            Err(err) => {
+                                eprintln!("{:?}", err);
+                                eprintln!("{}", Color::Red.paint("Error: parse usize from each length, check --length"));
+                                std::process::exit(1)
+                            }
+                        }
+                    })
+                    .collect::<Vec<usize>>();
+                lengths.sort_by(|a, b| b.partial_cmp(a).unwrap());
+                Result::<Vec<usize>, anyhow::Error>::Ok(lengths)
+            })
+            .help("Count the reads number that whose length is bigger than this value if you set this parameter, multi values can be separated by comma"))
+        .arg(Arg::new("gc")
+            // .short('g')
+            .long("gc")
+            .action(ArgAction::SetTrue)
+            .help("Whether to stats the gc content"))
+        .arg(thread_arg.clone())
+        .arg(
+            Arg::new("python")
+                .long("python")
+                .default_value("python3")
+                .action(ArgAction::Set)
+                .help("the python3 path, and matplotlib is needed")
+        )
+        .arg(Arg::new("plot")
+            .short('p')
+            .long("plot")
+            .help("Whether to make plot, if it's set, it should be the prefix of figure path without filename extension"))
+        .arg(Arg::new("format")
+            .short('f')
+            .long("format")
+            .action(ArgAction::Append)
+            .value_parser(["png", "pdf", "jpg", "svg"])
+            .default_value("pdf")
+            .help("Which format figure do you want if --plot is true, this para can be set multi times"))
+        .arg(
+            Arg::new("quantile")
+                .long("quantile")
+                .default_value("0.01")
+                .value_parser(|x: &str| positive_number_parse(x, "--quantile", true, 0.0f64, 0.5f64))
+                .help("the shortest ratio and longest ratio of reads will not be rendered on figure, should be in range(0.0, 1.0)")
+        );
     let filter_cmd = Command::new("filter")
         .about("filter nanopore fastq by length, quality or gc content")
         .arg(&input_arg)
@@ -290,8 +298,8 @@ pub fn parse_arguments() -> ArgMatches {
         .about("trim adapter, barcode, primer that artificial sequence in nanopore fastq")
         .arg(&input_arg)
         .arg(output_arg
-            .clone()
-            .help("Output the trimmed fastq into this file or stdout, it will be truncated if it's a existing file. [default: stdout]"),
+                 .clone()
+                 .help("Output the trimmed fastq into this file or stdout, it will be truncated if it's a existing file. [default: stdout]"),
         )
         .arg(
             Arg::new("log")
@@ -309,7 +317,7 @@ you can choice one from [LSK, RAD, ULK, RBK, PCS, PCB, NBD_1, NBD_2, ..., NBD_95
                 .value_parser(|x: &str| {
                     get_trim_cfg().contains_key(x);
                     if get_trim_cfg().contains_key(x) {
-                        return Result::<String, anyhow::Error>::Ok(x.to_string())
+                        return Result::<String, anyhow::Error>::Ok(x.to_string());
                     } else {
                         eprintln!("Error: invalid \'{}\' for \'--kit <kit>\'", x);
                         eprintln!("[possible values: LSK, RAD, ULK, RBK, PCS, PCB, NBD_1, NBD_2, ..., NBD_95, NBD_96]");
@@ -324,13 +332,13 @@ you can choice one from [LSK, RAD, ULK, RBK, PCS, PCB, NBD_1, NBD_2, ..., NBD_95
                 .value_parser(|x: &str| {
                     let bases = [b'A', b'T', b'C', b'G', b'R', b'Y', b'M', b'K', b'S', b'W', b'H', b'B', b'V', b'D', b','];
                     x.as_bytes().iter().for_each(|base| {
-                       if !bases.contains(base) {
-                           eprintln!("Error: Invalid base char found in primers");
-                           std::process::exit(1);
-                       }
+                        if !bases.contains(base) {
+                            eprintln!("Error: Invalid base char found in primers");
+                            std::process::exit(1);
+                        }
                     });
                     let comma_numbers = x.as_bytes().iter().filter(|base| *base == &b',').count();
-                    if comma_numbers != 1 || x.as_bytes().last().unwrap() == &b','{
+                    if comma_numbers != 1 || x.as_bytes().last().unwrap() == &b',' {
                         eprintln!("One and only one comma must be used to separate paired primers");
                         std::process::exit(1);
                     }
@@ -345,7 +353,7 @@ you can choice one from [LSK, RAD, ULK, RBK, PCS, PCB, NBD_1, NBD_2, ..., NBD_95
                 .required(true)
                 .multiple(false)
         )
-        .arg( thread_arg.clone() )
+        .arg(thread_arg.clone())
         .arg(
             Arg::new("min_len")
                 .short('L')
@@ -405,14 +413,14 @@ you can choice one from [LSK, RAD, ULK, RBK, PCS, PCB, NBD_1, NBD_2, ..., NBD_95
                 .long("end5_align_pct")
                 .help("[search parameter]: the ratio between align length of front adapter and the full length of adapter should be bigger than this value for 5' end")
                 .default_value("0.8")
-                .value_parser(|x: &str|positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
+                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
         )
         .arg(
             Arg::new("end5_align_ident")
                 .long("end5_align_ident")
                 .default_value("0.8")
                 .help("[search parameter]: the ratio between the identity bases number of align and the align length of adapter should be bigger than this value for 5'end")
-                .value_parser(|x: &str|positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
+                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
         )
         .arg(
             Arg::new("end3_len")
@@ -426,14 +434,14 @@ you can choice one from [LSK, RAD, ULK, RBK, PCS, PCB, NBD_1, NBD_2, ..., NBD_95
                 .long("end3_align_pct")
                 .help("[search parameter]: the ratio between align length of rear adapter and the full length of adapter should be bigger than this value for 3' end")
                 .default_value("0.8")
-                .value_parser(|x: &str|positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
+                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
         )
         .arg(
             Arg::new("end3_align_ident")
                 .long("end3_align_ident")
                 .default_value("0.8")
                 .help("[search parameter]: the ratio between the identity bases number of align and the align length of adapter should be bigger than this value for 3'end")
-                .value_parser(|x: &str|positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
+                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
         )
         .arg(
             Arg::new("end5_len_rc")
@@ -447,14 +455,14 @@ you can choice one from [LSK, RAD, ULK, RBK, PCS, PCB, NBD_1, NBD_2, ..., NBD_95
                 .long("end5_align_pct_rc")
                 .help("[search parameter]: the ratio between align length of front adapter and the full length of adapter should be bigger than this value for 5' end if this read is reverse complementary")
                 .default_value("0.8")
-                .value_parser(|x: &str|positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
+                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
         )
         .arg(
             Arg::new("end5_align_ident_rc")
                 .long("end5_align_ident_rc")
                 .default_value("0.8")
                 .help("[search parameter]: the ratio between the identity bases number of align and the align length of adapter should be bigger than this value for 5'end if this read is reverse complementary")
-                .value_parser(|x: &str|positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
+                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
         )
         .arg(
             Arg::new("end3_len_rc")
@@ -468,14 +476,14 @@ you can choice one from [LSK, RAD, ULK, RBK, PCS, PCB, NBD_1, NBD_2, ..., NBD_95
                 .long("end3_align_pct_rc")
                 .help("[search parameter]: the ratio between align length of rear adapter and the full length of adapter should be bigger than this value for 3' end if this read is reverse complementary")
                 .default_value("0.8")
-                .value_parser(|x: &str|positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
+                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
         )
         .arg(
             Arg::new("end3_align_ident_rc")
                 .long("end3_align_ident_rc")
                 .default_value("0.8")
                 .help("[search parameter]: the ratio between the identity bases number of align and the align length of adapter should be bigger than this value for 3'end if this read is reverse complementary")
-                .value_parser(|x: &str|positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
+                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
         )
 
         ;
