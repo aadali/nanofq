@@ -2,7 +2,7 @@ use crate::alignment::{LocalAligner, Scores};
 use crate::fastq::{EachStats, FastqReader, FilterOption, NanoRead};
 use crate::summary::{write_stats, write_summary, make_plot};
 use crate::trim::adapter::{TrimConfig, get_trim_cfg};
-use crate::utils::{rev_com, remove_tmp_files};
+use crate::utils::{rev_com};
 use clap::ArgMatches;
 use flate2::bufread::MultiGzDecoder;
 use rayon::prelude::*;
@@ -247,7 +247,6 @@ pub fn run_stats(stats_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
         }
     };
 
-    remove_tmp_files("/tmp/NanofqStatsTmpResult_*.tsv");
     let tmp_stats_outfile = format!("/tmp/NanofqStatsTmpResult_{}.tsv", uuid::Uuid::new_v4());
     match output {
         None => {

@@ -68,7 +68,7 @@ pub fn rev_com(seq: &str) -> String {
         .rev()
         .collect::<String>()
 }
-// ref_base from primer or reference can be dege base
+// ref_base from primer or reference can be degenerate base
 pub static IS_MATCHED: fn(&u8, &u8) -> bool = |ref_base, read_base| {
     ref_base == read_base
         || get_dege_bases()

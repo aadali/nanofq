@@ -481,7 +481,7 @@ const ULK: TrimConfig = TrimConfig {
 SQK-NBD114-24; SQK-NBD114-96
 NBD114-24/96 library reads structure
 Example for Native Barcode01
-         |NA_ADAPTER_5                |L_F_5   |Barcode01 rev com       |R_F_5   |insert Seq         |L_F_3   |Barcode01               |R_F_3         |NA_ADAPTER_3
+          |NA_ADAPTER_5                |L_F_5   |Barcode01 rev com       |R_F_5   |insert Seq         |L_F_3   |Barcode01               |R_F_3         |NA_ADAPTER_3
 5-TTTTTTTTCCTGTACTTCGTTCAGTTACGTATTGCT AAGGTTAA CACAAAGACACCGACAACTTTCTT CAGCACCT ................... AGGTGCTG AAGAAAGTTGTCGGTGTCTTTGTG TTAACCTTAGCAAT ACGTAACTGAACGAAGTACAGG-3
 we use barcode_left_flanking + barcode + barcode_right_flanking as query to trim nbd reads
 */

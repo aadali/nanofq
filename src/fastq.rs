@@ -10,7 +10,10 @@ use std::io::{BufWriter, Read, Write};
 use std::ops::{Deref, DerefMut};
 
 const BUFF: usize = 1024 * 1024;
-pub type EachStats = (Box<String>, usize, (f64, f64), Option<f64>); // (f64, f64): (this_read_average_error_pro, this_read_quality)
+
+// (f64, f64): (this_read_average_error_pro, this_read_quality)
+// (ReadID, Length, (ReadAverageErrProb, ReadQuality), Option<GCContent>)
+pub type EachStats = (Box<String>, usize, (f64, f64), Option<f64>);
 
 #[derive(Clone)]
 pub(crate) struct FilterOption<'a> {
@@ -42,7 +45,7 @@ pub trait NanoRead {
     fn is_passed(&self, fo: &FilterOption) -> bool;
 
     fn write(&self, writer: &mut dyn Write) -> Result<(), anyhow::Error>;
-
+    
     fn trim(
         &self,
         trim_cfg: &TrimConfig,

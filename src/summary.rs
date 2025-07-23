@@ -62,13 +62,8 @@ fn get_quality_than_n(stats_vec: &Vec<EachStats>, n: f64) -> (usize, usize) {
     (current_total_length, current_reads_number)
 }
 
+#[derive(Default)]
 struct LengthQuality((usize, f64));
-
-impl Default for LengthQuality {
-    fn default() -> Self {
-        LengthQuality((0usize, 0.0f64))
-    }
-}
 
 impl Sum for LengthQuality {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
@@ -209,7 +204,7 @@ pub fn get_summary(
         read_qual_quantile25
     ));
     contents.push_str(&format!(
-        "ReadQualityQuantile50\t{:.2}\n",
+        "ReadQualityMedian\t{:.2}\n",
         read_qual_quantile50
     ));
     contents.push_str(&format!(
@@ -316,9 +311,8 @@ pub fn make_plot(
     python: &String,
     stats_file: &str,
 ) -> Result<(), anyhow::Error> {
-    // remove previous tmp scripts
-    remove_tmp_files("/tmp/NanofqStatsPlot_*.py");
     let formats = format.join(",");
+    // use uuid to uniq each script of process if this subcommand called by different process at same time
     let script = &format!("/tmp/NanofqStatsPlot_{}.py", uuid::Uuid::new_v4());
     let cmd = format!(
         "PYTHON3 {} --input {} --quan {:.2} --n50 {} --len_bins 100 --qual_bins 100 --mode_qual {:.2} --prefix {} --format {}",
@@ -346,21 +340,20 @@ pub fn make_plot(
         .output();
     match cmd_result {
         Ok(output) => {
-            if output.status.success() {
-                println!("finished")
-            } else {
+            if !output.status.success() {
                 println!("status: {}", output.status);
                 eprintln!("std_err: {}", std::str::from_utf8(&output.stderr)?);
                 eprintln!(
-                    "{}\n{}\nReplace PYTHON3 with your own python3 path; Matplotlib is needed",
+                    "{}\n{}\n{}",
                     ansi_term::Color::Yellow.paint("Stats finished but make plot failed. You can use this command to make plot:"),
-                    ansi_term::Color::Green.paint(cmd)
+                    ansi_term::Color::Green.paint(cmd),
+                    ansi_term::Color::Yellow.paint("Replace PYTHON3 with your own python3 path; Matplotlib is needed")
                 );
                 std::process::exit(1);
             }
         }
         Err(e) => {
-            eprintln!("{:?}", e);
+            eprintln!("{}", ansi_term::Color::Red.paint(format!("{:?}" ,e)));
             std::process::exit(1);
         }
     }
