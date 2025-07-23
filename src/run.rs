@@ -377,7 +377,7 @@ fn trim_receiver(
             .par_iter()
             .map(|each_ref_record| {
                 LOCAL_ALIGNER.with_borrow_mut(|local_aligner| {
-                    each_ref_record.trim(trim_cfg, local_aligner, min_len, pretty_log)
+                    each_ref_record.trim(trim_cfg, local_aligner, min_len, pretty_log, true)
                 })
             })
             .collect();

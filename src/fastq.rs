@@ -1,4 +1,4 @@
-use crate::alignment::{LocalAligner};
+use crate::alignment::LocalAligner;
 use crate::trim::adapter::TrimConfig;
 use crate::trim::trim_seq;
 use crate::utils::get_q2p_table;
@@ -45,13 +45,14 @@ pub trait NanoRead {
     fn is_passed(&self, fo: &FilterOption) -> bool;
 
     fn write(&self, writer: &mut dyn Write) -> Result<(), anyhow::Error>;
-    
+
     fn trim(
         &self,
         trim_cfg: &TrimConfig,
         aligner: &mut LocalAligner,
         min_len: usize,
         pretty_log: bool,
+        trim_primer: bool,
     ) -> (Option<(&[u8], &[u8])>, Option<String>);
 }
 
@@ -82,8 +83,12 @@ impl<'a> NanoRead for RefRecord<'a> {
             .map(|x| get_q2p_table()[*x as usize])
             .sum::<f64>()
             / seq_len;
-        let quality = avg_err_prob.log10() * -10.0;
-        (avg_err_prob, quality)
+        if avg_err_prob.is_finite() {
+            let quality = avg_err_prob.log10() * -10.0;
+            (avg_err_prob, quality)
+        } else {
+            (0.0, 0.0)
+        }
     }
 
     #[inline]
@@ -140,6 +145,7 @@ impl<'a> NanoRead for RefRecord<'a> {
         aligner: &mut LocalAligner,
         min_len: usize,
         pretty_log: bool,
+        trim_primer: bool,
     ) -> (Option<(&[u8], &[u8])>, Option<String>) {
         let (trim_from, trim_to, log_string) = trim_seq(
             trim_cfg,
@@ -152,6 +158,7 @@ impl<'a> NanoRead for RefRecord<'a> {
             aligner,
             pretty_log,
             min_len,
+            trim_primer,
         );
         if trim_from == 0 && trim_to == 0 {
             (None, log_string)

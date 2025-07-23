@@ -68,6 +68,7 @@ pub fn trim_seq(
     aligner: &mut LocalAligner,
     log: bool,
     min_len: usize,
+    trim_primer: bool,
 ) -> (usize, usize, Option<String>) {
     let read_seq = seq;
     let mut fwd_trim_from = 0;
@@ -90,7 +91,7 @@ pub fn trim_seq(
             trim_end(&trim_cfg.end5, read_seq, aligner, ReadEnd::End5)
         {
             end5_alignment = end5_align;
-            fwd_trim_from = end5_alignment.read_range.1;
+            fwd_trim_from = if trim_primer {end5_alignment.read_range.1} else {end5_alignment.read_range.0};
             trim_end5_success = true;
             fwd_ident_score += end5_ident;
         }
@@ -102,7 +103,11 @@ pub fn trim_seq(
         {
             end3_used_len = end3_len;
             end3_alignment = end3_align;
-            fwd_trim_to = read_seq.len() - end3_used_len + end3_alignment.read_range.0 - 1;
+            fwd_trim_to = if trim_primer {
+                read_seq.len() - end3_used_len + end3_alignment.read_range.0 - 1
+            } else {
+                read_seq.len() - end3_used_len + end3_alignment.read_range.1 - 1
+            };
             trim_end3_success = true;
             fwd_ident_score += end3_ident;
         }
@@ -156,9 +161,9 @@ pub fn trim_seq(
             // Step6. if just one end of forward passed, then consider the both ends of rev_com and do Step7
             let mut rev_ident_score = 0;
             let mut rev_trim_from = 0;
+            let mut rev_trim_to = read_seq.len();
             let mut trim_rev_com_end5_success = false;
             let mut trim_rev_com_end3_success = false;
-            let mut rev_trim_to = read_seq.len();
             let mut rev_com_end5_alignment = LocalAlignment::default();
             let mut rev_com_end3_alignment = LocalAlignment::default();
             // Step7. check end5 of rev_com
@@ -166,7 +171,7 @@ pub fn trim_seq(
                 trim_end(&trim_cfg.rev_com_end5, read_seq, aligner, ReadEnd::End5)
             {
                 rev_com_end5_alignment = rev_com_end5_align;
-                rev_trim_from = rev_com_end5_alignment.read_range.1;
+                rev_trim_from = if trim_primer {rev_com_end5_alignment.read_range.1} else {rev_com_end5_alignment.read_range.0};
                 rev_ident_score += rev_com_end5_ident;
                 trim_rev_com_end5_success = true;
             }
@@ -176,8 +181,11 @@ pub fn trim_seq(
             {
                 end3_used_len = rev_com_end3_len;
                 rev_com_end3_alignment = rev_com_end3_align;
-                rev_trim_to =
-                    read_seq.len() - end3_used_len + rev_com_end3_alignment.read_range.0 - 1;
+                rev_trim_to = if trim_primer {
+                    read_seq.len() - end3_used_len + rev_com_end3_alignment.read_range.0 - 1
+                } else {
+                    read_seq.len() - end3_used_len + rev_com_end3_alignment.read_range.1 - 1
+                };
                 rev_ident_score += rev_com_end3_ident;
                 trim_rev_com_end3_success = true;
             }

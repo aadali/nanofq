@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::iter::Sum;
 use uuid;
-use crate::utils::remove_tmp_files;
 
 #[derive(Default, Debug)]
 pub struct BasicStatistics {
@@ -189,7 +188,8 @@ pub fn get_summary(
     }
 
     // stats_vec decreased by read quality
-    stats_vec.par_sort_by(|first, second| second.2.1.partial_cmp(&first.2.1).unwrap());
+    stats_vec
+        .par_sort_by(|first, second| second.2.1.partial_cmp(&first.2.1).expect("NAN was found"));
     let max_read_qual = stats_vec[0].2.1;
     let min_read_qual = stats_vec.iter().last().unwrap().2.1;
     let read_qual_quantile25 = *&stats_vec[(total_reads as f64 * 0.75) as usize].2.1;
@@ -203,10 +203,7 @@ pub fn get_summary(
         "ReadQualityQuantile25\t{:.2}\n",
         read_qual_quantile25
     ));
-    contents.push_str(&format!(
-        "ReadQualityMedian\t{:.2}\n",
-        read_qual_quantile50
-    ));
+    contents.push_str(&format!("ReadQualityMedian\t{:.2}\n", read_qual_quantile50));
     contents.push_str(&format!(
         "ReadQualityQuantile75\t{:.2}\n",
         read_qual_quantile75
@@ -245,20 +242,23 @@ pub fn get_summary(
                 idx_each_stats.1.2.1
             ))
         });
-    let mut basic_stats = BasicStatistics::default();
-    basic_stats.reads_number = total_reads;
-    basic_stats.bases_number = total_bases;
-    basic_stats.median_qual = read_qual_quantile50;
-    basic_stats.mode_qual = get_read_qual_mode(stats_vec);
-    basic_stats.max_qual = max_read_qual;
-    basic_stats.min_qual = min_read_qual;
-    basic_stats.mean_qual = mean_read_qual;
-    basic_stats.n50 = n50;
-    basic_stats.min_len = min_read_len;
-    basic_stats.max_len = max_read_len;
-    basic_stats.mean_len = mean_read_length;
-    basic_stats.std_len = len_std;
-    (contents, basic_stats)
+    (
+        contents,
+        BasicStatistics {
+            reads_number: total_reads,
+            bases_number: total_bases,
+            median_qual: read_qual_quantile50,
+            mode_qual: get_read_qual_mode(stats_vec),
+            max_qual: max_read_qual,
+            min_qual: min_read_qual,
+            mean_qual: mean_read_qual,
+            n50: n50,
+            min_len: min_read_len,
+            max_len: max_read_len,
+            mean_len: mean_read_length,
+            std_len: len_std,
+        },
+    )
 }
 
 pub fn write_summary(
@@ -353,7 +353,7 @@ pub fn make_plot(
             }
         }
         Err(e) => {
-            eprintln!("{}", ansi_term::Color::Red.paint(format!("{:?}" ,e)));
+            eprintln!("{}", ansi_term::Color::Red.paint(format!("{:?}", e)));
             std::process::exit(1);
         }
     }
