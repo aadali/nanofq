@@ -56,9 +56,9 @@ impl<'a> LocalAlignment<'a> {
     }
 
     pub fn pretty(&self, end: ReadEnd) -> String {
-        let mut align_ref_vec = Vec::<u8>::new();
-        let mut line_vec = Vec::<u8>::new();
-        let mut align_read_vec = Vec::<u8>::new();
+        let mut align_ref_vec = Vec::<u8>::with_capacity(self.read_map_ref_operations.len());
+        let mut line_vec = Vec::<u8>::with_capacity(self.read_map_ref_operations.len());
+        let mut align_read_vec = Vec::<u8>::with_capacity(self.read_map_ref_operations.len());
         let mut ref_idx = self.ref_range.0 - 1;
         let mut read_idx = self.read_range.0 - 1;
         for operation in &self.read_map_ref_operations {
