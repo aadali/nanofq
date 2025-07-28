@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
-use glob::glob;
 
 static DEGE_BASES: OnceLock<HashMap<u8, HashSet<u8>>> = OnceLock::new();
 static BASES: OnceLock<HashMap<u8, u8>> = OnceLock::new();
@@ -79,21 +78,6 @@ pub static IS_MATCHED: fn(&u8, &u8) -> bool = |ref_base, read_base| {
 pub const SEP_LINE: &str =
     "----------------------------------------------------------------------\n";
 
-pub fn remove_tmp_files(tmp:&str) {
-    match glob(tmp) {
-        Ok(scripts) => {
-            for entry in scripts {
-                match entry {
-                    Ok(path) => {
-                        let _ = std::fs::remove_file(path);
-                    }
-                    Err(_) => {}
-                }
-            }
-        }
-        Err(_) => {}
-    }
-}
 #[test]
 fn test_dege_base() {
     assert!(IS_MATCHED(&b'V', &b'A'));

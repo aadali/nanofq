@@ -1,6 +1,6 @@
 #![allow(unused_assignments)]
 // #![allow(unused_mut)]
-// #![allow(dead_code)]
+#![allow(dead_code)]
 // #![allow(unused_imports)]
 // #![allow(unused_variables)]
 mod alignment;
@@ -10,8 +10,9 @@ mod run;
 mod summary;
 mod trim;
 mod utils;
+mod amplicon;
 
-use crate::run::{run_filter, run_stats, run_trim};
+use crate::run::run_entry::{run_filter, run_stats, run_trim};
 use std::time::Instant;
 
 fn main() -> Result<(), anyhow::Error> {
