@@ -55,8 +55,10 @@ pub trait NanoRead {
         trim_primer: bool,
     ) -> (Option<(&[u8], &[u8])>, Option<String>);
 }
-
-impl<'a> NanoRead for RefRecord<'a> {
+impl<'a, T> NanoRead for T
+where
+    T: Record,
+{
     #[inline]
     fn gc_count(&self) -> f64 {
         let seq_len = self.seq().len() as f64;
@@ -127,15 +129,13 @@ impl<'a> NanoRead for RefRecord<'a> {
     }
 
     fn write(&self, writer: &mut dyn Write) -> Result<(), anyhow::Error> {
-        unsafe {
             write!(
                 writer,
                 "@{}\n{}\n+\n{}\n",
-                std::str::from_utf8_unchecked(self.head()),
-                std::str::from_utf8_unchecked(self.seq()),
-                std::str::from_utf8_unchecked(self.qual())
+                unsafe {std::str::from_utf8_unchecked(self.head())},
+                unsafe {std::str::from_utf8_unchecked(self.seq())},
+                unsafe {std::str::from_utf8_unchecked(self.qual())}
             )?;
-        }
         Ok(())
     }
 

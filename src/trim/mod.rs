@@ -91,7 +91,7 @@ pub fn trim_seq(
             trim_end(&trim_cfg.end5, read_seq, aligner, ReadEnd::End5)
         {
             end5_alignment = end5_align;
-            fwd_trim_from = if trim_primer {end5_alignment.read_range.1} else {end5_alignment.read_range.0};
+            fwd_trim_from = if trim_primer {end5_alignment.read_range.1} else {end5_alignment.read_range.0 - 1};
             trim_end5_success = true;
             fwd_ident_score += end5_ident;
         }
@@ -106,7 +106,7 @@ pub fn trim_seq(
             fwd_trim_to = if trim_primer {
                 read_seq.len() - end3_used_len + end3_alignment.read_range.0 - 1
             } else {
-                read_seq.len() - end3_used_len + end3_alignment.read_range.1 - 1
+                read_seq.len() - end3_used_len + end3_alignment.read_range.1
             };
             trim_end3_success = true;
             fwd_ident_score += end3_ident;
@@ -171,7 +171,7 @@ pub fn trim_seq(
                 trim_end(&trim_cfg.rev_com_end5, read_seq, aligner, ReadEnd::End5)
             {
                 rev_com_end5_alignment = rev_com_end5_align;
-                rev_trim_from = if trim_primer {rev_com_end5_alignment.read_range.1} else {rev_com_end5_alignment.read_range.0};
+                rev_trim_from = if trim_primer {rev_com_end5_alignment.read_range.1} else {rev_com_end5_alignment.read_range.0 - 1};
                 rev_ident_score += rev_com_end5_ident;
                 trim_rev_com_end5_success = true;
             }
@@ -184,7 +184,7 @@ pub fn trim_seq(
                 rev_trim_to = if trim_primer {
                     read_seq.len() - end3_used_len + rev_com_end3_alignment.read_range.0 - 1
                 } else {
-                    read_seq.len() - end3_used_len + rev_com_end3_alignment.read_range.1 - 1
+                    read_seq.len() - end3_used_len + rev_com_end3_alignment.read_range.1
                 };
                 rev_ident_score += rev_com_end3_ident;
                 trim_rev_com_end3_success = true;
