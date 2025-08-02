@@ -1,19 +1,15 @@
-use crate::alignment::{LocalAligner, LocalAlignment, Scores};
+use crate::alignment::{LocalAligner,  Scores};
 use crate::fastq::{FastqReader, NanoRead};
 use crate::trim::adapter::TrimConfig;
 use crate::trim::trim_seq;
 use crate::utils::rev_com;
-use bio::alignment;
 use bio::alphabets::dna;
-use seq_io::fastq::{Error, OwnedRecord, Record, RefRecord};
-use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap};
+use flate2::read::MultiGzDecoder;
+use seq_io::fastq::{ OwnedRecord, Record };
 use std::io::{Read, Write};
-use std::num::FpCategory::Nan;
-use std::ops::Sub;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-struct SubOwnedRecord {
+pub struct SubOwnedRecord {
     owned_record: OwnedRecord,
     start: usize,
     end: usize,
@@ -59,24 +55,20 @@ impl SubOwnedRecord {
             writer,
             ">{}_rev_com\n{}\n",
             self.owned_record.id()?,
-            rev_com(unsafe {std::str::from_utf8_unchecked(self.seq())}),
+            rev_com(unsafe { std::str::from_utf8_unchecked(self.seq()) }),
         )?;
         Ok(())
     }
 
     pub fn write_fa(&self, writer: &mut dyn Write) -> Result<(), anyhow::Error> {
-        write!(
-            writer,
-            ">{}\n{}\n",
-            self.owned_record.id()?,
-            unsafe {std::str::from_utf8_unchecked(self.seq())}
-        )?;
+        write!(writer, ">{}\n{}\n", self.owned_record.id()?, unsafe {
+            std::str::from_utf8_unchecked(self.seq())
+        })?;
         Ok(())
-
     }
 }
 
-enum QueryAmpMode {
+pub enum QueryAmpMode {
     Find,
     Align,
 }
@@ -199,13 +191,13 @@ fn get_suitable_amplicon_by_align<R: Read>(
     }
     candidate_amplicon
 }
-fn get_candidate_amplicon<R: Read>(
-    fastq_reader: &mut FastqReader<R>,
+pub fn get_candidate_amplicon<P: AsRef<Path>>(
+    input_fastq: Option<P>,
     fwd_primer: &str,
     rev_primer: &str,
     est_len: usize,
     query_amp_mode: &QueryAmpMode,
-) -> Vec<SubOwnedRecord> {
+) -> Result<Vec<SubOwnedRecord>, anyhow::Error> {
     let end5 = fwd_primer;
     let revcom_rev_primer = dna::revcomp(rev_primer.as_bytes());
     let end3 = std::str::from_utf8(&revcom_rev_primer)
@@ -214,27 +206,90 @@ fn get_candidate_amplicon<R: Read>(
     let revcom_fwd_primer = dna::revcomp(fwd_primer.as_bytes());
     let rev_com_end3 = std::str::from_utf8(&revcom_fwd_primer)
         .expect("Get reverse complementary sequence of fwd primer failed");
-    match query_amp_mode {
-        QueryAmpMode::Find => get_suitable_amplicon_by_find(
-            fastq_reader,
-            end5,
-            end3,
-            rev_com_end5,
-            rev_com_end3,
-            est_len,
-        ),
-        QueryAmpMode::Align => get_suitable_amplicon_by_align(
-            fastq_reader,
-            end5,
-            end3,
-            rev_com_end5,
-            rev_com_end3,
-            est_len,
-        ),
-    }
+    let sub_owned_record_vec = if input_fastq.is_none() {
+        let mut fastq_reader = FastqReader::new(std::io::stdin());
+        match query_amp_mode {
+            QueryAmpMode::Find => get_suitable_amplicon_by_find(
+                &mut fastq_reader,
+                end5,
+                end3,
+                rev_com_end5,
+                rev_com_end3,
+                est_len,
+            ),
+            QueryAmpMode::Align => get_suitable_amplicon_by_align(
+                &mut fastq_reader,
+                end5,
+                end3,
+                rev_com_end5,
+                rev_com_end3,
+                est_len,
+            ),
+        }
+    } else {
+        let input_fastq_path = PathBuf::from(input_fastq.unwrap().as_ref());
+        match query_amp_mode {
+            QueryAmpMode::Find => {
+                if input_fastq_path.to_str().unwrap().ends_with(".gz") {
+                    let mut fastq_reader = FastqReader::new(MultiGzDecoder::new(
+                        std::fs::File::open(&input_fastq_path)?,
+                    ));
+                    get_suitable_amplicon_by_find(
+                        &mut fastq_reader,
+                        end5,
+                        end3,
+                        rev_com_end5,
+                        rev_com_end3,
+                        est_len,
+                    )
+                } else {
+                    let mut fastq_reader =
+                        FastqReader::new(std::fs::File::open(&input_fastq_path)?);
+                    get_suitable_amplicon_by_find(
+                        &mut fastq_reader,
+                        end5,
+                        end3,
+                        rev_com_end5,
+                        rev_com_end3,
+                        est_len,
+                    )
+                }
+            }
+            QueryAmpMode::Align => {
+                if input_fastq_path.to_str().unwrap().ends_with(".gz") {
+                    let mut fastq_reader = FastqReader::new(MultiGzDecoder::new(
+                        std::fs::File::open(&input_fastq_path)?,
+                    ));
+                    get_suitable_amplicon_by_align(
+                        &mut fastq_reader,
+                        end5,
+                        end3,
+                        rev_com_end5,
+                        rev_com_end3,
+                        est_len,
+                    )
+                } else {
+                    let mut fastq_reader =
+                        FastqReader::new(std::fs::File::open(&input_fastq_path)?);
+                    get_suitable_amplicon_by_align(
+                        &mut fastq_reader,
+                        end5,
+                        end3,
+                        rev_com_end5,
+                        rev_com_end3,
+                        est_len,
+                    )
+                }
+            }
+        }
+    };
+    Ok(sub_owned_record_vec)
 }
 
-fn filter_candidate_amplicon(candidate_amplicon: Vec<SubOwnedRecord>) -> Vec<SubOwnedRecord> {
+pub fn filter_candidate_amplicon(
+    candidate_amplicon: Vec<SubOwnedRecord>,
+    number: usize,
+) -> Vec<SubOwnedRecord> {
     let mut final_amplicon = vec![];
     let total_len = candidate_amplicon
         .iter()
@@ -249,17 +304,28 @@ fn filter_candidate_amplicon(candidate_amplicon: Vec<SubOwnedRecord>) -> Vec<Sub
         })
         / (candidate_amplicon.len() as f64))
         .sqrt();
-    let (len_lower, len_upper) =( mean_len  - 0.5 * std_len, mean_len + 0.5 * std_len);
+    let (len_lower, len_upper) = (mean_len - 0.5 * std_len, mean_len + 0.5 * std_len);
     for each_candidate_amplicon in candidate_amplicon {
-        if (each_candidate_amplicon.qual().len() as f64) > len_lower && (each_candidate_amplicon.seq().len() as f64) < len_upper {
+        if (each_candidate_amplicon.qual().len() as f64) > len_lower
+            && (each_candidate_amplicon.seq().len() as f64) < len_upper
+        {
             final_amplicon.push(each_candidate_amplicon);
         }
     }
-    final_amplicon.sort_by(|first, second| second.calculate_read_quality().partial_cmp(&first.calculate_read_quality()).unwrap());
-    final_amplicon
+    final_amplicon.sort_by(|first, second| {
+        second
+            .calculate_read_quality()
+            .partial_cmp(&first.calculate_read_quality())
+            .unwrap()
+    });
+    final_amplicon.into_iter().take(number).collect()
 }
 
-fn write_final_amplicon(final_amplicon: Vec<SubOwnedRecord>, fq_writer: &mut dyn Write, fa_writer: &mut dyn Write) -> Result<(), anyhow::Error>{
+pub fn write_final_amplicon(
+    final_amplicon: Vec<SubOwnedRecord>,
+    fq_writer: &mut dyn Write,
+    fa_writer: &mut dyn Write,
+) -> Result<(), anyhow::Error> {
     for each_amplicon in &final_amplicon {
         if each_amplicon.rev_com {
             each_amplicon.write_rev_com(fq_writer)?;
@@ -272,9 +338,13 @@ fn write_final_amplicon(final_amplicon: Vec<SubOwnedRecord>, fq_writer: &mut dyn
     Ok(())
 }
 
-fn mafft_msa<P: AsRef<Path>>(fa_path: P, msa_output_path: P, mafft_path: &String) -> P{
+pub fn mafft_msa<P: AsRef<Path>>(
+    msa_input_path: &P,
+    msa_output_path: &P,
+    mafft_path: &str,
+) -> Result<(), anyhow::Error> {
     let msa_res = std::process::Command::new(mafft_path)
-        .arg(fa_path.as_ref())
+        .arg(msa_input_path.as_ref())
         .arg("--auto")
         .arg("--thread")
         .arg("4")
@@ -293,10 +363,10 @@ fn mafft_msa<P: AsRef<Path>>(fa_path: P, msa_output_path: P, mafft_path: &String
             std::process::exit(1);
         }
     }
-    msa_output_path
+    Ok(())
 }
 
-pub fn get_index_of_base(base: &u8) -> usize {
+fn get_index_of_base(base: &u8) -> usize {
     match base {
         b'A' | b'a' => 0,
         b't' | b'T' => 1,
@@ -304,13 +374,19 @@ pub fn get_index_of_base(base: &u8) -> usize {
         b'c' | b'C' => 3,
         b'-' => 4,
         other => {
-            eprintln!("Expect A/T/C/G/a/t/c/g/-, but found {} in msa result file", *other as char);
+            eprintln!(
+                "Expect A/T/C/G/a/t/c/g/-, but found {} in msa result file",
+                *other as char
+            );
             std::process::exit(1);
         }
     }
 }
 
-pub fn get_consensus_from_msa<P: AsRef<Path>>(file_path: P, consensus_file: P) -> Result<(), anyhow::Error>{
+pub fn get_consensus_from_msa<P: AsRef<Path>>(
+    file_path: P,
+    read_id: &str,
+) -> Result<String, anyhow::Error> {
     let msa_reader = bio::io::fasta::Reader::new(std::fs::File::open(file_path)?);
     let mut records = msa_reader.records();
     let first_record = records
@@ -332,25 +408,20 @@ pub fn get_consensus_from_msa<P: AsRef<Path>>(file_path: P, consensus_file: P) -
             break;
         }
     }
-    let mut consensus_fasta = String::new();
+    let mut consensus_seq = String::new();
     for each_pos in &v {
         let max_count = each_pos.iter().max().unwrap();
         if max_count == &each_pos[0] {
-            consensus_fasta.push('A')
+            consensus_seq.push('A')
         } else if max_count == &each_pos[1] {
-            consensus_fasta.push('T')
+            consensus_seq.push('T')
         } else if max_count == &each_pos[2] {
-            consensus_fasta.push('G')
+            consensus_seq.push('G')
         } else if max_count == &each_pos[3] {
-            consensus_fasta.push('C')
+            consensus_seq.push('C')
         } else {
             continue;
         }
     }
-    std::fs::write(consensus_file, consensus_fasta)?;
-    Ok(())
-}
-
-pub fn main_amplicon() {
-
+    Ok(format!(">{}\n{}\n", read_id, consensus_seq))
 }

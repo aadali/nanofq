@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use crate::trim::adapter::get_trim_cfg;
 use ansi_term::Color;
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, value_parser};
@@ -101,6 +102,21 @@ fn positive_number_parse<T: FromStr + PartialOrd + Display>(
         }
     };
     Ok(min_length)
+}
+
+fn primer_parse(input_primer: &str) -> Result<String, anyhow::Error>{
+    let allowed_bases =HashSet::from( [b'A', b'T', b'G', b'C', b'a', b't', b'g' ,b'c']);
+    let primer = input_primer.as_bytes()
+        .iter()
+        .map(|each_base| {
+            if !allowed_bases.contains(each_base) {
+                eprintln!("Expect base A/T/G/C/a/t/g/c in primer, but found {}", *each_base as char);
+                std::process::exit(1)
+            }
+            each_base.to_ascii_uppercase() as char
+        })
+        .collect::<String>();
+    Ok(primer)
 }
 
 pub fn parse_arguments() -> ArgMatches {
@@ -484,8 +500,74 @@ you can choice one from [LSK, RAD, ULK, RBK, PCS, PCB, NBD_1, NBD_2, ..., NBD_95
                 .default_value("0.8")
                 .help("[search parameter]: the ratio between the identity bases number of align and the align length of adapter should be bigger than this value for 3'end if this read is reverse complementary")
                 .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
-        )
+        );
 
+        let amplicon_cmd = Command::new("amplicon")
+            .about("get draft consensus from Ligation Nanopore Long reads for amplicon")
+            .arg(&input_arg)
+            .arg(output_arg.clone()
+                .default_value("./")
+                .help("output directory, if not exists, mkdir. [default: ./]"))
+            .arg(
+                Arg::new("name")
+                    .short('n')
+                    .long("name")
+                    .action(ArgAction::Set)
+                    .default_value("draft_consensus")
+                    .help("the tmp files and consensus fasta will be named by this value")
+            )
+            .arg(
+                Arg::new("fwd")
+                    .short('f')
+                    .long("fwd")
+                    .action(ArgAction::Set)
+                    .required(true)
+                    .value_parser(|x: &str|  primer_parse(x) )
+                    .help("the forward primer of amplicon")
+            )
+            .arg(
+                Arg::new("rev")
+                    .short('r')
+                    .long("rev")
+                    .action(ArgAction::Set)
+                    .required(true)
+                    .value_parser(|x: &str| primer_parse(x) )
+                    .help("the reverse primer of amplicon")
+            )
+            .arg(
+                Arg::new("len")
+                    .short('l')
+                    .long("len")
+                    .action(ArgAction::Set)
+                    .required(true)
+                    .value_parser(value_parser!(u32))
+                    .help("estimated amplicon length,  more accurate, more better. shorter reads will be discarded directly")
+            )
+            .arg(
+                Arg::new("mafft")
+                    .long("mafft")
+                    .action(ArgAction::Set)
+                    .default_value("mafft")
+                    .help("the mafft path, used to Multiple Sequence Alignment")
+            )
+            .arg(
+                Arg::new("number")
+                    .short('N')
+                    .long("number")
+                    .action(ArgAction::Set)
+                    .default_value("1000")
+                    .value_parser(value_parser!(u32))
+                    .help("top n best quality reads with appropriate lengths will be selected for mafft analysis. the bigger n, the slower it gets")
+            )
+            .arg(
+                Arg::new("mode")
+                    .short('m')
+                    .long("mode")
+                    .action(ArgAction::Set)
+                    .value_parser(["find", "align"])
+                    .default_value("find")
+                    .help("How get primer position in reads. Find: exact match; Align: 10% mismatch is allowed")
+            )
         ;
 
     let cmd = Command::new("nanofq")
@@ -493,7 +575,8 @@ you can choice one from [LSK, RAD, ULK, RBK, PCS, PCB, NBD_1, NBD_2, ..., NBD_95
         .about("A simple program for nanopore fastq file to stats, filter, trim...")
         .subcommand(stats_cmd)
         .subcommand(filter_cmd)
-        .subcommand(trim_cmd);
+        .subcommand(trim_cmd)
+        .subcommand(amplicon_cmd);
     let x = cmd.get_matches();
     x
 }

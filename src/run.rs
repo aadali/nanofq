@@ -1,4 +1,4 @@
-use crate::alignment::{LocalAligner};
+use crate::alignment::LocalAligner;
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 
@@ -36,6 +36,11 @@ fn collect_fastq_dir(path: &Path) -> Result<Vec<PathBuf>, anyhow::Error> {
 
 mod sub_run {
     pub mod stats {
+        use crate::fastq::{EachStats, FastqReader, NanoRead};
+        use crate::run::collect_fastq_dir;
+        use flate2::bufread::MultiGzDecoder;
+        use rayon::prelude::*;
+        use seq_io::fastq::{RecordSet, RefRecord};
         use std::any::Any;
         use std::fs::File;
         use std::io::{BufReader, Read};
@@ -43,11 +48,6 @@ mod sub_run {
         use std::sync::mpsc;
         use std::sync::mpsc::Receiver;
         use std::thread;
-        use flate2::bufread::MultiGzDecoder;
-        use seq_io::fastq::{RecordSet, RefRecord};
-        use crate::fastq::{EachStats, FastqReader, NanoRead};
-        use crate::run::collect_fastq_dir;
-        use rayon::prelude::*;
 
         fn stats_receiver(receiver: Receiver<RecordSet>, gc: bool) -> Vec<EachStats> {
             let mut all_stats: Vec<EachStats> = vec![];
@@ -64,8 +64,8 @@ mod sub_run {
         }
 
         pub fn stats<R>(reader: R, thread: usize, gc: bool) -> Vec<EachStats>
-            where
-                R: Read + Send + Any,
+        where
+            R: Read + Send + Any,
         {
             if thread == 1 {
                 FastqReader::new(reader).stats(gc)
@@ -108,6 +108,11 @@ mod sub_run {
         }
     }
     pub mod filter {
+        use crate::fastq::{FastqReader, FilterOption, NanoRead};
+        use crate::run::collect_fastq_dir;
+        use flate2::bufread::MultiGzDecoder;
+        use rayon::prelude::*;
+        use seq_io::fastq::{RecordSet, RefRecord};
         use std::any::Any;
         use std::fs::File;
         use std::io::{BufReader, BufWriter, Read, Write};
@@ -115,11 +120,6 @@ mod sub_run {
         use std::sync::mpsc;
         use std::sync::mpsc::Receiver;
         use std::thread;
-        use flate2::bufread::MultiGzDecoder;
-        use seq_io::fastq::{RecordSet, RefRecord};
-        use crate::fastq::{FastqReader, FilterOption, NanoRead};
-        use crate::run::collect_fastq_dir;
-        use rayon::prelude::*;
 
         fn filter_receiver(
             receiver: Receiver<RecordSet>,
@@ -161,8 +161,8 @@ mod sub_run {
             retain_failed: bool,
             failed_writer: &mut BufWriter<File>,
         ) -> Result<(), anyhow::Error>
-            where
-                R: Read + Send + Any,
+        where
+            R: Read + Send + Any,
         {
             if thread == 1 {
                 FastqReader::new(reader).filter(writer, fo, retain_failed, failed_writer)?
@@ -218,8 +218,14 @@ mod sub_run {
             Ok(())
         }
     }
-    
+
     pub mod trim {
+        use crate::fastq::{FastqReader, NanoRead};
+        use crate::run::{LOCAL_ALIGNER, collect_fastq_dir};
+        use crate::trim::adapter::TrimConfig;
+        use flate2::bufread::MultiGzDecoder;
+        use rayon::prelude::*;
+        use seq_io::fastq::{Record, RecordSet, RefRecord};
         use std::any::Any;
         use std::fs::File;
         use std::io::{BufReader, BufWriter, Read, Write};
@@ -227,12 +233,6 @@ mod sub_run {
         use std::sync::mpsc;
         use std::sync::mpsc::Receiver;
         use std::thread;
-        use flate2::bufread::MultiGzDecoder;
-        use seq_io::fastq::{RecordSet, RefRecord, Record};
-        use crate::fastq::{FastqReader, NanoRead};
-        use crate::run::{collect_fastq_dir, LOCAL_ALIGNER};
-        use crate::trim::adapter::TrimConfig;
-        use rayon::prelude::*;
 
         fn trim_receiver(
             receiver: Receiver<RecordSet>,
@@ -263,10 +263,10 @@ mod sub_run {
                                     unsafe { std::str::from_utf8_unchecked(sub_seq) },
                                     unsafe { std::str::from_utf8_unchecked(sub_qual) }
                                 )
-                                    .expect(&format!(
-                                        "write trimmed fastq into output file failed for {}",
-                                        std::str::from_utf8(ref_record.head()).unwrap()
-                                    ));
+                                .expect(&format!(
+                                    "write trimmed fastq into output file failed for {}",
+                                    std::str::from_utf8(ref_record.head()).unwrap()
+                                ));
                             }
                             write!(
                                 log_writer,
@@ -276,7 +276,7 @@ mod sub_run {
                                     std::str::from_utf8(ref_record.head()).unwrap()
                                 ))
                             )
-                                .unwrap();
+                            .unwrap();
                         },
                     )
                 } else {
@@ -290,10 +290,10 @@ mod sub_run {
                                     unsafe { std::str::from_utf8_unchecked(sub_seq) },
                                     unsafe { std::str::from_utf8_unchecked(sub_qual) }
                                 )
-                                    .expect(&format!(
-                                        "write trimmed fastq into output file failed for {}",
-                                        std::str::from_utf8(ref_record.head()).unwrap()
-                                    ));
+                                .expect(&format!(
+                                    "write trimmed fastq into output file failed for {}",
+                                    std::str::from_utf8(ref_record.head()).unwrap()
+                                ));
                             }
                         },
                     )
@@ -310,8 +310,8 @@ mod sub_run {
             pretty_log: bool,
             log_writer: &mut BufWriter<File>,
         ) -> Result<(), anyhow::Error>
-            where
-                R: Read + Send + Any,
+        where
+            R: Read + Send + Any,
         {
             let (sender, receiver) = mpsc::sync_channel(1000);
             let _ = thread::spawn(move || {
@@ -362,26 +362,28 @@ mod sub_run {
             }
             Ok(())
         }
-
     }
 }
 
-
 pub mod run_entry {
-    use std::fs::File;
-    use std::io::{BufReader, BufWriter, Write};
-    use std::path::Path;
+    use crate::alignment::{LocalAligner, Scores};
+    use crate::amplicon::{
+        QueryAmpMode, filter_candidate_amplicon, get_candidate_amplicon, get_consensus_from_msa,
+        mafft_msa, write_final_amplicon,
+    };
+    use crate::fastq::{FilterOption};
+    use crate::run::LOCAL_ALIGNER;
+    use crate::run::sub_run::filter::{filter, filter_fastq_dir};
+    use crate::run::sub_run::stats::{stats, stats_fastq_dir};
+    use crate::run::sub_run::trim::{trim, trim_fastq_dir};
+    use crate::summary::{make_plot, write_stats, write_summary};
+    use crate::trim::adapter::{TrimConfig, get_trim_cfg};
+    use crate::utils::rev_com;
     use clap::ArgMatches;
     use flate2::bufread::MultiGzDecoder;
-    use crate::alignment::{LocalAligner, Scores};
-    use crate::fastq::FilterOption;
-    use crate::summary::{make_plot, write_stats, write_summary};
-    use crate::trim::adapter::{get_trim_cfg, TrimConfig};
-    use crate::utils::rev_com;
-    use crate::run::sub_run::stats::{stats, stats_fastq_dir};
-    use crate::run::sub_run::filter::{filter, filter_fastq_dir};
-    use crate::run::sub_run::trim::{trim, trim_fastq_dir};
-    use crate::run::{LOCAL_ALIGNER};
+    use std::fs::File;
+    use std::io::{BufReader, BufWriter, Write };
+    use std::path::{Path};
 
     pub fn run_stats(stats_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
         let input = stats_cmd.get_one::<String>("input");
@@ -433,20 +435,38 @@ pub mod run_entry {
                     let mut writer = std::fs::File::create(&tmp_stats_outfile)?;
                     write_stats(&stats_result, &mut writer, gc)?;
                 }
-            },
+            }
             Some(output_file) => write_stats(
                 &stats_result,
                 &mut std::io::BufWriter::new(File::create(output_file).unwrap()),
                 gc,
             )?,
         }
-        let basic_stats = write_summary(&mut stats_result, lengths, quality, *topn as usize, summary);
-        let formats = format.iter().map(|x| (**x).clone()).collect::<Vec<String>>();
+        let basic_stats =
+            write_summary(&mut stats_result, lengths, quality, *topn as usize, summary);
+        let formats = format
+            .iter()
+            .map(|x| (**x).clone())
+            .collect::<Vec<String>>();
         if plot.is_some() {
             if output.is_none() {
-                make_plot(&basic_stats, *quantile, plot.unwrap(), &formats, python, &tmp_stats_outfile)?;
+                make_plot(
+                    &basic_stats,
+                    *quantile,
+                    plot.unwrap(),
+                    &formats,
+                    python,
+                    &tmp_stats_outfile,
+                )?;
             } else {
-                make_plot(&basic_stats, *quantile, plot.unwrap(), &formats, python, output.unwrap())?;
+                make_plot(
+                    &basic_stats,
+                    *quantile,
+                    plot.unwrap(),
+                    &formats,
+                    python,
+                    output.unwrap(),
+                )?;
             }
         }
         Ok(())
@@ -740,6 +760,40 @@ pub mod run_entry {
                 }
             }
         }
+        Ok(())
+    }
+
+    pub fn run_amplicon(amplicon_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
+        let input = amplicon_cmd.get_one::<String>("input");
+        let output = amplicon_cmd.get_one::<String>("output").unwrap();
+        let fwd = amplicon_cmd.get_one::<String>("fwd").unwrap();
+        let rev = amplicon_cmd.get_one::<String>("rev").unwrap();
+        let est_len = *amplicon_cmd.get_one::<u32>("len").unwrap() as usize;
+        let mafft = amplicon_cmd.get_one::<String>("mafft").unwrap();
+        let number = *amplicon_cmd.get_one::<u32>("number").unwrap() as usize;
+        let name = amplicon_cmd.get_one::<String>("name").unwrap();
+        let x = amplicon_cmd.get_one::<String>("mode").unwrap();
+        let mode = if x == "find" {
+            QueryAmpMode::Find
+        } else {
+            QueryAmpMode::Align
+        };
+        let output_dir = Path::new(output);
+        if !output_dir.exists() {
+            std::fs::create_dir_all(&output_dir)?;
+        }
+        let candidate_amplicon = get_candidate_amplicon(input, fwd, rev, est_len, &mode)?;
+        let final_amplicon = filter_candidate_amplicon(candidate_amplicon, number);
+        let fq_file_path = output_dir.join(format!("{}_amplicon.fastq", name));
+        let fa_file_path = output_dir.join(format!("{}_amplicon.fasta", name));
+        let mafft_output_path = output_dir.join(format!("{}_amplicon.fasta", name));
+        {
+            let mut fq_writer = std::io::BufWriter::new(std::fs::File::create(&fq_file_path)?);
+            let mut fa_writer = std::io::BufWriter::new(std::fs::File::create(&fa_file_path)?);
+            write_final_amplicon(final_amplicon, &mut fq_writer, &mut fa_writer)?;
+        }
+        mafft_msa(&fa_file_path, &mafft_output_path, mafft)?;
+        get_consensus_from_msa(&mafft_output_path, name)?;
         Ok(())
     }
 }
