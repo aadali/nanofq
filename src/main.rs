@@ -4,15 +4,15 @@
 // #![allow(unused_imports)]
 // #![allow(unused_variables)]
 mod alignment;
+mod amplicon;
 mod arguments;
 mod fastq;
 mod run;
 mod summary;
 mod trim;
 mod utils;
-mod amplicon;
 
-use crate::run::run_entry::{run_filter, run_stats, run_trim};
+use crate::run::run_entry::{run_amplicon, run_filter, run_stats, run_trim};
 use std::time::Instant;
 
 fn main() -> Result<(), anyhow::Error> {
@@ -24,6 +24,8 @@ fn main() -> Result<(), anyhow::Error> {
         run_filter(filter_cmd)?;
     } else if let Some(trim_cmd) = matches.subcommand_matches("trim") {
         run_trim(trim_cmd)?;
+    } else if let Some(amplicon_cmd) = matches.subcommand_matches("amplicon") {
+        run_amplicon(amplicon_cmd)?;
     }
     let dur = start.elapsed();
     println!("Elapsed time: {:6?}", dur);

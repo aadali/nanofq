@@ -1,4 +1,5 @@
-use crate::alignment::{LocalAligner,  Scores};
+use std::fmt::Display;
+use crate::alignment::{LocalAligner, Scores};
 use crate::fastq::{FastqReader, NanoRead};
 use crate::trim::adapter::TrimConfig;
 use crate::trim::trim_seq;
@@ -100,12 +101,12 @@ fn get_suitable_amplicon_by_find<R: Read>(
                             if let (Some(trim_from), Some(trim_to_)) =
                                 (seq_str.find(rev_com_end5), seq_str.find(rev_com_end3))
                             {
-                                (trim_from, trim_to_ + rev_com_end3.len() - 1, false)
+                                (trim_from, trim_to_ + rev_com_end3.len() - 1, true)
                             } else {
                                 continue;
                             }
                         };
-                    if trim_to > trim_to && trim_to - trim_from > est_len {
+                    if trim_to > trim_from && trim_to - trim_from > est_len-1 {
                         candidate_amplicon.push(SubOwnedRecord {
                             owned_record: ref_record.to_owned_record(),
                             start: trim_from,
@@ -228,6 +229,7 @@ pub fn get_candidate_amplicon<P: AsRef<Path>>(
         }
     } else {
         let input_fastq_path = PathBuf::from(input_fastq.unwrap().as_ref());
+        debug_assert!(input_fastq_path.is_file());
         match query_amp_mode {
             QueryAmpMode::Find => {
                 if input_fastq_path.to_str().unwrap().ends_with(".gz") {
@@ -313,9 +315,9 @@ pub fn filter_candidate_amplicon(
         }
     }
     final_amplicon.sort_by(|first, second| {
-        second
+       first
             .calculate_read_quality()
-            .partial_cmp(&first.calculate_read_quality())
+            .partial_cmp(&second.calculate_read_quality())
             .unwrap()
     });
     final_amplicon.into_iter().take(number).collect()
@@ -338,28 +340,28 @@ pub fn write_final_amplicon(
     Ok(())
 }
 
-pub fn mafft_msa<P: AsRef<Path>>(
+pub fn mafft_msa<P: AsRef<Path> + Display>(
     msa_input_path: &P,
     msa_output_path: &P,
     mafft_path: &str,
 ) -> Result<(), anyhow::Error> {
-    let msa_res = std::process::Command::new(mafft_path)
-        .arg(msa_input_path.as_ref())
-        .arg("--auto")
-        .arg("--thread")
-        .arg("4")
-        .arg(">")
-        .arg(msa_output_path.as_ref())
-        .output();
+    let cmd = format!("{}  --auto --thread 4 {} > {}", mafft_path, msa_input_path, msa_output_path);
+
+    let msa_res = std::process::Command::new("/bin/bash")
+    .arg("-c")
+    .arg(&cmd)
+    .output();
     match msa_res {
         Ok(msa) => {
             if !msa.status.success() {
-                eprintln!("Multiple Sequence Alignment by mafft failed");
+                eprintln!("{}", ansi_term::Color::Red.paint(cmd));
+                eprintln!("{}", ansi_term::Color::Red.paint(std::str::from_utf8(&msa.stderr)?));
+                eprintln!("{}", ansi_term::Color::Red.paint("Multiple Sequence Alignment by mafft failed"));
                 std::process::exit(1);
             }
         }
         Err(err) => {
-            eprintln!("{:?}", err);
+            eprintln!("{}", ansi_term::Color::Red.paint(format!("{:?}", err)));
             std::process::exit(1);
         }
     }

@@ -4,7 +4,7 @@ use crate::trim::trim_seq;
 use crate::utils::get_q2p_table;
 use ansi_term::Color;
 use seq_io::fastq;
-use seq_io::fastq::{Record, RefRecord};
+use seq_io::fastq::{Record};
 use std::fs::File;
 use std::io::{BufWriter, Read, Write};
 use std::ops::{Deref, DerefMut};

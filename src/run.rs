@@ -371,19 +371,19 @@ pub mod run_entry {
         QueryAmpMode, filter_candidate_amplicon, get_candidate_amplicon, get_consensus_from_msa,
         mafft_msa, write_final_amplicon,
     };
-    use crate::fastq::{FilterOption};
-    use crate::run::LOCAL_ALIGNER;
+    use crate::fastq::FilterOption;
     use crate::run::sub_run::filter::{filter, filter_fastq_dir};
     use crate::run::sub_run::stats::{stats, stats_fastq_dir};
     use crate::run::sub_run::trim::{trim, trim_fastq_dir};
+    use crate::run::{LOCAL_ALIGNER, collect_fastq_dir};
     use crate::summary::{make_plot, write_stats, write_summary};
     use crate::trim::adapter::{TrimConfig, get_trim_cfg};
     use crate::utils::rev_com;
     use clap::ArgMatches;
     use flate2::bufread::MultiGzDecoder;
     use std::fs::File;
-    use std::io::{BufReader, BufWriter, Write };
-    use std::path::{Path};
+    use std::io::{BufReader, BufWriter, Write};
+    use std::path::Path;
 
     pub fn run_stats(stats_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
         let input = stats_cmd.get_one::<String>("input");
@@ -782,18 +782,48 @@ pub mod run_entry {
         if !output_dir.exists() {
             std::fs::create_dir_all(&output_dir)?;
         }
-        let candidate_amplicon = get_candidate_amplicon(input, fwd, rev, est_len, &mode)?;
+        let candidate_amplicon = if let Some(input) = input {
+            let input_path = Path::new(input);
+            if input_path.is_dir() {
+                let fqs = collect_fastq_dir(input_path)?;
+                debug_assert!(fqs.len() > 0);
+                fqs.iter()
+                    .map(|fq| {
+                        get_candidate_amplicon(Some(fq), fwd, rev, est_len, &mode).expect(
+                            &format!(
+                                "Get candidate amplicon from {} failed",
+                                fq.to_str().unwrap()
+                            ),
+                        )
+                    })
+                    .flatten()
+                    .collect::<Vec<_>>()
+            } else {
+                get_candidate_amplicon(Some(input_path), fwd, rev, est_len, &mode)
+                    .expect(&format!("Get candidate amplicon from {} failed", input))
+            }
+        } else {
+            get_candidate_amplicon(Option::<&str>::None, fwd, rev, est_len, &mode)?
+        };
         let final_amplicon = filter_candidate_amplicon(candidate_amplicon, number);
-        let fq_file_path = output_dir.join(format!("{}_amplicon.fastq", name));
-        let fa_file_path = output_dir.join(format!("{}_amplicon.fasta", name));
-        let mafft_output_path = output_dir.join(format!("{}_amplicon.fasta", name));
+        let fq_file_path = output_dir.join("candidate_amplicon.fastq");
+        let fa_file_path = output_dir.join("candidate_amplicon.fasta");
+        let mafft_output_path = output_dir.join("msa.fasta");
         {
             let mut fq_writer = std::io::BufWriter::new(std::fs::File::create(&fq_file_path)?);
             let mut fa_writer = std::io::BufWriter::new(std::fs::File::create(&fa_file_path)?);
             write_final_amplicon(final_amplicon, &mut fq_writer, &mut fa_writer)?;
         }
-        mafft_msa(&fa_file_path, &mafft_output_path, mafft)?;
-        get_consensus_from_msa(&mafft_output_path, name)?;
+        mafft_msa(
+            &fa_file_path.to_str().unwrap(),
+            &mafft_output_path.to_str().unwrap(),
+            mafft,
+        )?;
+        let consensus_fasta_content = get_consensus_from_msa(&mafft_output_path, name)?;
+        std::fs::write(
+            output_dir.join(format!("{}.fasta", name)),
+            consensus_fasta_content,
+        )?;
         Ok(())
     }
 }

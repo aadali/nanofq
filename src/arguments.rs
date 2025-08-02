@@ -507,7 +507,7 @@ you can choice one from [LSK, RAD, ULK, RBK, PCS, PCB, NBD_1, NBD_2, ..., NBD_95
             .arg(&input_arg)
             .arg(output_arg.clone()
                 .default_value("./")
-                .help("output directory, if not exists, mkdir. [default: ./]"))
+                .help("output directory, if not exists, create it"))
             .arg(
                 Arg::new("name")
                     .short('n')
