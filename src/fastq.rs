@@ -147,7 +147,7 @@ where
         pretty_log: bool,
         trim_primer: bool,
     ) -> (Option<(&[u8], &[u8])>, Option<String>) {
-        let (trim_from, trim_to, log_string) = trim_seq(
+        let (trim_from, trim_to, log_string, _) = trim_seq(
             trim_cfg,
             self.seq(),
             &format!(

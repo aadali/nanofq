@@ -1,40 +1,47 @@
+use crate::alignment::{LocalAligner, LocalAlignment, Scores};
 use crate::fastq::{FastqReader, NanoRead};
+use crate::trim::adapter::TrimConfig;
+use crate::trim::trim_seq;
 use crate::utils::rev_com;
-use seq_io::fastq::{OwnedRecord, Record, RefRecord};
+use bio::alignment;
+use bio::alphabets::dna;
+use seq_io::fastq::{Error, OwnedRecord, Record, RefRecord};
 use std::cmp::Ordering;
-use std::collections::BinaryHeap;
+use std::collections::{BinaryHeap, HashMap};
 use std::io::{Read, Write};
+use std::num::FpCategory::Nan;
+use std::ops::Sub;
+use std::path::Path;
 
-struct SubRecord<T> {
-    ref_record: T,
+struct SubOwnedRecord {
+    owned_record: OwnedRecord,
     start: usize,
     end: usize,
+    rev_com: bool,
 }
 
-impl<T> Record for SubRecord<T>
-where
-    T: Record,
-{
+impl Record for SubOwnedRecord {
     fn head(&self) -> &[u8] {
-        self.ref_record.head()
+        self.owned_record.head()
     }
 
     fn seq(&self) -> &[u8] {
-        &self.ref_record.seq()[self.start..=self.end]
+        &self.owned_record.seq()[self.start..=self.end]
     }
 
     fn qual(&self) -> &[u8] {
-        &self.ref_record.seq()[self.start..=self.end]
+        &self.owned_record.qual()[self.start..=self.end]
     }
 }
-impl<'a> SubRecord<RefRecord<'a>> {
-    fn write_rev_com(&self, writer: &mut dyn Write) -> Result<(), anyhow::Error> {
+
+impl SubOwnedRecord {
+    pub fn write_rev_com(&self, writer: &mut dyn Write) -> Result<(), anyhow::Error> {
         write!(
             writer,
             "@{}\n{}\n+\n{}\n",
             format!(
                 "{}_rev_com {}",
-                self.ref_record.id()?,
+                self.owned_record.id()?,
                 self.desc().unwrap_or(Ok("")).unwrap()
             ),
             rev_com(unsafe { std::str::from_utf8_unchecked(self.seq()) }),
@@ -47,133 +54,303 @@ impl<'a> SubRecord<RefRecord<'a>> {
         Ok(())
     }
 
-    fn to_owned(&self) -> SubRecord<OwnedRecord> {
-        SubRecord {
-            ref_record: self.ref_record.to_owned_record(),
-            start: self.start,
-            end: self.end,
-        }
+    pub fn write_rev_com_fa(&self, writer: &mut dyn Write) -> Result<(), anyhow::Error> {
+        write!(
+            writer,
+            ">{}_rev_com\n{}\n",
+            self.owned_record.id()?,
+            rev_com(unsafe {std::str::from_utf8_unchecked(self.seq())}),
+        )?;
+        Ok(())
+    }
+
+    pub fn write_fa(&self, writer: &mut dyn Write) -> Result<(), anyhow::Error> {
+        write!(
+            writer,
+            ">{}\n{}\n",
+            self.owned_record.id()?,
+            unsafe {std::str::from_utf8_unchecked(self.seq())}
+        )?;
+        Ok(())
+
     }
 }
 
-struct QualOwnedRecord {
-    qual: f64,
-    sub_record: SubRecord<OwnedRecord>,
+enum QueryAmpMode {
+    Find,
+    Align,
 }
 
-impl Ord for QualOwnedRecord {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap()
-    }
-}
-
-impl Eq for QualOwnedRecord {}
-impl PartialOrd for QualOwnedRecord {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        other.qual.partial_cmp(&self.qual)
-    }
-}
-
-impl PartialEq for QualOwnedRecord {
-    fn eq(&self, other: &Self) -> bool {
-        (self.qual * 1_000_000.0) as usize == (other.qual * 1_000_000.00) as usize
-    }
-}
-fn push_heap(
-    ref_record: RefRecord,
-    trim_from: usize,
-    trim_to: usize,
-    best_n_reads: &mut BinaryHeap<QualOwnedRecord>,
-    end3: &str,
-    min_len: usize,
-    n: usize,
-) {
-    let trim_to = trim_to + end3.len() - 1;
-    if !(trim_to <= trim_from || trim_to - trim_from < min_len) {
-        let sub_record = SubRecord {
-            ref_record: ref_record.to_owned_record(),
-            start: trim_from,
-            end: trim_to,
-        };
-        let this_qual = sub_record.calculate_read_quality().1;
-        let heap_item = QualOwnedRecord {
-            qual: this_qual,
-            sub_record,
-        };
-        if best_n_reads.len() < n {
-            best_n_reads.push(heap_item)
-        } else if heap_item > *best_n_reads.peek().unwrap() {
-            best_n_reads.pop();
-            best_n_reads.push(heap_item);
-        }
-    }
-}
-pub fn clean_amplicon<R: Read>(
+fn get_suitable_amplicon_by_find<R: Read>(
     fastq_reader: &mut FastqReader<R>,
-    fwd_primer: &str,
-    rev_primer: &str,
-    min_len: usize,
-    n: usize,
-    output_writer: &mut dyn Write,
-) {
-    let end5 = fwd_primer;
-    let end3 = rev_com(rev_primer);
-    let rev_com_end5 = rev_primer;
-    let rev_com_end3 = rev_com(fwd_primer);
-    let mut best_n_reads = BinaryHeap::<QualOwnedRecord>::new();
+    end5: &str,
+    end3: &str,
+    rev_com_end5: &str,
+    rev_com_end3: &str,
+    est_len: usize,
+) -> Vec<SubOwnedRecord> {
+    let mut candidate_amplicon = vec![];
     loop {
-        if let Some(Ok(ref_record)) = fastq_reader.next() {
-            if ref_record.seq().len() < min_len {
-                continue;
-            }
-            let seq_str = unsafe { std::str::from_utf8_unchecked(ref_record.seq()) };
-            if let Some(trim_from) = seq_str.find(end5) {
-                if let Some(trim_to_) = seq_str.find(&end3) {
-                    push_heap(
-                        ref_record,
-                        trim_from,
-                        trim_to_,
-                        &mut best_n_reads,
-                        &end3,
-                        min_len,
-                        n,
-                    );
-                }
-            } else {
-                if let Some(trim_from) = seq_str.find(rev_com_end5) {
-                    if let Some(trim_to_) = seq_str.find(&rev_com_end3) {
-                        push_heap(
-                            ref_record,
-                            trim_from,
-                            trim_to_,
-                            &mut best_n_reads,
-                            &rev_com_end3,
-                            min_len,
-                            n,
-                        );
+        if let Some(ref_record_res) = fastq_reader.next() {
+            match ref_record_res {
+                Ok(ref_record) => {
+                    if ref_record.seq().len() < est_len {
+                        continue;
                     }
+                    let seq_str = std::str::from_utf8(ref_record.seq())
+                        .expect("Convert ref_record.seq() to &str failed");
+                    let (trim_from, trim_to, is_rev_com) =
+                        if let (Some(trim_from), Some(trim_to_)) =
+                            (seq_str.find(end5), seq_str.find(end3))
+                        {
+                            (trim_from, trim_to_ + end3.len() - 1, false)
+                        } else {
+                            if let (Some(trim_from), Some(trim_to_)) =
+                                (seq_str.find(rev_com_end5), seq_str.find(rev_com_end3))
+                            {
+                                (trim_from, trim_to_ + rev_com_end3.len() - 1, false)
+                            } else {
+                                continue;
+                            }
+                        };
+                    if trim_to > trim_to && trim_to - trim_from > est_len {
+                        candidate_amplicon.push(SubOwnedRecord {
+                            owned_record: ref_record.to_owned_record(),
+                            start: trim_from,
+                            end: trim_to,
+                            rev_com: is_rev_com,
+                        })
+                    }
+                }
+                Err(err) => {
+                    eprintln!("{:?}", err);
+                    std::process::exit(1)
                 }
             }
         } else {
             break;
         }
     }
-    let best_n_reads = best_n_reads.into_sorted_vec();
-    for x in &best_n_reads {
-        NanoRead::write(&x.sub_record, output_writer).unwrap();
+    candidate_amplicon
+}
+
+fn get_suitable_amplicon_by_align<R: Read>(
+    fastq_reader: &mut FastqReader<R>,
+    end5: &str,
+    end3: &str,
+    rev_com_end5: &str,
+    rev_com_end3: &str,
+    est_len: usize,
+) -> Vec<SubOwnedRecord> {
+    let mut candidate_amplicon = vec![];
+    let end_align_para = (180usize, 0.9, 0.9);
+    let primer_cfg = TrimConfig {
+        kit_name: "primer",
+        end5: Some((end5, end_align_para)),
+        end3: Some((end3, end_align_para)),
+        rev_com_end5: Some((rev_com_end5, end_align_para)),
+        rev_com_end3: Some((&rev_com_end3, end_align_para)),
+    };
+    let scores = Scores {
+        match_: 3,
+        mismatch: -3,
+        gap_open: -5,
+        gap_extend: -1,
+    };
+    let mut local_aligner = LocalAligner::new((200, 200), scores);
+    loop {
+        if let Some(ref_record_res) = fastq_reader.next() {
+            match ref_record_res {
+                Ok(ref_record) => {
+                    if ref_record.seq().len() < est_len {
+                        continue;
+                    }
+                    let (trim_from, trim_to, _, is_rev_com) = trim_seq(
+                        &primer_cfg,
+                        ref_record.seq(),
+                        &format!(
+                            "{}: {}",
+                            ref_record.id().expect("parse into read id error"),
+                            ref_record.seq().len()
+                        ),
+                        &mut local_aligner,
+                        false,
+                        est_len / 2,
+                        false,
+                    );
+                    if trim_from == 0 || trim_to == 0 || trim_to == ref_record.seq().len() {
+                        continue;
+                    }
+                    candidate_amplicon.push(SubOwnedRecord {
+                        owned_record: ref_record.to_owned_record(),
+                        start: trim_from,
+                        end: trim_to - 1,
+                        rev_com: is_rev_com,
+                    })
+                }
+                Err(err) => {
+                    eprintln!("{:?}", err);
+                    std::process::exit(1);
+                }
+            }
+        } else {
+            break;
+        }
+    }
+    candidate_amplicon
+}
+fn get_candidate_amplicon<R: Read>(
+    fastq_reader: &mut FastqReader<R>,
+    fwd_primer: &str,
+    rev_primer: &str,
+    est_len: usize,
+    query_amp_mode: &QueryAmpMode,
+) -> Vec<SubOwnedRecord> {
+    let end5 = fwd_primer;
+    let revcom_rev_primer = dna::revcomp(rev_primer.as_bytes());
+    let end3 = std::str::from_utf8(&revcom_rev_primer)
+        .expect("Get reverse complementary sequence of rev primer failed");
+    let rev_com_end5 = rev_primer;
+    let revcom_fwd_primer = dna::revcomp(fwd_primer.as_bytes());
+    let rev_com_end3 = std::str::from_utf8(&revcom_fwd_primer)
+        .expect("Get reverse complementary sequence of fwd primer failed");
+    match query_amp_mode {
+        QueryAmpMode::Find => get_suitable_amplicon_by_find(
+            fastq_reader,
+            end5,
+            end3,
+            rev_com_end5,
+            rev_com_end3,
+            est_len,
+        ),
+        QueryAmpMode::Align => get_suitable_amplicon_by_align(
+            fastq_reader,
+            end5,
+            end3,
+            rev_com_end5,
+            rev_com_end3,
+            est_len,
+        ),
     }
 }
 
-pub fn run_amplicon() {
-    let fwd= "CAAGATCGTGCCACGGTACTCCAGCC";
-    let rev = "CAGACCAGAGGATTTCGGAGGGTCTG";
-    let raw_fastq = "/Users/aadali/test_data/amplicon/barcode03.fastq";
-    let mut reader = FastqReader::new(std::fs::File::open(raw_fastq).unwrap());
-    let min_len = 1200;
-    let n = 2000;
-    let mut bar03_trimmed_fq = std::io::BufWriter::new(
-        std::fs::File::create("/Users/aadali/test_data/amplicon/barcode03_primer.trimmed.fastq")
-            .unwrap(),
-    );
-    clean_amplicon(&mut reader, fwd, rev, min_len, n, &mut bar03_trimmed_fq);
+fn filter_candidate_amplicon(candidate_amplicon: Vec<SubOwnedRecord>) -> Vec<SubOwnedRecord> {
+    let mut final_amplicon = vec![];
+    let total_len = candidate_amplicon
+        .iter()
+        .fold(0usize, |sum, each_sub_owned_record| {
+            each_sub_owned_record.seq().len() + sum
+        });
+    let mean_len = total_len as f64 / candidate_amplicon.len() as f64;
+    let std_len = (candidate_amplicon
+        .iter()
+        .fold(0.0f64, |sum, each_sub_owned_record| {
+            sum + (each_sub_owned_record.seq().len() as f64 - mean_len).powf(2.0)
+        })
+        / (candidate_amplicon.len() as f64))
+        .sqrt();
+    let (len_lower, len_upper) =( mean_len  - 0.5 * std_len, mean_len + 0.5 * std_len);
+    for each_candidate_amplicon in candidate_amplicon {
+        if (each_candidate_amplicon.qual().len() as f64) > len_lower && (each_candidate_amplicon.seq().len() as f64) < len_upper {
+            final_amplicon.push(each_candidate_amplicon);
+        }
+    }
+    final_amplicon.sort_by(|first, second| second.calculate_read_quality().partial_cmp(&first.calculate_read_quality()).unwrap());
+    final_amplicon
+}
+
+fn write_final_amplicon(final_amplicon: Vec<SubOwnedRecord>, fq_writer: &mut dyn Write, fa_writer: &mut dyn Write) -> Result<(), anyhow::Error>{
+    for each_amplicon in &final_amplicon {
+        if each_amplicon.rev_com {
+            each_amplicon.write_rev_com(fq_writer)?;
+            each_amplicon.write_rev_com_fa(fa_writer)?;
+        } else {
+            NanoRead::write(each_amplicon, fq_writer)?;
+            each_amplicon.write_fa(fa_writer)?;
+        }
+    }
+    Ok(())
+}
+
+fn mafft_msa<P: AsRef<Path>>(fa_path: P, msa_output_path: P, mafft_path: &String) -> P{
+    let msa_res = std::process::Command::new(mafft_path)
+        .arg(fa_path.as_ref())
+        .arg("--auto")
+        .arg("--thread")
+        .arg("4")
+        .arg(">")
+        .arg(msa_output_path.as_ref())
+        .output();
+    match msa_res {
+        Ok(msa) => {
+            if !msa.status.success() {
+                eprintln!("Multiple Sequence Alignment by mafft failed");
+                std::process::exit(1);
+            }
+        }
+        Err(err) => {
+            eprintln!("{:?}", err);
+            std::process::exit(1);
+        }
+    }
+    msa_output_path
+}
+
+pub fn get_index_of_base(base: &u8) -> usize {
+    match base {
+        b'A' | b'a' => 0,
+        b't' | b'T' => 1,
+        b'g' | b'G' => 2,
+        b'c' | b'C' => 3,
+        b'-' => 4,
+        other => {
+            eprintln!("Expect A/T/C/G/a/t/c/g/-, but found {} in msa result file", *other as char);
+            std::process::exit(1);
+        }
+    }
+}
+
+pub fn get_consensus_from_msa<P: AsRef<Path>>(file_path: P, consensus_file: P) -> Result<(), anyhow::Error>{
+    let msa_reader = bio::io::fasta::Reader::new(std::fs::File::open(file_path)?);
+    let mut records = msa_reader.records();
+    let first_record = records
+        .next()
+        .expect("Empty fasta file found")
+        .expect("Bad fasta format found");
+    let align_len = first_record.seq().len();
+    let mut v = vec![[0usize, 0, 0, 0, 0]; align_len];
+    for (idx, base) in first_record.seq().iter().enumerate() {
+        v[idx][get_index_of_base(base)] += 1;
+    }
+    loop {
+        if let Some(each_record_res) = records.next() {
+            let each_record = each_record_res?;
+            for (idx, base) in each_record.seq().iter().enumerate() {
+                v[idx][get_index_of_base(base)] += 1;
+            }
+        } else {
+            break;
+        }
+    }
+    let mut consensus_fasta = String::new();
+    for each_pos in &v {
+        let max_count = each_pos.iter().max().unwrap();
+        if max_count == &each_pos[0] {
+            consensus_fasta.push('A')
+        } else if max_count == &each_pos[1] {
+            consensus_fasta.push('T')
+        } else if max_count == &each_pos[2] {
+            consensus_fasta.push('G')
+        } else if max_count == &each_pos[3] {
+            consensus_fasta.push('C')
+        } else {
+            continue;
+        }
+    }
+    std::fs::write(consensus_file, consensus_fasta)?;
+    Ok(())
+}
+
+pub fn main_amplicon() {
+
 }

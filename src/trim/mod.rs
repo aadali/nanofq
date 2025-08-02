@@ -69,7 +69,7 @@ pub fn trim_seq(
     log: bool,
     min_len: usize,
     trim_primer: bool,
-) -> (usize, usize, Option<String>) {
+) -> (usize, usize, Option<String>, bool) {
     let read_seq = seq;
     let mut fwd_trim_from = 0;
     let mut fwd_trim_to = read_seq.len();
@@ -144,7 +144,7 @@ pub fn trim_seq(
                 .map(|x| x.push_str(&end3_alignment.pretty(ReadEnd::End3)));
         }
         let (a, b) = get_trim_return(fwd_trim_from, fwd_trim_to, min_len, &mut pretty_log);
-        (a, b, pretty_log)
+        (a, b, pretty_log, false)
     } else {
         // Step4. if the rev_com read should be also detected
         if trim_end5_success && trim_end3_success {
@@ -156,7 +156,7 @@ pub fn trim_seq(
                 .as_mut()
                 .map(|x| x.push_str(&end3_alignment.pretty(ReadEnd::End3)));
             let (a, b) = get_trim_return(fwd_trim_from, fwd_trim_to, min_len, &mut pretty_log);
-            (a, b, pretty_log)
+            (a, b, pretty_log, false)
         } else {
             // Step6. if just one end of forward passed, then consider the both ends of rev_com and do Step7
             let mut rev_ident_score = 0;
@@ -203,7 +203,7 @@ pub fn trim_seq(
                 }
                 // Step10. if identity bases numbers of forward is more, just use trim info from Step1 and Step2
                 let (a, b) = get_trim_return(fwd_trim_from, fwd_trim_to, min_len, &mut pretty_log);
-                (a, b, pretty_log)
+                (a, b, pretty_log, false)
             } else {
                 // Step11. if identity bases numbers of rev_com is more, just use trim info from Step7 and Step8
                 if trim_rev_com_end5_success {
@@ -217,7 +217,7 @@ pub fn trim_seq(
                         .map(|x| x.push_str(&rev_com_end3_alignment.pretty(ReadEnd::End3)));
                 }
                 let (a, b) = get_trim_return(rev_trim_from, rev_trim_to, min_len, &mut pretty_log);
-                (a, b, pretty_log)
+                (a, b, pretty_log, true)
             }
         }
     }
