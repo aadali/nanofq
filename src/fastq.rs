@@ -4,7 +4,7 @@ use crate::trim::trim_seq;
 use crate::utils::get_q2p_table;
 use ansi_term::Color;
 use seq_io::fastq;
-use seq_io::fastq::{Record};
+use seq_io::fastq::Record;
 use std::fs::File;
 use std::io::{BufWriter, Read, Write};
 use std::ops::{Deref, DerefMut};
@@ -42,7 +42,7 @@ pub trait NanoRead {
 
     fn stats(&self, gc: bool) -> EachStats;
 
-    fn is_passed(&self, fo: &FilterOption) -> bool;
+    fn is_passed(&self, fo: &FilterOption) -> (bool, Box<String>, usize, f64);
 
     fn write(&self, writer: &mut dyn Write) -> Result<(), anyhow::Error>;
 
@@ -112,7 +112,7 @@ where
     }
 
     #[inline]
-    fn is_passed(&self, fo: &FilterOption) -> bool {
+    fn is_passed(&self, fo: &FilterOption) -> (bool, Box<String>, usize, f64) {
         let seq_len = self.seq().len();
         let gc_passed = if fo.gc {
             let gc = self.gc_count();
@@ -121,21 +121,31 @@ where
             true
         };
         let this_read_qual = self.calculate_read_quality().1;
-        seq_len >= fo.min_len
+        let is_passed = seq_len >= fo.min_len
             && seq_len <= fo.max_len
             && this_read_qual > fo.min_qual
             && this_read_qual < fo.max_qual
-            && gc_passed
+            && gc_passed;
+        (
+            is_passed,
+                Box::new(
+                    self.id()
+                        .expect(&Color::Red.paint("parse id to str error").to_string())
+                        .to_string(),
+                ),
+                seq_len,
+            this_read_qual,
+        )
     }
 
     fn write(&self, writer: &mut dyn Write) -> Result<(), anyhow::Error> {
-            write!(
-                writer,
-                "@{}\n{}\n+\n{}\n",
-                unsafe {std::str::from_utf8_unchecked(self.head())},
-                unsafe {std::str::from_utf8_unchecked(self.seq())},
-                unsafe {std::str::from_utf8_unchecked(self.qual())}
-            )?;
+        write!(
+            writer,
+            "@{}\n{}\n+\n{}\n",
+            unsafe { std::str::from_utf8_unchecked(self.head()) },
+            unsafe { std::str::from_utf8_unchecked(self.seq()) },
+            unsafe { std::str::from_utf8_unchecked(self.qual()) }
+        )?;
         Ok(())
     }
 
@@ -209,7 +219,8 @@ impl<R: Read> FastqReader<R> {
         fo: &FilterOption,
         retain_failed: bool,
         failed_writer: &mut BufWriter<File>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<Vec<(Box<String>, usize, f64)>, anyhow::Error> {
+        let mut stats_results = Vec::new();
         if retain_failed {
             loop {
                 match self.next() {
@@ -219,12 +230,14 @@ impl<R: Read> FastqReader<R> {
                                 .paint("Error: failed to get fastq record")
                                 .to_string(),
                         );
-                        if ref_record.is_passed(fo) {
+                        let read_filter_res = ref_record.is_passed(fo);
+                        if read_filter_res.0 {
+                            stats_results.push((read_filter_res.1, read_filter_res.2, read_filter_res.3));
                             NanoRead::write(&ref_record, writer)?
                         }
                     }
                     None => {
-                        return Ok(());
+                        return Ok(stats_results);
                     }
                 }
             }
@@ -237,14 +250,16 @@ impl<R: Read> FastqReader<R> {
                                 .paint("Error: failed to get fastq record")
                                 .to_string(),
                         );
-                        if ref_record.is_passed(fo) {
+                        let read_filter_res = ref_record.is_passed(fo);
+                        if read_filter_res.0 {
+                            stats_results.push((read_filter_res.1, read_filter_res.2, read_filter_res.3));
                             NanoRead::write(&ref_record, writer)?
                         } else {
                             NanoRead::write(&ref_record, failed_writer)?
                         }
                     }
                     None => {
-                        return Ok(());
+                        return Ok(stats_results);
                     }
                 }
             }

@@ -127,30 +127,37 @@ mod sub_run {
             writer: &mut dyn Write,
             retain_failed: bool,
             failed_writer: &mut BufWriter<File>,
-        ) -> Result<(), anyhow::Error> {
+        ) -> Result<Vec<(Box<String>, usize, f64)>, anyhow::Error> {
+            let mut this_receiver_stats = Vec::<(Box<String>, usize, f64)>::new();
             for record_set in receiver {
                 let record_vec = record_set.into_iter().collect::<Vec<RefRecord>>();
                 let vec2 = record_vec
                     .par_iter()
                     .map(|x| x.is_passed(fo))
-                    .collect::<Vec<bool>>();
+                    .collect::<Vec<(bool, Box<String>, usize, f64)>>();
                 if retain_failed {
-                    for (ref_record, is_passed) in record_vec.iter().zip(&vec2) {
-                        if *is_passed {
+                    for (ref_record, (is_passed, read_name, read_len, read_qual)) in
+                        record_vec.iter().zip(vec2)
+                    {
+                        if is_passed {
+                            this_receiver_stats.push((read_name, read_len, read_qual));
                             NanoRead::write(ref_record, writer)?;
                         } else {
                             NanoRead::write(ref_record, failed_writer)?;
                         }
                     }
                 } else {
-                    for (ref_record, is_passed) in record_vec.iter().zip(&vec2) {
-                        if *is_passed {
+                    for (ref_record, (is_passed, read_name, read_len, read_qual)) in
+                        record_vec.iter().zip(vec2)
+                    {
+                        if is_passed {
+                            this_receiver_stats.push((read_name, read_len, read_qual));
                             NanoRead::write(ref_record, writer)?;
                         }
                     }
                 }
             }
-            Ok(())
+            Ok(this_receiver_stats)
         }
 
         pub fn filter<R>(
@@ -160,12 +167,15 @@ mod sub_run {
             fo: &FilterOption,
             retain_failed: bool,
             failed_writer: &mut BufWriter<File>,
-        ) -> Result<(), anyhow::Error>
+        ) -> Result<Vec<(Box<String>, usize, f64)>, anyhow::Error>
         where
             R: Read + Send + Any,
         {
+            let mut filter_stats = Vec::<(Box<String>, usize, f64)>::new();
             if thread == 1 {
-                FastqReader::new(reader).filter(writer, fo, retain_failed, failed_writer)?
+                let x =
+                    FastqReader::new(reader).filter(writer, fo, retain_failed, failed_writer)?;
+                return Ok(x);
             } else {
                 let (sender, receiver) = mpsc::sync_channel(1000);
                 let _ = thread::spawn(move || {
@@ -180,9 +190,11 @@ mod sub_run {
                         }
                     }
                 });
-                filter_receiver(receiver, fo, writer, retain_failed, failed_writer)?
+                let receiver_res =
+                    filter_receiver(receiver, fo, writer, retain_failed, failed_writer)?;
+                filter_stats.extend(receiver_res);
             }
-            Ok(())
+            Ok(filter_stats)
         }
 
         pub fn filter_fastq_dir(
@@ -192,20 +204,22 @@ mod sub_run {
             fo: &FilterOption,
             retain_failed: bool,
             failed_writer: &mut BufWriter<File>,
-        ) -> Result<(), anyhow::Error> {
+        ) -> Result<Vec<(Box<String>, usize, f64)>, anyhow::Error> {
+            let mut filter_stats = Vec::<(Box<String>, usize, f64)>::new();
             let fastqs = collect_fastq_dir(path).unwrap();
             for fq in fastqs {
                 if fq.to_str().unwrap().ends_with(".gz") {
-                    filter(
+                    let this_file_filter_res = filter(
                         MultiGzDecoder::new(BufReader::new(File::open(fq)?)),
                         thread,
                         writer,
                         fo,
                         retain_failed,
                         failed_writer,
-                    )?
+                    )?;
+                    filter_stats.extend(this_file_filter_res);
                 } else {
-                    filter(
+                    let this_file_filter_res = filter(
                         BufReader::new(File::open(fq)?),
                         thread,
                         writer,
@@ -213,9 +227,10 @@ mod sub_run {
                         retain_failed,
                         failed_writer,
                     )?;
+                    filter_stats.extend(this_file_filter_res);
                 }
             }
-            Ok(())
+            Ok(filter_stats)
         }
     }
 
@@ -371,7 +386,7 @@ pub mod run_entry {
         QueryAmpMode, filter_candidate_amplicon, get_candidate_amplicon, get_consensus_from_msa,
         mafft_msa, write_final_amplicon,
     };
-    use crate::fastq::FilterOption;
+    use crate::fastq::{FastqReader, FilterOption, NanoRead};
     use crate::run::sub_run::filter::{filter, filter_fastq_dir};
     use crate::run::sub_run::stats::{stats, stats_fastq_dir};
     use crate::run::sub_run::trim::{trim, trim_fastq_dir};
@@ -381,8 +396,10 @@ pub mod run_entry {
     use crate::utils::rev_com;
     use clap::ArgMatches;
     use flate2::bufread::MultiGzDecoder;
+    use seq_io::fastq::Record;
+    use std::collections::HashSet;
     use std::fs::File;
-    use std::io::{BufReader, BufWriter, Write};
+    use std::io::{BufRead, BufReader, BufWriter, Read, Write};
     use std::path::Path;
 
     pub fn run_stats(stats_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
@@ -483,6 +500,7 @@ pub mod run_entry {
         let min_gc = filter_cmd.get_one::<f64>("min_gc").unwrap();
         let max_gc = filter_cmd.get_one::<f64>("max_gc").unwrap();
         let thread = filter_cmd.get_one::<u16>("thread").unwrap();
+        let max_bases = filter_cmd.get_one::<u64>("max_bases");
         let failed_fq_path = filter_cmd.get_one::<String>("retain_failed");
         let filter_option = FilterOption {
             min_len: *min_len,
@@ -504,60 +522,150 @@ pub mod run_entry {
             .num_threads(*thread as usize)
             .build_global()?;
 
-        let mut writer: Box<dyn Write> = if output.is_none() {
-            Box::new(BufWriter::new(std::io::stdout()))
-        } else {
-            Box::new(BufWriter::new(File::create(output.unwrap())?))
-        };
-
-        match input {
-            None => {
-                filter(
+        let tmp_filter_fastq = format!("./.{}.tmp.filter.fastq", uuid::Uuid::new_v4());
+        let mut filter_stats = {
+            let mut tmp_writer = BufWriter::new(File::create(&tmp_filter_fastq)?);
+            match input {
+                None => filter(
                     std::io::stdin(),
                     *thread as usize,
-                    &mut writer,
+                    &mut tmp_writer,
                     &filter_option,
                     failed_retain,
                     &mut failed_writer,
-                )?;
-            }
-            Some(input_path) => {
-                let ends_with_gz = input_path.ends_with(".gz");
-                let input_path = Path::new(input_path);
-                if input_path.is_file() {
-                    if ends_with_gz {
-                        let reader = MultiGzDecoder::new(BufReader::new(File::open(input_path)?));
-                        filter(
-                            reader,
-                            *thread as usize,
-                            &mut writer,
-                            &filter_option,
-                            failed_retain,
-                            &mut failed_writer,
-                        )?
+                )?,
+                Some(input_path) => {
+                    let ends_with_gz = input_path.ends_with(".gz");
+                    let input_path = Path::new(input_path);
+                    if input_path.is_file() {
+                        if ends_with_gz {
+                            let reader =
+                                MultiGzDecoder::new(BufReader::new(File::open(input_path)?));
+                            filter(
+                                reader,
+                                *thread as usize,
+                                &mut tmp_writer,
+                                &filter_option,
+                                failed_retain,
+                                &mut failed_writer,
+                            )?
+                        } else {
+                            let reader = BufReader::new(File::open(input_path)?);
+                            filter(
+                                reader,
+                                *thread as usize,
+                                &mut tmp_writer,
+                                &filter_option,
+                                failed_retain,
+                                &mut failed_writer,
+                            )?
+                        }
                     } else {
-                        let reader = BufReader::new(File::open(input_path)?);
-                        filter(
-                            reader,
+                        filter_fastq_dir(
+                            input_path,
                             *thread as usize,
-                            &mut writer,
+                            &mut tmp_writer,
                             &filter_option,
                             failed_retain,
                             &mut failed_writer,
                         )?
                     }
+                }
+            }
+        };
+
+        fn mv_tmp_to_final(old_path: &str, final_path: &str) -> Result<(), anyhow::Error> {
+            let cmd_process = std::process::Command::new("mv")
+                .arg(old_path)
+                .arg(final_path)
+                .output();
+            match cmd_process {
+                Ok(output) => {
+                    if !output.status.success() {
+                        println!("{}", std::str::from_utf8(&output.stderr)?);
+                        std::process::exit(1);
+                    }
+                }
+                Err(error) => {
+                    println!("Get final filtered fastq failed");
+                    println!("{:?}", error);
+                }
+            }
+            Ok(())
+        }
+
+        match max_bases {
+            None => {
+                if output.is_none() {
+                    let mut tmp_reader = std::io::BufReader::new(std::fs::File::open(&tmp_filter_fastq)?);
+                    let mut buf = [0; 1024 * 8];
+                    loop {
+                        let bytes_size = tmp_reader.read(&mut buf)?;
+                        if bytes_size == 0 {
+                            break;
+                        }
+                        std::io::stdout().write_all(&buf[..bytes_size])?;
+                    }
+                    std::fs::remove_file(&tmp_filter_fastq)?;
                 } else {
-                    filter_fastq_dir(
-                        input_path,
-                        *thread as usize,
-                        &mut writer,
-                        &filter_option,
-                        failed_retain,
-                        &mut failed_writer,
-                    )?
+                    mv_tmp_to_final(&tmp_filter_fastq, output.unwrap())?;
+                }
+            }
+            Some(target_bases_count) => {
+                let target_bases_count = *target_bases_count as usize;
+                let mut total_filter_bases = 0usize;
+                for each in &filter_stats {
+                    total_filter_bases += each.1
+                }
+                if total_filter_bases < target_bases_count {
+                    if output.is_none() {
+                        let mut tmp_reader = std::io::BufReader::new(std::fs::File::open(&tmp_filter_fastq)?);
+                        let mut buf = [0; 1024 * 8];
+                        loop {
+                            let bytes_size = tmp_reader.read(&mut buf)?;
+                            if bytes_size == 0 {
+                                break;
+                            }
+                            std::io::stdout().write_all(&buf[..bytes_size])?
+                        }
+                        std::fs::remove_file(tmp_filter_fastq)?;
+                    } else {
+                        mv_tmp_to_final(&tmp_filter_fastq, output.unwrap())?;
+                    }
+                } else {
+                    let mut read_names = HashSet::new();
+                    filter_stats.sort_by(|x, y| y.2.partial_cmp(&x.2).unwrap());
+                    let mut total_retain_bases = 0usize;
+                    for each in filter_stats {
+                        total_retain_bases += each.1;
+                        read_names.insert(*each.0);
+                        if total_retain_bases >= target_bases_count {
+                            break;
+                        }
+                    }
+                    let tmp_reader = std::io::BufReader::new(std::fs::File::open(&tmp_filter_fastq)?);
+                    let mut tmp_fastq_reader = FastqReader::new(tmp_reader);
+                    let mut writer: Box<dyn Write> = if output.is_none() {
+                        Box::new(BufWriter::new(std::io::stdout()))
+                    } else {
+                        Box::new(BufWriter::new(File::create(output.unwrap())?))
+                    };
+                    loop {
+                        if let Some(each_record_res) = tmp_fastq_reader.next() {
+                            let each_record = each_record_res?;
+                            if read_names.contains(each_record.id()?) {
+                                NanoRead::write(&each_record, &mut writer)?
+                            } else {
+                                NanoRead::write(&each_record, &mut failed_writer)?
+                            }
+                        } else {
+                            break;
+                        }
+                    }
                 }
             }
         }
+
         Ok(())
     }
     pub fn run_trim(trim_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
@@ -789,12 +897,10 @@ pub mod run_entry {
                 debug_assert!(fqs.len() > 0);
                 fqs.iter()
                     .map(|fq| {
-                        get_candidate_amplicon(Some(fq), fwd, rev, est_len, &mode).expect(
-                            &format!(
-                                "Get candidate amplicon from {} failed",
-                                fq.to_str().unwrap()
-                            ),
-                        )
+                        get_candidate_amplicon(Some(fq), fwd, rev, est_len, &mode).expect(&format!(
+                            "Get candidate amplicon from {} failed",
+                            fq.to_str().unwrap()
+                        ))
                     })
                     .flatten()
                     .collect::<Vec<_>>()

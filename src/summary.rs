@@ -308,7 +308,7 @@ pub fn make_plot(
     quan: f64,
     prefix: &str,
     format: &Vec<String>,
-    python: &String,
+    python: &str,
     stats_file: &str,
 ) -> Result<(), anyhow::Error> {
     let formats = format.join(",");

@@ -18,16 +18,21 @@ use std::time::Instant;
 fn main() -> Result<(), anyhow::Error> {
     let start = Instant::now();
     let matches = arguments::parse_arguments();
-    if let Some(stats_cmd) = matches.subcommand_matches("stats") {
-        run_stats(stats_cmd)?;
+    let main_result = if let Some(stats_cmd) = matches.subcommand_matches("stats") {
+        run_stats(stats_cmd)
     } else if let Some(filter_cmd) = matches.subcommand_matches("filter") {
-        run_filter(filter_cmd)?;
+        run_filter(filter_cmd)
     } else if let Some(trim_cmd) = matches.subcommand_matches("trim") {
-        run_trim(trim_cmd)?;
+        run_trim(trim_cmd)
     } else if let Some(amplicon_cmd) = matches.subcommand_matches("amplicon") {
-        run_amplicon(amplicon_cmd)?;
+        run_amplicon(amplicon_cmd)
+    } else {
+        eprintln!("error for cmd parser");
+        std::process::exit(1);
+    };
+    if main_result.is_err() {
+        println!("{:?}", main_result.err().unwrap());
+        std::process::exit(1);
     }
-    let dur = start.elapsed();
-    println!("Elapsed time: {:6?}", dur);
     Ok(())
 }

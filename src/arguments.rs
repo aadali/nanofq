@@ -1,7 +1,7 @@
-use std::collections::HashSet;
 use crate::trim::adapter::get_trim_cfg;
 use ansi_term::Color;
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, value_parser};
+use std::collections::HashSet;
 use std::fmt::Display;
 use std::path::Path;
 use std::str::FromStr;
@@ -104,13 +104,17 @@ fn positive_number_parse<T: FromStr + PartialOrd + Display>(
     Ok(min_length)
 }
 
-fn primer_parse(input_primer: &str) -> Result<String, anyhow::Error>{
-    let allowed_bases =HashSet::from( [b'A', b'T', b'G', b'C', b'a', b't', b'g' ,b'c']);
-    let primer = input_primer.as_bytes()
+fn primer_parse(input_primer: &str) -> Result<String, anyhow::Error> {
+    let allowed_bases = HashSet::from([b'A', b'T', b'G', b'C', b'a', b't', b'g', b'c']);
+    let primer = input_primer
+        .as_bytes()
         .iter()
         .map(|each_base| {
             if !allowed_bases.contains(each_base) {
-                eprintln!("Expect base A/T/G/C/a/t/g/c in primer, but found {}", *each_base as char);
+                eprintln!(
+                    "Expect base A/T/G/C/a/t/g/c in primer, but found {}",
+                    *each_base as char
+                );
                 std::process::exit(1)
             }
             each_base.to_ascii_uppercase() as char
@@ -240,6 +244,16 @@ pub fn parse_arguments() -> ArgMatches {
         .arg(
             output_arg
                 .clone()
+                .value_parser(|output: &str| {
+                    if !(output.ends_with(".fq") || output.ends_with(".fastq")) {
+                        eprintln!(
+                            "{}",
+                            Color::Red.paint("Error: output must ends with .fastq or .fq")
+                        );
+                        std::process::exit(1);
+                    }
+                    Result::<String, anyhow::Error>::Ok(output.to_string())
+                })
                 .help("Output the filtered fastq into this file or stdout, it will be truncated if it's a existing file. Compressed file is not supported. [default: stdout]"),
         )
         .arg(
@@ -304,6 +318,16 @@ pub fn parse_arguments() -> ArgMatches {
                 .help("Max gc content if --gc is set true"),
         )
         .arg(thread_arg.clone())
+        .arg(
+            Arg::new("max_bases")
+                .long("max_bases")
+                .action(ArgAction::Set)
+                .value_parser(value_parser!(u64))
+                .help("After the initial filtering based on length and quality values, \
+                just keep the best reads based on their quality values those total base count is greater \
+                than or equal to this value. If the total bases count \
+                is less than this value, then this parameter is useless.")
+        )
         .arg(
             Arg::new("retain_failed")
                 .long("retain_failed")
@@ -502,7 +526,7 @@ you can choice one from [LSK, RAD, ULK, RBK, PCS, PCB, NBD_1, NBD_2, ..., NBD_95
                 .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
         );
 
-        let amplicon_cmd = Command::new("amplicon")
+    let amplicon_cmd = Command::new("amplicon")
             .about("get draft consensus from Ligation Nanopore Long reads for amplicon")
             .arg(&input_arg)
             .arg(output_arg.clone()
