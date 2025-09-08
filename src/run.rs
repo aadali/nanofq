@@ -662,6 +662,7 @@ pub mod run_entry {
                             break;
                         }
                     }
+                    std::fs::remove_file(&tmp_filter_fastq)?;
                 }
             }
         }

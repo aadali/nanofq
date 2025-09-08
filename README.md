@@ -182,3 +182,30 @@ the rev strand with BP01 + CRTA_rev_com at 5'end, SSPII_rev_com + BP01_rev_com a
       |RA_ADAPTER we want to trim from reads                             | insert Seq
     5-GCTTGGGTGTTTAACCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA-...................-3
    ```
+   
+### amplicon
+```
+$ nanofq amplicon --help
+get draft consensus from Ligation Nanopore Long reads for amplicon
+
+Usage: nanofq amplicon [OPTIONS] --fwd <fwd> --rev <rev> --len <len>
+
+Options:
+  -i, --input <input>    The input fastq, may be a single fastq[.gz] or a directory containing some fastq[.gz] [default: stdin]
+  -o, --output <output>  output directory, if not exists, create it [default: ./]
+  -n, --name <name>      the tmp files and consensus fasta will be named by this value [default: draft_consensus]
+  -f, --fwd <fwd>        the forward primer of amplicon
+  -r, --rev <rev>        the reverse primer of amplicon
+  -l, --len <len>        estimated amplicon length,  more accurate, more better. shorter reads will be discarded directly
+      --mafft <mafft>    the mafft path, used to Multiple Sequence Alignment [default: mafft]
+  -N, --number <number>  top n best quality reads with appropriate lengths will be selected for mafft analysis. the bigger n, the slower it gets [default: 1000]
+  -m, --mode <mode>      How get primer position in reads. Find: exact match; Align: 10% mismatch is allowed [default: find] [possible values: find, align]
+  -h, --help             Print help
+```
+
+#### dependency
+[`mafft`](https://mafft.cbrc.jp/alignment/software/)
+### description
+Give the primers and expected length of amplicon, then find the primers at the ends of read by exact match with `find` mode or 10% mismatch with `align` mode with appropriate length.
+Trim all the sequence outside the primers range, keep top n reads with the highest quality scores, then use mafft to do Multi Sequence Alignment and get align results.
+Finally, get consensus sequence from the alignment file as draft consensus of amplicon
