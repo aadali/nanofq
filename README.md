@@ -206,6 +206,6 @@ Options:
 #### dependency
 [`mafft`](https://mafft.cbrc.jp/alignment/software/)
 ### description
-Give the primers and expected length of amplicon, then find the primers at the ends of read by exact match with `find` mode or 10% mismatch with `align` mode with appropriate length.
-Trim all the sequence outside the primers range, keep top n reads with the highest quality scores, then use mafft to do Multi Sequence Alignment and get align results.
-Finally, get consensus sequence from the alignment file as draft consensus of amplicon
+Give the primers and expected length of amplicon, then find the primers at the ends of read using exact match with `find` mode or allowing up to 10% mismatch with `align` mode, ensuring appropriate length.
+Trim all sequences outside the primers range, keep the top n reads with the highest quality scores, then use `mafft` to perform  Multi Sequence Alignment and obtain align results.
+Finally, get consensus sequence from the alignment file as draft consensus of the amplicon
