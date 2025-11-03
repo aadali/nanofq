@@ -25,6 +25,7 @@ Commands:
   stats   stats nanopore fastq, output the stats result, summary and figures
   filter  filter nanopore fastq by length, quality or gc content
   trim    trim adapter, barcode, primer that artificial sequence in nanopore fastq
+  amplicon get draft consensus from Ligation Nanopore Long reads for amplicon
   help    Print this message or the help of the given subcommand(s)
 
 Options:

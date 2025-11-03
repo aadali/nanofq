@@ -9,6 +9,7 @@ use flate2::read::MultiGzDecoder;
 use seq_io::fastq::{ OwnedRecord, Record };
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use ansi_term::Color;
 
 pub struct SubOwnedRecord {
     owned_record: OwnedRecord,
@@ -285,6 +286,10 @@ pub fn get_candidate_amplicon<P: AsRef<Path>>(
             }
         }
     };
+    if sub_owned_record_vec.len() < 3 {
+        eprintln!("{}", Color::Red.paint("few fastq records got"));
+        std::process::exit(1)
+    }
     Ok(sub_owned_record_vec)
 }
 
