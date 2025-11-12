@@ -190,7 +190,7 @@ pub fn parse_arguments() -> ArgMatches {
             .short('d')
             .long("use_dorado_quality")
             .action(ArgAction::SetTrue)
-            .help("use dorado q-score calculation, this means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value"))
+            .help("Use dorado q-score calculation, this means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value"))
         .arg(Arg::new("length")
             .short('l')
             .long("length")
@@ -301,7 +301,7 @@ pub fn parse_arguments() -> ArgMatches {
             .short('d')
             .long("use_dorado_quality")
             .action(ArgAction::SetTrue)
-            .help("use dorado q-score calculation, this means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value")
+            .help("Use dorado q-score calculation, this means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value")
         )
         .arg(
             Arg::new("gc")

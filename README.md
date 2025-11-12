@@ -13,7 +13,7 @@ cargo build --release
 ```
 > Note: For generating statistical plots, `python3` along with the `matplotlib` library is required.
 
-## usage
+## Usage
 
 ```
 $ ./nanofq --help
@@ -55,6 +55,7 @@ Options:
   -s, --summary <summary>    Output stats summary into this file, it will be truncated if it exists [default: ./NanofqStatsSummary.txt]
   -n, --topn <topn>          Write the top N longest reads and highest quality reads info into summary file [default: 5]
   -q, --quality <quality>    Count the reads number that whose quality is bigger than this value, multi value can be separated by comma [default: 25,20,18,15,12,10]
+  -d, --use_dorado_quality   Use dorado q-score calculation, this means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value
   -l, --length <length>      Count the reads number that whose length is bigger than this value if you set this parameter, multi values can be separated by comma
       --gc                   Whether to stats the gc content
   -t, --thread <thread>      How many threads will be used [default: 1]
@@ -79,7 +80,6 @@ nanofq stats -i test.fastq -o test001.stats.tsv -s test001.summary.txt -t 4 --pl
 ```
 ### filter
 ```
-$ nanofq filter --help
 filter nanopore fastq by length, quality or gc content
 
 Usage: nanofq filter [OPTIONS]
@@ -91,11 +91,15 @@ Options:
   -L, --max_len <max_len>              Min read length [default: 4294967295]
   -q, --min_qual <min_qual>            Min read qual [default: 1.0]
   -Q, --max_qual <max_qual>            Max read qual, but in most cases, you do not need to specify this value [default: 50.0]
+  -d, --use_dorado_quality             use dorado q-score calculation, this means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value
       --gc                             Whether gc content is used to filter read [default: false]
   -g, --min_gc <min_gc>                Min gc content if --gc is set true [default: 0.0]
   -G, --max_gc <max_gc>                Max gc content if --gc is set true [default: 1.0]
   -t, --thread <thread>                How many threads will be used [default: 1]
+      --max_bases <max_bases>          After the initial filtering based on length and quality values, just keep the best reads based on their quality values those total base count is greater than or equal to this value. If the total
+                                       bases count is less than this value, then this parameter is useless.
       --retain_failed <retain_failed>  Whether store the failed fastq, if set, this value should be the path of failed fastq. this file will be truncated if it exists
+  -h, --help                           Print help
 ```
 
 ### trim
@@ -210,3 +214,8 @@ Options:
 Give the primers and expected length of amplicon, then find the primers at the ends of read using exact match with `find` mode or allowing up to 10% mismatch with `align` mode, ensuring appropriate length.
 Trim all sequences outside the primers range, keep the top n reads with the highest quality scores, then use `mafft` to perform  Multi Sequence Alignment and obtain align results.
 Finally, get consensus sequence from the alignment file as draft consensus of the amplicon
+
+## ChangeLog
+### nanofq (v0.1.1) 2025-11.12
+1. add --use_dorado_quality parameter for stats and filter subcommands. Dorado [trim the leading 60 bases](https://software-docs.nanoporetech.com/dorado/latest/basecaller/qscore/#mean-q-score-calculation-in-dorado) if the sequence is longer than 60 bases when calculates read Q-score
+2. fix bug that meta info reserved in read name of stats output for dorado post basecalled fastq cause dorado use tab to sperate meta info of fastq record header

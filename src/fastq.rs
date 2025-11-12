@@ -81,12 +81,20 @@ where
     #[inline]
     fn calculate_read_quality(&self, use_dorado_quality: bool) -> (f64, f64) {
         let seq_real_len = self.seq().len();
-        let trim_leading = use_dorado_quality &&  seq_real_len > DORADO_TRIM_LEADING_BASE_NUMBER;
-        let seq_len = if trim_leading {seq_real_len - DORADO_TRIM_LEADING_BASE_NUMBER} else {seq_real_len} as f64;
+        let trim_leading = use_dorado_quality && seq_real_len > DORADO_TRIM_LEADING_BASE_NUMBER;
+        let seq_len = if trim_leading {
+            seq_real_len - DORADO_TRIM_LEADING_BASE_NUMBER
+        } else {
+            seq_real_len
+        } as f64;
         let avg_err_prob = self
             .qual()
             .iter()
-            .skip(if trim_leading {DORADO_TRIM_LEADING_BASE_NUMBER} else {0})
+            .skip(if trim_leading {
+                DORADO_TRIM_LEADING_BASE_NUMBER
+            } else {
+                0
+            })
             .map(|x| get_q2p_table()[*x as usize])
             .sum::<f64>()
             / seq_len;
@@ -103,12 +111,19 @@ where
         let len = self.seq().len();
         let read_quality = self.calculate_read_quality(use_dorado_quality);
         let gc = if gc { Some(self.gc_count()) } else { None };
-
         (
             Box::new(
-                self.id()
-                    .expect(&Color::Red.paint("parse id to str error").to_string())
-                    .to_string(),
+                str::from_utf8(
+                    self.head()
+                        .split(|b| *b == b' ' || *b == b'\t') // the header of dorado basecaller output fastq separated by tab
+                        .next()
+                        .unwrap(),
+                )
+                .expect(&Color::Red.paint(format!(
+                    "parse read id failed in record header: {}",
+                    str::from_utf8(self.head()).unwrap_or("unknow header")
+                )))
+                .to_string(),
             ),
             len,
             read_quality,
@@ -133,12 +148,20 @@ where
             && gc_passed;
         (
             is_passed,
-                Box::new(
-                    self.id()
-                        .expect(&Color::Red.paint("parse id to str error").to_string())
-                        .to_string(),
-                ),
-                seq_len,
+            Box::new(
+                str::from_utf8(
+                    self.head()
+                        .split(|b| *b == b' ' || *b == b'\t')
+                        .next()
+                        .unwrap(),
+                )
+                .expect(&Color::Red.paint(format!(
+                    "parse read id failed in record header: {}",
+                    str::from_utf8(self.head()).unwrap_or("unknow header")
+                )))
+                .to_string(),
+            ),
+            seq_len,
             this_read_qual,
         )
     }
@@ -237,7 +260,11 @@ impl<R: Read> FastqReader<R> {
                         );
                         let read_filter_res = ref_record.is_passed(fo);
                         if read_filter_res.0 {
-                            stats_results.push((read_filter_res.1, read_filter_res.2, read_filter_res.3));
+                            stats_results.push((
+                                read_filter_res.1,
+                                read_filter_res.2,
+                                read_filter_res.3,
+                            ));
                             NanoRead::write(&ref_record, writer)?
                         }
                     }
@@ -257,7 +284,11 @@ impl<R: Read> FastqReader<R> {
                         );
                         let read_filter_res = ref_record.is_passed(fo);
                         if read_filter_res.0 {
-                            stats_results.push((read_filter_res.1, read_filter_res.2, read_filter_res.3));
+                            stats_results.push((
+                                read_filter_res.1,
+                                read_filter_res.2,
+                                read_filter_res.3,
+                            ));
                             NanoRead::write(&ref_record, writer)?
                         } else {
                             NanoRead::write(&ref_record, failed_writer)?
