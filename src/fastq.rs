@@ -10,6 +10,7 @@ use std::io::{BufWriter, Read, Write};
 use std::ops::{Deref, DerefMut};
 
 const BUFF: usize = 1024 * 1024;
+const DORADO_TRIM_LEADING_BASE_NUMBER: usize = 60;
 
 // (f64, f64): (this_read_average_error_pro, this_read_quality)
 // (ReadID, Length, (ReadAverageErrProb, ReadQuality), Option<GCContent>)
@@ -19,6 +20,7 @@ pub type EachStats = (Box<String>, usize, (f64, f64), Option<f64>);
 pub(crate) struct FilterOption<'a> {
     pub min_len: usize,
     pub max_len: usize,
+    pub use_dorado_quality: bool,
     pub min_qual: f64,
     pub max_qual: f64,
     pub gc: bool,
@@ -38,9 +40,9 @@ impl<'a> FilterOption<'a> {
 }
 pub trait NanoRead {
     fn gc_count(&self) -> f64;
-    fn calculate_read_quality(&self) -> (f64, f64);
+    fn calculate_read_quality(&self, use_dorado_quality: bool) -> (f64, f64);
 
-    fn stats(&self, gc: bool) -> EachStats;
+    fn stats(&self, gc: bool, use_dorado_quality: bool) -> EachStats;
 
     fn is_passed(&self, fo: &FilterOption) -> (bool, Box<String>, usize, f64);
 
@@ -77,11 +79,14 @@ where
     }
 
     #[inline]
-    fn calculate_read_quality(&self) -> (f64, f64) {
-        let seq_len = self.seq().len() as f64;
+    fn calculate_read_quality(&self, use_dorado_quality: bool) -> (f64, f64) {
+        let seq_real_len = self.seq().len();
+        let trim_leading = use_dorado_quality &&  seq_real_len > DORADO_TRIM_LEADING_BASE_NUMBER;
+        let seq_len = if trim_leading {seq_real_len - DORADO_TRIM_LEADING_BASE_NUMBER} else {seq_real_len} as f64;
         let avg_err_prob = self
             .qual()
             .iter()
+            .skip(if trim_leading {DORADO_TRIM_LEADING_BASE_NUMBER} else {0})
             .map(|x| get_q2p_table()[*x as usize])
             .sum::<f64>()
             / seq_len;
@@ -94,9 +99,9 @@ where
     }
 
     #[inline]
-    fn stats(&self, gc: bool) -> EachStats {
+    fn stats(&self, gc: bool, use_dorado_quality: bool) -> EachStats {
         let len = self.seq().len();
-        let read_quality = self.calculate_read_quality();
+        let read_quality = self.calculate_read_quality(use_dorado_quality);
         let gc = if gc { Some(self.gc_count()) } else { None };
 
         (
@@ -120,7 +125,7 @@ where
         } else {
             true
         };
-        let this_read_qual = self.calculate_read_quality().1;
+        let this_read_qual = self.calculate_read_quality(fo.use_dorado_quality).1;
         let is_passed = seq_len >= fo.min_len
             && seq_len <= fo.max_len
             && this_read_qual > fo.min_qual
@@ -192,7 +197,7 @@ impl<R: Read> FastqReader<R> {
     }
 
     #[inline]
-    pub(crate) fn stats(&mut self, gc: bool) -> Vec<EachStats> {
+    pub(crate) fn stats(&mut self, gc: bool, use_dorado_quality: bool) -> Vec<EachStats> {
         let mut stats_result = vec![];
         loop {
             let ref_record_opt = self.next();
@@ -204,7 +209,7 @@ impl<R: Read> FastqReader<R> {
                                 .paint("Error: failed to get fastq record")
                                 .to_string(),
                         )
-                        .stats(gc),
+                        .stats(gc, use_dorado_quality),
                 )
             } else {
                 break;

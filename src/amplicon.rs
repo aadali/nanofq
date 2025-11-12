@@ -321,8 +321,8 @@ pub fn filter_candidate_amplicon(
     }
     final_amplicon.sort_by(|first, second| {
        first
-            .calculate_read_quality()
-            .partial_cmp(&second.calculate_read_quality())
+            .calculate_read_quality(false)
+            .partial_cmp(&second.calculate_read_quality(false))
             .unwrap()
     });
     final_amplicon.into_iter().take(number).collect()
