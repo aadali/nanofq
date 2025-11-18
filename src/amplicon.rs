@@ -1,15 +1,15 @@
-use std::fmt::Display;
 use crate::alignment::{LocalAligner, Scores};
 use crate::fastq::{FastqReader, NanoRead};
 use crate::trim::adapter::TrimConfig;
 use crate::trim::trim_seq;
 use crate::utils::rev_com;
+use ansi_term::Color;
 use bio::alphabets::dna;
 use flate2::read::MultiGzDecoder;
-use seq_io::fastq::{ OwnedRecord, Record };
+use seq_io::fastq::{OwnedRecord, Record};
+use std::fmt::Display;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use ansi_term::Color;
 
 pub struct SubOwnedRecord {
     owned_record: OwnedRecord,
@@ -70,64 +70,6 @@ impl SubOwnedRecord {
     }
 }
 
-pub enum QueryAmpMode {
-    Find,
-    Align,
-}
-
-fn get_suitable_amplicon_by_find<R: Read>(
-    fastq_reader: &mut FastqReader<R>,
-    end5: &str,
-    end3: &str,
-    rev_com_end5: &str,
-    rev_com_end3: &str,
-    est_len: usize,
-) -> Vec<SubOwnedRecord> {
-    let mut candidate_amplicon = vec![];
-    loop {
-        if let Some(ref_record_res) = fastq_reader.next() {
-            match ref_record_res {
-                Ok(ref_record) => {
-                    if ref_record.seq().len() < est_len {
-                        continue;
-                    }
-                    let seq_str = std::str::from_utf8(ref_record.seq())
-                        .expect("Convert ref_record.seq() to &str failed");
-                    let (trim_from, trim_to, is_rev_com) =
-                        if let (Some(trim_from), Some(trim_to_)) =
-                            (seq_str.find(end5), seq_str.find(end3))
-                        {
-                            (trim_from, trim_to_ + end3.len() - 1, false)
-                        } else {
-                            if let (Some(trim_from), Some(trim_to_)) =
-                                (seq_str.find(rev_com_end5), seq_str.find(rev_com_end3))
-                            {
-                                (trim_from, trim_to_ + rev_com_end3.len() - 1, true)
-                            } else {
-                                continue;
-                            }
-                        };
-                    if trim_to > trim_from && trim_to - trim_from > est_len-1 {
-                        candidate_amplicon.push(SubOwnedRecord {
-                            owned_record: ref_record.to_owned_record(),
-                            start: trim_from,
-                            end: trim_to,
-                            rev_com: is_rev_com,
-                        })
-                    }
-                }
-                Err(err) => {
-                    eprintln!("{:?}", err);
-                    std::process::exit(1)
-                }
-            }
-        } else {
-            break;
-        }
-    }
-    candidate_amplicon
-}
-
 fn get_suitable_amplicon_by_align<R: Read>(
     fastq_reader: &mut FastqReader<R>,
     end5: &str,
@@ -135,6 +77,7 @@ fn get_suitable_amplicon_by_align<R: Read>(
     rev_com_end5: &str,
     rev_com_end3: &str,
     est_len: usize,
+    range: u8,
 ) -> Vec<SubOwnedRecord> {
     let mut candidate_amplicon = vec![];
     let end_align_para = (180usize, 0.9, 0.9);
@@ -152,11 +95,13 @@ fn get_suitable_amplicon_by_align<R: Read>(
         gap_extend: -1,
     };
     let mut local_aligner = LocalAligner::new((200, 200), scores);
+    let low = (est_len as f64 * ((100 - range) as f64 / 100.0)) as usize;
+    let up = (est_len as f64 * ((100 + range) as f64 / 100.0)) as usize;
     loop {
         if let Some(ref_record_res) = fastq_reader.next() {
             match ref_record_res {
                 Ok(ref_record) => {
-                    if ref_record.seq().len() < est_len {
+                    if ref_record.seq().len() < low || ref_record.seq().len() > up {
                         continue;
                     }
                     let (trim_from, trim_to, _, is_rev_com) = trim_seq(
@@ -198,7 +143,7 @@ pub fn get_candidate_amplicon<P: AsRef<Path>>(
     fwd_primer: &str,
     rev_primer: &str,
     est_len: usize,
-    query_amp_mode: &QueryAmpMode,
+    range: u8,
 ) -> Result<Vec<SubOwnedRecord>, anyhow::Error> {
     let end5 = fwd_primer;
     let revcom_rev_primer = dna::revcomp(rev_primer.as_bytes());
@@ -210,80 +155,41 @@ pub fn get_candidate_amplicon<P: AsRef<Path>>(
         .expect("Get reverse complementary sequence of fwd primer failed");
     let sub_owned_record_vec = if input_fastq.is_none() {
         let mut fastq_reader = FastqReader::new(std::io::stdin());
-        match query_amp_mode {
-            QueryAmpMode::Find => get_suitable_amplicon_by_find(
-                &mut fastq_reader,
-                end5,
-                end3,
-                rev_com_end5,
-                rev_com_end3,
-                est_len,
-            ),
-            QueryAmpMode::Align => get_suitable_amplicon_by_align(
-                &mut fastq_reader,
-                end5,
-                end3,
-                rev_com_end5,
-                rev_com_end3,
-                est_len,
-            ),
-        }
+        get_suitable_amplicon_by_align(
+            &mut fastq_reader,
+            end5,
+            end3,
+            rev_com_end5,
+            rev_com_end3,
+            est_len,
+            range,
+        )
     } else {
         let input_fastq_path = PathBuf::from(input_fastq.unwrap().as_ref());
         debug_assert!(input_fastq_path.is_file());
-        match query_amp_mode {
-            QueryAmpMode::Find => {
-                if input_fastq_path.to_str().unwrap().ends_with(".gz") {
-                    let mut fastq_reader = FastqReader::new(MultiGzDecoder::new(
-                        std::fs::File::open(&input_fastq_path)?,
-                    ));
-                    get_suitable_amplicon_by_find(
-                        &mut fastq_reader,
-                        end5,
-                        end3,
-                        rev_com_end5,
-                        rev_com_end3,
-                        est_len,
-                    )
-                } else {
-                    let mut fastq_reader =
-                        FastqReader::new(std::fs::File::open(&input_fastq_path)?);
-                    get_suitable_amplicon_by_find(
-                        &mut fastq_reader,
-                        end5,
-                        end3,
-                        rev_com_end5,
-                        rev_com_end3,
-                        est_len,
-                    )
-                }
-            }
-            QueryAmpMode::Align => {
-                if input_fastq_path.to_str().unwrap().ends_with(".gz") {
-                    let mut fastq_reader = FastqReader::new(MultiGzDecoder::new(
-                        std::fs::File::open(&input_fastq_path)?,
-                    ));
-                    get_suitable_amplicon_by_align(
-                        &mut fastq_reader,
-                        end5,
-                        end3,
-                        rev_com_end5,
-                        rev_com_end3,
-                        est_len,
-                    )
-                } else {
-                    let mut fastq_reader =
-                        FastqReader::new(std::fs::File::open(&input_fastq_path)?);
-                    get_suitable_amplicon_by_align(
-                        &mut fastq_reader,
-                        end5,
-                        end3,
-                        rev_com_end5,
-                        rev_com_end3,
-                        est_len,
-                    )
-                }
-            }
+        if input_fastq_path.to_str().unwrap().ends_with(".gz") {
+            let mut fastq_reader =
+                FastqReader::new(MultiGzDecoder::new(std::fs::File::open(&input_fastq_path)?));
+            get_suitable_amplicon_by_align(
+                &mut fastq_reader,
+                end5,
+                end3,
+                rev_com_end5,
+                rev_com_end3,
+                est_len,
+                range,
+            )
+        } else {
+            let mut fastq_reader = FastqReader::new(std::fs::File::open(&input_fastq_path)?);
+            get_suitable_amplicon_by_align(
+                &mut fastq_reader,
+                end5,
+                end3,
+                rev_com_end5,
+                rev_com_end3,
+                est_len,
+                range,
+            )
         }
     };
     if sub_owned_record_vec.len() < 3 {
@@ -296,7 +202,9 @@ pub fn get_candidate_amplicon<P: AsRef<Path>>(
 pub fn filter_candidate_amplicon(
     candidate_amplicon: Vec<SubOwnedRecord>,
     number: usize,
-) -> Vec<SubOwnedRecord> {
+) -> Vec<SubOwnedRecord>
+// Retain the data within half-standard deviation
+{
     let mut final_amplicon = vec![];
     let total_len = candidate_amplicon
         .iter()
@@ -320,7 +228,7 @@ pub fn filter_candidate_amplicon(
         }
     }
     final_amplicon.sort_by(|first, second| {
-       first
+        first
             .calculate_read_quality(false)
             .partial_cmp(&second.calculate_read_quality(false))
             .unwrap()
@@ -350,18 +258,27 @@ pub fn mafft_msa<P: AsRef<Path> + Display>(
     msa_output_path: &P,
     mafft_path: &str,
 ) -> Result<(), anyhow::Error> {
-    let cmd = format!("{}  --auto --thread 4 {} > {}", mafft_path, msa_input_path, msa_output_path);
+    let cmd = format!(
+        "{}  --auto --thread 4 {} > {}",
+        mafft_path, msa_input_path, msa_output_path
+    );
 
     let msa_res = std::process::Command::new("/bin/bash")
-    .arg("-c")
-    .arg(&cmd)
-    .output();
+        .arg("-c")
+        .arg(&cmd)
+        .output();
     match msa_res {
         Ok(msa) => {
             if !msa.status.success() {
                 eprintln!("{}", ansi_term::Color::Red.paint(cmd));
-                eprintln!("{}", ansi_term::Color::Red.paint(std::str::from_utf8(&msa.stderr)?));
-                eprintln!("{}", ansi_term::Color::Red.paint("Multiple Sequence Alignment by mafft failed"));
+                eprintln!(
+                    "{}",
+                    ansi_term::Color::Red.paint(std::str::from_utf8(&msa.stderr)?)
+                );
+                eprintln!(
+                    "{}",
+                    ansi_term::Color::Red.paint("Multiple Sequence Alignment by mafft failed")
+                );
                 std::process::exit(1);
             }
         }

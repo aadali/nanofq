@@ -201,21 +201,25 @@ Options:
   -n, --name <name>      the tmp files and consensus fasta will be named by this value [default: draft_consensus]
   -f, --fwd <fwd>        the forward primer of amplicon
   -r, --rev <rev>        the reverse primer of amplicon
-  -l, --len <len>        estimated amplicon length,  more accurate, more better. shorter reads will be discarded directly
+  -l, --len <len>        estimated amplicon length,  more accurate, more better.
+  -R, --range <range>    reads whose length in range of this value percent of estimate length will be used [default: 10]
       --mafft <mafft>    the mafft path, used to Multiple Sequence Alignment [default: mafft]
-  -N, --number <number>  top n best quality reads with appropriate lengths will be selected for mafft analysis. the bigger n, the slower it gets [default: 1000]
-  -m, --mode <mode>      How get primer position in reads. Find: exact match; Align: 10% mismatch is allowed [default: find] [possible values: find, align]
+  -N, --number <number>  top n best quality reads with appropriate lengths will be selected for mafft analysis. the bigger n, the slower it gets [default: 500]
   -h, --help             Print help
 ```
 
 #### dependency
 [`mafft`](https://mafft.cbrc.jp/alignment/software/)
 ### description
-Give the primers and expected length of amplicon, then find the primers at the ends of read using exact match with `find` mode or allowing up to 10% mismatch with `align` mode, ensuring appropriate length.
+Give the primers and expected length of amplicon, then find the primers at the ends of read with local alignment, ensuring appropriate length.
 Trim all sequences outside the primers range, keep the top n reads with the highest quality scores, then use `mafft` to perform  Multi Sequence Alignment and obtain align results.
 Finally, get consensus sequence from the alignment file as draft consensus of the amplicon
 
 ## ChangeLog
-### nanofq (v0.1.1) 2025-11.12
+### nanofq (v0.1.2) 2025-11-18
+1. add --range parameter for amplicon subcommand
+2. remove find mode in amplicon subcommand, always use local alignment to find primers of amplicon
+
+### nanofq (v0.1.1) 2025-11-12
 1. add --use_dorado_quality parameter for stats and filter subcommands. Dorado [trim the leading 60 bases](https://software-docs.nanoporetech.com/dorado/latest/basecaller/qscore/#mean-q-score-calculation-in-dorado) if the sequence is longer than 60 bases when calculates read Q-score
 2. fix bug that meta info reserved in read name of stats output for dorado post basecalled fastq cause dorado use tab to sperate meta info of fastq record header

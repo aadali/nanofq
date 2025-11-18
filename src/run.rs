@@ -384,7 +384,7 @@ mod sub_run {
 pub mod run_entry {
     use crate::alignment::{LocalAligner, Scores};
     use crate::amplicon::{
-        QueryAmpMode, filter_candidate_amplicon, get_candidate_amplicon, get_consensus_from_msa,
+        filter_candidate_amplicon, get_candidate_amplicon, get_consensus_from_msa,
         mafft_msa, write_final_amplicon,
     };
     use crate::fastq::{FastqReader, FilterOption, NanoRead};
@@ -883,15 +883,10 @@ pub mod run_entry {
         let fwd = amplicon_cmd.get_one::<String>("fwd").unwrap();
         let rev = amplicon_cmd.get_one::<String>("rev").unwrap();
         let est_len = *amplicon_cmd.get_one::<u32>("len").unwrap() as usize;
+        let range = amplicon_cmd.get_one::<u8>("range").unwrap();
         let mafft = amplicon_cmd.get_one::<String>("mafft").unwrap();
         let number = *amplicon_cmd.get_one::<u32>("number").unwrap() as usize;
         let name = amplicon_cmd.get_one::<String>("name").unwrap();
-        let x = amplicon_cmd.get_one::<String>("mode").unwrap();
-        let mode = if x == "find" {
-            QueryAmpMode::Find
-        } else {
-            QueryAmpMode::Align
-        };
         let output_dir = Path::new(output);
         if !output_dir.exists() {
             std::fs::create_dir_all(&output_dir)?;
@@ -903,7 +898,7 @@ pub mod run_entry {
                 debug_assert!(fqs.len() > 0);
                 fqs.iter()
                     .map(|fq| {
-                        get_candidate_amplicon(Some(fq), fwd, rev, est_len, &mode).expect(&format!(
+                        get_candidate_amplicon(Some(fq), fwd, rev, est_len, *range).expect(&format!(
                             "Get candidate amplicon from {} failed",
                             fq.to_str().unwrap()
                         ))
@@ -911,11 +906,11 @@ pub mod run_entry {
                     .flatten()
                     .collect::<Vec<_>>()
             } else {
-                get_candidate_amplicon(Some(input_path), fwd, rev, est_len, &mode)
+                get_candidate_amplicon(Some(input_path), fwd, rev, est_len, *range)
                     .expect(&format!("Get candidate amplicon from {} failed", input))
             }
         } else {
-            get_candidate_amplicon(Option::<&str>::None, fwd, rev, est_len, &mode)?
+            get_candidate_amplicon(Option::<&str>::None, fwd, rev, est_len, *range)?
         };
         let final_amplicon = filter_candidate_amplicon(candidate_amplicon, number);
         let fq_file_path = output_dir.join("candidate_amplicon.fastq");

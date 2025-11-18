@@ -1,6 +1,6 @@
 [package]
 name = "nanofq"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 authors = ["aadali <aaaliyin@gmail.com>"]
 rust-version = "1.85.0"
