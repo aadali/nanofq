@@ -50,20 +50,20 @@ stats nanopore fastq, output the stats result, summary and figures
 Usage: nanofq stats [OPTIONS]
 
 Options:
-  -i, --input <input>        The input fastq, may be a single fastq[.gz] or a directory containing some fastq[.gz] [default: stdin]
-  -o, --output <output>      Output the stats result into this, a tsv file or stdout. it will be truncated if it's a existing file. [default: stdout]
-  -s, --summary <summary>    Output stats summary into this file, it will be truncated if it exists [default: ./NanofqStatsSummary.txt]
-  -n, --topn <topn>          Write the top N longest reads and highest quality reads info into summary file [default: 5]
-  -q, --quality <quality>    Count the reads number that whose quality is bigger than this value, multi value can be separated by comma [default: 25,20,18,15,12,10]
-  -d, --use_dorado_quality   Use dorado q-score calculation, this means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value
-  -l, --length <length>      Count the reads number that whose length is bigger than this value if you set this parameter, multi values can be separated by comma
-      --gc                   Whether to stats the gc content
-  -t, --thread <thread>      How many threads will be used [default: 1]
-      --python <python>      the python3 path, and matplotlib is needed [default: python3]
-  -p, --plot <plot>          Whether to make plot, if it's set, it should be the prefix of figure path without filename extension
-  -f, --format <format>      Which format figure do you want if --plot is true, this para can be set multi times [default: pdf] [possible values: png, pdf, jpg, svg]
-      --quantile <quantile>  the shortest ratio and longest ratio of reads will not be rendered on figure, should be in range(0.0, 1.0) [default: 0.01]
-  -h, --help                 Print help
+  -i, --input <input>            The input fastq, may be a single fastq[.gz] or a directory containing some fastq[.gz] [default: stdin]
+  -o, --output <output>          Output the stats result into this, a tsv file or stdout. it will be truncated if it's a existing file. [default: stdout]
+  -s, --summary <summary>        Output stats summary into this file, it will be truncated if it exists [default: ./NanofqStatsSummary.txt]
+  -n, --topn <topn>              Write the top N longest reads and highest quality reads info into summary file [default: 5]
+  -q, --quality <quality>        Count the reads number that whose quality is bigger than this value, multi value can be separated by comma [default: 25,20,18,15,12,10]
+  -d, --dont_use_dorado_quality  Don't use dorado q-score calculation. Using dorado quality means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value
+  -l, --length <length>          Count the reads number that whose length is bigger than this value if you set this parameter, multi values can be separated by comma
+      --gc                       Whether to stats the gc content
+  -t, --thread <thread>          How many threads will be used [default: 1]
+      --python <python>          the python3 path, and matplotlib is needed [default: python3]
+  -p, --plot <plot>              Whether to make plot, if it's set, it should be the prefix of figure path without filename extension
+  -f, --format <format>          Which format figure do you want if --plot is true, this para can be set multi times [default: pdf] [possible values: png, pdf, jpg, svg]
+      --quantile <quantile>      the shortest ratio and longest ratio of reads will not be rendered on figure, should be in range(0.0, 1.0) [default: 0.01]
+  -h, --help                     Print help
 ```
 The program processes all input fastqs and outputs the statistical results to the specified `--output` file and a summary to the `--summary` file. If the `--plot` option is enabled, it also generates visualizations similar to the following:
 
@@ -91,7 +91,7 @@ Options:
   -L, --max_len <max_len>              Min read length [default: 4294967295]
   -q, --min_qual <min_qual>            Min read qual [default: 1.0]
   -Q, --max_qual <max_qual>            Max read qual, but in most cases, you do not need to specify this value [default: 50.0]
-  -d, --use_dorado_quality             use dorado q-score calculation, this means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value
+  -d, --dont_use_dorado_quality        Don't use dorado q-score calculation. Using dorado quality means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value
       --gc                             Whether gc content is used to filter read [default: false]
   -g, --min_gc <min_gc>                Min gc content if --gc is set true [default: 0.0]
   -G, --max_gc <max_gc>                Max gc content if --gc is set true [default: 1.0]
@@ -214,6 +214,10 @@ Options:
 Give the primers and expected length of amplicon, then find the primers at the ends of read with local alignment, ensuring appropriate length.
 Trim all sequences outside the primers range, keep the top n reads with the highest quality scores, then use `mafft` to perform  Multi Sequence Alignment and obtain align results.
 Finally, get consensus sequence from the alignment file as draft consensus of the amplicon
+
+## ChangeLog
+### nanofq (v0.1.3) 2025-11-20
+1. change --use_dorado_quality parameter in filter and stats subcommands to --dont_use_dorado_quality and its logic
 
 ## ChangeLog
 ### nanofq (v0.1.2) 2025-11-18

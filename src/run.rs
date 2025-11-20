@@ -49,26 +49,26 @@ mod sub_run {
         use std::sync::mpsc::Receiver;
         use std::thread;
 
-        fn stats_receiver(receiver: Receiver<RecordSet>, gc: bool, use_dorado_quality: bool) -> Vec<EachStats> {
+        fn stats_receiver(receiver: Receiver<RecordSet>, gc: bool, dont_use_dorado_quality: bool) -> Vec<EachStats> {
             let mut all_stats: Vec<EachStats> = vec![];
             for record_set in receiver {
                 let record_vec = record_set.into_iter().collect::<Vec<RefRecord>>();
                 all_stats.extend(
                     record_vec
                         .into_par_iter()
-                        .map(|x| x.stats(gc, use_dorado_quality))
+                        .map(|x| x.stats(gc, dont_use_dorado_quality))
                         .collect::<Vec<EachStats>>(),
                 );
             }
             all_stats
         }
 
-        pub fn stats<R>(reader: R, thread: usize, gc: bool, use_dorado_quality: bool) -> Vec<EachStats>
+        pub fn stats<R>(reader: R, thread: usize, gc: bool, dont_use_dorado_quality: bool) -> Vec<EachStats>
         where
             R: Read + Send + Any,
         {
             if thread == 1 {
-                FastqReader::new(reader).stats(gc, use_dorado_quality)
+                FastqReader::new(reader).stats(gc, dont_use_dorado_quality)
             } else {
                 let (sender, receiver) = mpsc::sync_channel(1000);
                 let _ = thread::spawn(move || {
@@ -84,11 +84,11 @@ mod sub_run {
                     }
                     Result::<(), anyhow::Error>::Ok(())
                 });
-                stats_receiver(receiver, gc, use_dorado_quality)
+                stats_receiver(receiver, gc, dont_use_dorado_quality)
             }
         }
 
-        pub fn stats_fastq_dir(path: &Path, thread: usize, gc: bool, use_dorado_quality: bool) -> Vec<EachStats> {
+        pub fn stats_fastq_dir(path: &Path, thread: usize, gc: bool, dont_use_dorado_quality: bool) -> Vec<EachStats> {
             let fastqs = collect_fastq_dir(path).unwrap();
             fastqs
                 .into_par_iter()
@@ -98,10 +98,10 @@ mod sub_run {
                             MultiGzDecoder::new(BufReader::new(File::open(fq).unwrap())),
                             thread,
                             gc,
-                            use_dorado_quality
+                            dont_use_dorado_quality
                         )
                     } else {
-                        stats(BufReader::new(File::open(fq).unwrap()), thread, gc, use_dorado_quality)
+                        stats(BufReader::new(File::open(fq).unwrap()), thread, gc, dont_use_dorado_quality)
                     }
                 })
                 .flatten()
@@ -400,7 +400,7 @@ pub mod run_entry {
     use seq_io::fastq::Record;
     use std::collections::HashSet;
     use std::fs::File;
-    use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+    use std::io::{ BufReader, BufWriter, Read, Write};
     use std::path::Path;
 
     pub fn run_stats(stats_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
@@ -409,7 +409,7 @@ pub mod run_entry {
         let summary = stats_cmd.get_one::<String>("summary").unwrap();
         let topn = stats_cmd.get_one::<u16>("topn").unwrap();
         let quality = stats_cmd.get_one::<Vec<f64>>("quality").unwrap();
-        let use_dorado_quality = stats_cmd.get_flag("use_dorado_quality");
+        let dont_use_dorado_quality = stats_cmd.get_flag("dont_use_dorado_quality");
         let lengths = stats_cmd.get_one::<Vec<usize>>("length");
         let gc = stats_cmd.get_flag("gc");
         let thread = stats_cmd.get_one::<u16>("thread").unwrap();
@@ -427,7 +427,7 @@ pub mod run_entry {
 
         let mut stats_result = match input {
             // None => stats_result = stats_stdin(*thread as usize, gc),
-            None => stats(std::io::stdin(), *thread as usize, gc, use_dorado_quality),
+            None => stats(std::io::stdin(), *thread as usize, gc, dont_use_dorado_quality),
             Some(input) => {
                 let input_path = Path::new(input);
                 if input_path.is_file() {
@@ -436,13 +436,13 @@ pub mod run_entry {
                             MultiGzDecoder::new(BufReader::new(File::open(input)?)),
                             *thread as usize,
                             gc,
-                            use_dorado_quality
+                            dont_use_dorado_quality
                         )
                     } else {
-                        stats(BufReader::new(File::open(input)?), *thread as usize, gc, use_dorado_quality)
+                        stats(BufReader::new(File::open(input)?), *thread as usize, gc, dont_use_dorado_quality)
                     }
                 } else {
-                    stats_fastq_dir(input_path, *thread as usize, gc, use_dorado_quality)
+                    stats_fastq_dir(input_path, *thread as usize, gc, dont_use_dorado_quality)
                 }
             }
         };
@@ -497,7 +497,7 @@ pub mod run_entry {
         let output = filter_cmd.get_one::<String>("output");
         let min_len = filter_cmd.get_one::<usize>("min_len").unwrap();
         let max_len = filter_cmd.get_one::<usize>("max_len").unwrap();
-        let use_dorado_quality = filter_cmd.get_flag("use_dorado_quality");
+        let dont_use_dorado_quality = filter_cmd.get_flag("dont_use_dorado_quality");
         let min_qual = filter_cmd.get_one::<f64>("min_qual").unwrap();
         let max_qual = filter_cmd.get_one::<f64>("max_qual").unwrap();
         let gc = filter_cmd.get_flag("gc");
@@ -509,7 +509,7 @@ pub mod run_entry {
         let filter_option = FilterOption {
             min_len: *min_len,
             max_len: *max_len,
-            use_dorado_quality,
+            dont_use_dorado_quality,
             min_qual: *min_qual,
             max_qual: *max_qual,
             gc,

@@ -11,12 +11,13 @@ mod run;
 mod summary;
 mod trim;
 mod utils;
+mod bam;
 
 use crate::run::run_entry::{run_amplicon, run_filter, run_stats, run_trim};
 use std::time::Instant;
 
 fn main() -> Result<(), anyhow::Error> {
-    let start = Instant::now();
+    let _start = Instant::now();
     let matches = arguments::parse_arguments();
     let main_result = if let Some(stats_cmd) = matches.subcommand_matches("stats") {
         run_stats(stats_cmd)

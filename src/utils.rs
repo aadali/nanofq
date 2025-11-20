@@ -1,9 +1,16 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
+use ansi_term::Color;
 
 static DEGE_BASES: OnceLock<HashMap<u8, HashSet<u8>>> = OnceLock::new();
 static BASES: OnceLock<HashMap<u8, u8>> = OnceLock::new();
 static Q2P_TABLE: OnceLock<[f64; 128]> = OnceLock::new();
+
+pub fn quit_with_error(msg: &str) {
+    eprintln!();
+    eprintln!("{}", Color::Red.paint(msg));
+    std::process::exit(1)
+}
 
 pub fn get_dege_bases() -> &'static HashMap<u8, HashSet<u8>> {
     DEGE_BASES.get_or_init(|| {
