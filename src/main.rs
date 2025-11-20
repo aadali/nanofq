@@ -11,7 +11,6 @@ mod run;
 mod summary;
 mod trim;
 mod utils;
-mod bam;
 
 use crate::run::run_entry::{run_amplicon, run_filter, run_stats, run_trim};
 use std::time::Instant;
