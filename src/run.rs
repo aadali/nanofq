@@ -49,7 +49,11 @@ mod sub_run {
         use std::sync::mpsc::Receiver;
         use std::thread;
 
-        fn stats_receiver(receiver: Receiver<RecordSet>, gc: bool, dont_use_dorado_quality: bool) -> Vec<EachStats> {
+        fn stats_receiver(
+            receiver: Receiver<RecordSet>,
+            gc: bool,
+            dont_use_dorado_quality: bool,
+        ) -> Vec<EachStats> {
             let mut all_stats: Vec<EachStats> = vec![];
             for record_set in receiver {
                 let record_vec = record_set.into_iter().collect::<Vec<RefRecord>>();
@@ -63,7 +67,12 @@ mod sub_run {
             all_stats
         }
 
-        pub fn stats<R>(reader: R, thread: usize, gc: bool, dont_use_dorado_quality: bool) -> Vec<EachStats>
+        pub fn stats<R>(
+            reader: R,
+            thread: usize,
+            gc: bool,
+            dont_use_dorado_quality: bool,
+        ) -> Vec<EachStats>
         where
             R: Read + Send + Any,
         {
@@ -88,7 +97,12 @@ mod sub_run {
             }
         }
 
-        pub fn stats_fastq_dir(path: &Path, thread: usize, gc: bool, dont_use_dorado_quality: bool) -> Vec<EachStats> {
+        pub fn stats_fastq_dir(
+            path: &Path,
+            thread: usize,
+            gc: bool,
+            dont_use_dorado_quality: bool,
+        ) -> Vec<EachStats> {
             let fastqs = collect_fastq_dir(path).unwrap();
             fastqs
                 .into_par_iter()
@@ -98,10 +112,15 @@ mod sub_run {
                             MultiGzDecoder::new(BufReader::new(File::open(fq).unwrap())),
                             thread,
                             gc,
-                            dont_use_dorado_quality
+                            dont_use_dorado_quality,
                         )
                     } else {
-                        stats(BufReader::new(File::open(fq).unwrap()), thread, gc, dont_use_dorado_quality)
+                        stats(
+                            BufReader::new(File::open(fq).unwrap()),
+                            thread,
+                            gc,
+                            dont_use_dorado_quality,
+                        )
                     }
                 })
                 .flatten()
@@ -384,9 +403,10 @@ mod sub_run {
 pub mod run_entry {
     use crate::alignment::{LocalAligner, Scores};
     use crate::amplicon::{
-        filter_candidate_amplicon, get_candidate_amplicon, get_consensus_from_msa,
-        mafft_msa, write_final_amplicon,
+        filter_candidate_amplicon, get_candidate_amplicon, get_consensus_from_msa, mafft_msa,
+        write_final_amplicon,
     };
+    use crate::bam::{stats_xam, BasicBamStatistics};
     use crate::fastq::{FastqReader, FilterOption, NanoRead};
     use crate::run::sub_run::filter::{filter, filter_fastq_dir};
     use crate::run::sub_run::stats::{stats, stats_fastq_dir};
@@ -394,13 +414,13 @@ pub mod run_entry {
     use crate::run::{LOCAL_ALIGNER, collect_fastq_dir};
     use crate::summary::{make_plot, write_stats, write_summary};
     use crate::trim::adapter::{TrimConfig, get_trim_cfg};
-    use crate::utils::rev_com;
+    use crate::utils::{quit_with_error, rev_com};
     use clap::ArgMatches;
     use flate2::bufread::MultiGzDecoder;
     use seq_io::fastq::Record;
     use std::collections::HashSet;
     use std::fs::File;
-    use std::io::{ BufReader, BufWriter, Read, Write};
+    use std::io::{BufReader, BufWriter, Read, Write};
     use std::path::Path;
 
     pub fn run_stats(stats_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
@@ -412,6 +432,7 @@ pub mod run_entry {
         let dont_use_dorado_quality = stats_cmd.get_flag("dont_use_dorado_quality");
         let lengths = stats_cmd.get_one::<Vec<usize>>("length");
         let gc = stats_cmd.get_flag("gc");
+        let bam = stats_cmd.get_flag("bam");
         let thread = stats_cmd.get_one::<u16>("thread").unwrap();
         let plot = stats_cmd.get_one::<String>("plot");
         let python = stats_cmd.get_one::<String>("python").unwrap();
@@ -425,23 +446,72 @@ pub mod run_entry {
             .num_threads(*thread as usize)
             .build_global()?;
 
+        let mut basic_bam_stats= BasicBamStatistics::default();
         let mut stats_result = match input {
             // None => stats_result = stats_stdin(*thread as usize, gc),
-            None => stats(std::io::stdin(), *thread as usize, gc, dont_use_dorado_quality),
+            None => {
+                if bam {
+                    let mut bam_reader = rust_htslib::bam::Reader::from_stdin()?;
+                    let (basic_bam_stats_, all_stats) = stats_xam(
+                        &mut bam_reader,
+                        *thread as usize,
+                        gc,
+                        dont_use_dorado_quality,
+                    );
+                    basic_bam_stats = basic_bam_stats_;
+                    all_stats
+                } else {
+                    stats(
+                        std::io::stdin(),
+                        *thread as usize,
+                        gc,
+                        dont_use_dorado_quality,
+                    )
+                }
+            }
             Some(input) => {
                 let input_path = Path::new(input);
                 if input_path.is_file() {
                     if input_path.to_str().unwrap().ends_with(".gz") {
+                        // stats a fastq.gz file
+                        if bam {
+                            quit_with_error("--bam should used with bam/sam file")
+                        }
                         stats(
                             MultiGzDecoder::new(BufReader::new(File::open(input)?)),
                             *thread as usize,
                             gc,
-                            dont_use_dorado_quality
+                            dont_use_dorado_quality,
                         )
+                    } else if input_path.to_str().unwrap().ends_with(".bam")
+                        || input_path.to_str().unwrap().ends_with(".sam")
+                    {
+                        // stats a bam or sam file
+                        let mut bam_reader = rust_htslib::bam::Reader::from_path(input)?;
+                        let (basic_bam_stats_, all_stats) = stats_xam(
+                            &mut bam_reader,
+                            *thread as usize,
+                            gc,
+                            dont_use_dorado_quality,
+                        );
+                        basic_bam_stats = basic_bam_stats_;
+                        all_stats
                     } else {
-                        stats(BufReader::new(File::open(input)?), *thread as usize, gc, dont_use_dorado_quality)
+                        // stats a fastq file
+                        if bam {
+                            quit_with_error("--bam should used with bam/sam file")
+                        }
+                        stats(
+                            BufReader::new(File::open(input)?),
+                            *thread as usize,
+                            gc,
+                            dont_use_dorado_quality,
+                        )
                     }
                 } else {
+                    if bam {
+                        quit_with_error("--bam couldn't used with directory input")
+                    }
                     stats_fastq_dir(input_path, *thread as usize, gc, dont_use_dorado_quality)
                 }
             }
@@ -462,8 +532,14 @@ pub mod run_entry {
                 gc,
             )?,
         }
-        let basic_stats =
-            write_summary(&mut stats_result, lengths, quality, *topn as usize, summary);
+        let basic_stats = write_summary(
+            &mut stats_result,
+            lengths,
+            quality,
+            *topn as usize,
+            &basic_bam_stats,
+            summary,
+        );
         let formats = format
             .iter()
             .map(|x| (**x).clone())
@@ -602,7 +678,8 @@ pub mod run_entry {
         match max_bases {
             None => {
                 if output.is_none() {
-                    let mut tmp_reader = std::io::BufReader::new(std::fs::File::open(&tmp_filter_fastq)?);
+                    let mut tmp_reader =
+                        std::io::BufReader::new(std::fs::File::open(&tmp_filter_fastq)?);
                     let mut buf = [0; 1024 * 8];
                     loop {
                         let bytes_size = tmp_reader.read(&mut buf)?;
@@ -624,7 +701,8 @@ pub mod run_entry {
                 }
                 if total_filter_bases < target_bases_count {
                     if output.is_none() {
-                        let mut tmp_reader = std::io::BufReader::new(std::fs::File::open(&tmp_filter_fastq)?);
+                        let mut tmp_reader =
+                            std::io::BufReader::new(std::fs::File::open(&tmp_filter_fastq)?);
                         let mut buf = [0; 1024 * 8];
                         loop {
                             let bytes_size = tmp_reader.read(&mut buf)?;
@@ -648,7 +726,8 @@ pub mod run_entry {
                             break;
                         }
                     }
-                    let tmp_reader = std::io::BufReader::new(std::fs::File::open(&tmp_filter_fastq)?);
+                    let tmp_reader =
+                        std::io::BufReader::new(std::fs::File::open(&tmp_filter_fastq)?);
                     let mut tmp_fastq_reader = FastqReader::new(tmp_reader);
                     let mut writer: Box<dyn Write> = if output.is_none() {
                         Box::new(BufWriter::new(std::io::stdout()))
@@ -898,10 +977,12 @@ pub mod run_entry {
                 debug_assert!(fqs.len() > 0);
                 fqs.iter()
                     .map(|fq| {
-                        get_candidate_amplicon(Some(fq), fwd, rev, est_len, *range).expect(&format!(
-                            "Get candidate amplicon from {} failed",
-                            fq.to_str().unwrap()
-                        ))
+                        get_candidate_amplicon(Some(fq), fwd, rev, est_len, *range).expect(
+                            &format!(
+                                "Get candidate amplicon from {} failed",
+                                fq.to_str().unwrap()
+                            ),
+                        )
                     })
                     .flatten()
                     .collect::<Vec<_>>()

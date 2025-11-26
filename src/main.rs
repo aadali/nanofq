@@ -14,9 +14,10 @@ mod utils;
 
 use crate::run::run_entry::{run_amplicon, run_filter, run_stats, run_trim};
 use std::time::Instant;
+use crate::utils::quit_with_error;
 
 fn main() -> Result<(), anyhow::Error> {
-    let _start = Instant::now();
+    let start = Instant::now();
     let matches = arguments::parse_arguments();
     let main_result = if let Some(stats_cmd) = matches.subcommand_matches("stats") {
         run_stats(stats_cmd)
@@ -27,12 +28,12 @@ fn main() -> Result<(), anyhow::Error> {
     } else if let Some(amplicon_cmd) = matches.subcommand_matches("amplicon") {
         run_amplicon(amplicon_cmd)
     } else {
-        eprintln!("error for cmd parser");
-        std::process::exit(1);
+        quit_with_error("Error for cmd parse");
+        Ok(())
     };
     if main_result.is_err() {
-        println!("{:?}", main_result.err().unwrap());
-        std::process::exit(1);
+        quit_with_error(&main_result.err().unwrap().to_string());
     }
+    println!("{:?}", start.elapsed());
     Ok(())
 }

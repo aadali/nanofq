@@ -33,11 +33,12 @@ Options:
   -V, --version  Print version
 ```
 ### Input Parameters
-For all subcommand, there are three possible input scenarios:
-
-1) **Standard Input(stdin)**
-2) **Single Fastq File** - A text-based fastq or gzipped fastq ending with `.fq`, `.fastq`, `.fastq.gz` or `.fq.gz`
-3) **Directory of Fastq Files** - A folder containing one or more fastq files (text-based or gzipped). The program will only process files matching the specified extensions
+For all subcommand, there are some possible input scenarios:
+1. a single fastq or fastq.gz
+2. a directory containing some fastq or fastq.gz files
+3. fastq from stdin [default]
+4. *a bam or sam file*, only for `stats` subcommand
+5. *a bam or sam file from stdin with `--bam` specified*, only for `stats` subcommand
 
 ### Output
 The output can be directed to either standard output (stdout) or a specific file path. Gzipped output is not supported.
@@ -45,12 +46,17 @@ The output can be directed to either standard output (stdout) or a specific file
 ### stats
 
 ```
-stats nanopore fastq, output the stats result, summary and figures
+stats nanopore fastq/sam/bam, output the stats result, summary and figures
 
 Usage: nanofq stats [OPTIONS]
 
 Options:
-  -i, --input <input>            The input fastq, may be a single fastq[.gz] or a directory containing some fastq[.gz] [default: stdin]
+  -i, --input <input>            The input file, could be
+                                         1. a single fastq[.gz]
+                                         2. a directory containing some fastq[.gz]
+                                         3. a bam or sam file
+                                         4. fastq from stdin [default]
+                                         5. bam or sam from stdin with --bam specified
   -o, --output <output>          Output the stats result into this, a tsv file or stdout. it will be truncated if it's a existing file. [default: stdout]
   -s, --summary <summary>        Output stats summary into this file, it will be truncated if it exists [default: ./NanofqStatsSummary.txt]
   -n, --topn <topn>              Write the top N longest reads and highest quality reads info into summary file [default: 5]
@@ -58,9 +64,10 @@ Options:
   -d, --dont_use_dorado_quality  Don't use dorado q-score calculation. Using dorado quality means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value
   -l, --length <length>          Count the reads number that whose length is bigger than this value if you set this parameter, multi values can be separated by comma
       --gc                       Whether to stats the gc content
+  -b, --bam                      If set, treat input as bam/sam
   -t, --thread <thread>          How many threads will be used [default: 1]
       --python <python>          the python3 path, and matplotlib is needed [default: python3]
-  -p, --plot <plot>              Whether to make plot, if it's set, it should be the prefix of figure path without filename extension
+  -p, --plot <plot>              Whether to make plot, if set, it should be the prefix of figure path without filename extension
   -f, --format <format>          Which format figure do you want if --plot is true, this para can be set multi times [default: pdf] [possible values: png, pdf, jpg, svg]
       --quantile <quantile>      the shortest ratio and longest ratio of reads will not be rendered on figure, should be in range(0.0, 1.0) [default: 0.01]
   -h, --help                     Print help
@@ -216,10 +223,12 @@ Trim all sequences outside the primers range, keep the top n reads with the high
 Finally, get consensus sequence from the alignment file as draft consensus of the amplicon
 
 ## ChangeLog
+### nanofq (v0.2.0) 2025-11-26
+1. bam/sam format supported for `stats` subcommand
+
 ### nanofq (v0.1.3) 2025-11-20
 1. change --use_dorado_quality parameter in filter and stats subcommands to --dont_use_dorado_quality and its logic
 
-## ChangeLog
 ### nanofq (v0.1.2) 2025-11-18
 1. add --range parameter for amplicon subcommand
 2. remove find mode in amplicon subcommand, always use local alignment to find primers of amplicon
