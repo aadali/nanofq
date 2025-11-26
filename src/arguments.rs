@@ -1,4 +1,5 @@
 use crate::trim::adapter::get_trim_cfg;
+use crate::utils::quit_with_error;
 use ansi_term::Color;
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, value_parser};
 use std::collections::HashSet;
@@ -7,35 +8,49 @@ use std::path::Path;
 use std::str::FromStr;
 
 const U32_MAX: &str = "4294967295";
-fn input_value_parser(input: &str) {
+fn input_value_parser(input: &str, stats: bool) {
     let input_path = Path::new(input);
     match input_path.try_exists() {
         Ok(ok) => {
             if !ok {
-                eprintln!(
-                    "{}",
-                    Color::Red.paint(format!(
-                        "{}: No such file or directory, check --input",
-                        input
-                    ))
-                );
-                std::process::exit(1);
+                quit_with_error(&format!(
+                    "{}: no such file or directory, check --input",
+                    input
+                ));
             } else {
-                if input_path.is_file() {
-                    if !(input.ends_with(".fastq")
-                        || input.ends_with(".fq")
-                        || input.ends_with(".fastq.gz")
-                        || input.ends_with(".fq.gz"))
-                    {
-                        eprintln!("{}", Color::Red.paint("bad suffix for input file, possible suffix is one of [.fastq, .fq, .fastq.gz, .fq.gz], check --input"));
-                        std::process::exit(1);
+                if stats {
+                    if input_path.is_file() {
+                        if !(input.ends_with(".fastq")
+                            || input.ends_with(".fq")
+                            || input.ends_with(".fastq.gz")
+                            || input.ends_with(".fq.gz")
+                            || input.ends_with(".sam")
+                            || input.ends_with(".bam"))
+                        {
+                            quit_with_error(
+                                "bad suffix for input file, possible suffix is one of [.fastq, .fq, .fastq.gz, .fq.gz, .sam, .bam], check --input",
+                            );
+                        }
+                    } else {
+                        if input_path.is_file() {
+                            if !(input.ends_with(".fastq")
+                                || input.ends_with(".fq")
+                                || input.ends_with(".fastq.gz")
+                                || input.ends_with(".fq.gz"))
+                            {
+                                quit_with_error(
+                                    "bad suffix for input file, possible suffix is one of [.fastq, .fq, .fastq.gz, .fq.gz], check --input",
+                                );
+                            }
+                        }
                     }
                 } else if input_path.is_dir() {
                     let mut count = 0;
-                    for entry in input_path
-                        .read_dir()
-                        .expect(&format!("open directory: {:?} failed", input_path))
-                    {
+                    let read_dir_res = input_path.read_dir();
+                    if read_dir_res.is_err() {
+                        quit_with_error(&format!("Open directory: {:?} failed", input_path));
+                    }
+                    for entry in read_dir_res.unwrap() {
                         if let Ok(entry) = entry {
                             let p = entry.path();
                             let p = p.to_str().unwrap();
@@ -49,24 +64,18 @@ fn input_value_parser(input: &str) {
                         }
                     }
                     if count == 0 {
-                        eprintln!(
-                            "{}",
-                            Color::Red.paint(format!(
-                                "No fastq or fastq.gz file found in directory: {}",
-                                input
-                            ))
-                        );
-                        std::process::exit(1);
+                        quit_with_error(&format!(
+                            "No fastq or fastq.gz file found in directory: {}, check --input",
+                            input
+                        ));
                     }
                 } else {
-                    eprintln!("{}", Color::Red.paint("input should be file or directory"));
-                    std::process::exit(1);
+                    quit_with_error("input should be file or directory, check --input");
                 }
             }
         }
         Err(error) => {
-            eprintln!("{}", Color::Red.paint(format!("{:?}", error)));
-            std::process::exit(1)
+            quit_with_error(&format!("{:?}, check --input", error.to_string()));
         }
     }
 }
@@ -123,16 +132,32 @@ fn primer_parse(input_primer: &str) -> Result<String, anyhow::Error> {
     Ok(primer)
 }
 
-pub fn parse_arguments() -> ArgMatches {
-    let input_arg = Arg::new("input")
+fn get_input_arg(stats: bool) -> Arg {
+    let is_stats = stats;
+    let input_help = "The input fastq, may be a single fastq[.gz] or a directory containing some fastq[.gz] [default: stdin]";
+    let stats_input_help = "The input file, could be
+        1. a single fastq[.gz]
+        2. a directory containing some fastq[.gz]
+        3. a bam or sam file
+        4. fastq from stdin [default]
+        5. bam or sam from stdin with --bam specified";
+    Arg::new("input")
         .short('i')
         .long("input")
         .action(ArgAction::Set)
-        .value_parser(|input: &str| {
-            input_value_parser(&input);
+        .value_parser(move |input: &str| {
+            input_value_parser(&input, stats);
             Result::<String, anyhow::Error>::Ok(input.to_string())
         })
-        .help("The input fastq, may be a single fastq[.gz] or a directory containing some fastq[.gz] [default: stdin]");
+        .help(if is_stats {
+            stats_input_help
+        } else {
+            input_help
+        })
+}
+pub fn parse_arguments() -> ArgMatches {
+    let stats_input_arg = get_input_arg(true);
+    let input_arg = get_input_arg(false);
 
     let output_arg = Arg::new("output")
         .short('o')
@@ -148,395 +173,401 @@ pub fn parse_arguments() -> ArgMatches {
         .help("How many threads will be used");
 
     let stats_cmd = Command::new("stats")
-        .about("stats nanopore fastq, output the stats result, summary and figures")
-        .arg(&input_arg)
-        .arg(output_arg.clone().help("Output the stats result into this, a tsv file or stdout. it will be truncated if it's a existing file. [default: stdout]"))
-        .arg(Arg::new("summary")
-            .short('s')
-            .long("summary")
-            .action(ArgAction::Set)
-            .default_value("./NanofqStatsSummary.txt")
-            .help("Output stats summary into this file, it will be truncated if it exists"))
-        .arg(Arg::new("topn")
-            .short('n')
-            .long("topn")
-            .action(ArgAction::Set)
-            .default_value("5")
-            .value_parser(value_parser!(u16))
-            .help("Write the top N longest reads and highest quality reads info into summary file"))
-        .arg(Arg::new("quality")
-            .short('q')
-            .long("quality")
-            .value_parser(|x: &str| {
-                let mut qualities = x.split(",")
-                    .into_iter()
-                    .map(|each| {
-                        match each.parse::<f64>() {
-                            Ok(qual) => qual,
-                            Err(_) => {
-                                eprintln!("{}", Color::Red.paint("Error: parse f64 from each quality, check --quality"));
-                                std::process::exit(1);
-                            }
-                        }
-                    })
-                    .collect::<Vec<f64>>();
-                // decrease quality
-                qualities.sort_by(|a, b| b.partial_cmp(a).unwrap());
-                Result::<Vec<f64>, anyhow::Error>::Ok(qualities)
-            })
-            .default_value("25,20,18,15,12,10")
-            .help("Count the reads number that whose quality is bigger than this value, multi value can be separated by comma"))
-        .arg(Arg::new("dont_use_dorado_quality")
-            .short('d')
-            .long("dont_use_dorado_quality")
-            .action(ArgAction::SetTrue)
-            .help("Don't use dorado q-score calculation. Using dorado quality means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value")
-        )
-        .arg(Arg::new("length")
-            .short('l')
-            .long("length")
-            .value_parser(|x: &str| {
-                let mut lengths = x.split(",")
-                    .into_iter()
-                    .map(|each| {
-                        match each.parse::<usize>() {
-                            Ok(len) => len,
-                            Err(err) => {
-                                eprintln!("{:?}", err);
-                                eprintln!("{}", Color::Red.paint("Error: parse usize from each length, check --length"));
-                                std::process::exit(1)
-                            }
-                        }
-                    })
-                    .collect::<Vec<usize>>();
-                lengths.sort_by(|a, b| b.partial_cmp(a).unwrap());
-                Result::<Vec<usize>, anyhow::Error>::Ok(lengths)
-            })
-            .help("Count the reads number that whose length is bigger than this value if you set this parameter, multi values can be separated by comma"))
-        .arg(Arg::new("gc")
-            // .short('g')
-            .long("gc")
-            .action(ArgAction::SetTrue)
-            .help("Whether to stats the gc content"))
-        .arg(thread_arg.clone())
-        .arg(
-            Arg::new("python")
-                .long("python")
-                .default_value("python3")
+            .about("stats nanopore fastq/sam/bam, output the stats result, summary and figures")
+            .arg(&stats_input_arg)
+            .arg(output_arg.clone().help("Output the stats result into this, a tsv file or stdout. it will be truncated if it's a existing file. [default: stdout]"))
+            .arg(Arg::new("summary")
+                .short('s')
+                .long("summary")
                 .action(ArgAction::Set)
-                .help("the python3 path, and matplotlib is needed")
-        )
-        .arg(Arg::new("plot")
-            .short('p')
-            .long("plot")
-            .help("Whether to make plot, if it's set, it should be the prefix of figure path without filename extension"))
-        .arg(Arg::new("format")
-            .short('f')
-            .long("format")
-            .action(ArgAction::Append)
-            .value_parser(["png", "pdf", "jpg", "svg"])
-            .default_value("pdf")
-            .help("Which format figure do you want if --plot is true, this para can be set multi times"))
-        .arg(
-            Arg::new("quantile")
-                .long("quantile")
-                .default_value("0.01")
-                .value_parser(|x: &str| positive_number_parse(x, "--quantile", true, 0.0f64, 0.5f64))
-                .help("the shortest ratio and longest ratio of reads will not be rendered on figure, should be in range(0.0, 1.0)")
-        );
-    let filter_cmd = Command::new("filter")
-        .about("filter nanopore fastq by length, quality or gc content")
-        .arg(&input_arg)
-        .arg(
-            output_arg
-                .clone()
-                .value_parser(|output: &str| {
-                    if !(output.ends_with(".fq") || output.ends_with(".fastq")) {
-                        eprintln!(
-                            "{}",
-                            Color::Red.paint("Error: output must ends with .fastq or .fq")
-                        );
-                        std::process::exit(1);
-                    }
-                    Result::<String, anyhow::Error>::Ok(output.to_string())
-                })
-                .help("Output the filtered fastq into this file or stdout, it will be truncated if it's a existing file. Compressed file is not supported. [default: stdout]"),
-        )
-        .arg(
-            Arg::new("min_len")
-                .short('l')
-                .long("min_len")
+                .default_value("./NanofqStatsSummary.txt")
+                .help("Output stats summary into this file, it will be truncated if it exists"))
+            .arg(Arg::new("topn")
+                .short('n')
+                .long("topn")
                 .action(ArgAction::Set)
-                .default_value("1")
-                .value_parser(|x: &str| positive_number_parse::<usize>(x, "--min_len", false, 1, u32::MAX as usize))
-                .help("Min read length"),
-        )
-        .arg(
-            Arg::new("max_len")
-                .short('L')
-                .long("max_len")
-                .action(ArgAction::Set)
-                .default_value(U32_MAX)
-                .value_parser(|x: &str| positive_number_parse::<usize>(x, "--max_len", false, 1, u32::MAX as usize))
-                .help("Min read length"),
-        )
-        .arg(
-            Arg::new("min_qual")
+                .default_value("5")
+                .value_parser(value_parser!(u16))
+                .help("Write the top N longest reads and highest quality reads info into summary file"))
+            .arg(Arg::new("quality")
                 .short('q')
-                .long("min_qual")
-                .action(ArgAction::Set)
-                .default_value("1.0")
-                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--min_qual", true, 1.0f64, 50.0f64))
-                .help("Min read qual"),
-        )
-        .arg(
-            Arg::new("max_qual")
-                .short('Q')
-                .long("max_qual")
-                .action(ArgAction::Set)
-                .default_value("50.0")
-                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--max_qual", true, 1.0f64, 50.0f64))
-                .help("Max read qual, but in most cases, you do not need to specify this value"),
-        )
-        .arg(Arg::new("dont_use_dorado_quality")
-            .short('d')
-            .long("dont_use_dorado_quality")
-            .action(ArgAction::SetTrue)
-            .help("Don't use dorado q-score calculation. Using dorado quality means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value")
-        )
-        .arg(
-            Arg::new("gc")
+                .long("quality")
+                .value_parser(|x: &str| {
+                    let mut qualities = x.split(",")
+                        .into_iter()
+                        .map(|each| {
+                            match each.parse::<f64>() {
+                                Ok(qual) => qual,
+                                Err(_) => {
+                                    eprintln!("{}", Color::Red.paint("Error: parse f64 from each quality, check --quality"));
+                                    std::process::exit(1);
+                                }
+                            }
+                        })
+                        .collect::<Vec<f64>>();
+                    // decrease quality
+                    qualities.sort_by(|a, b| b.partial_cmp(a).unwrap());
+                    Result::<Vec<f64>, anyhow::Error>::Ok(qualities)
+                })
+                .default_value("25,20,18,15,12,10")
+                .help("Count the reads number that whose quality is bigger than this value, multi value can be separated by comma"))
+            .arg(Arg::new("dont_use_dorado_quality")
+                .short('d')
+                .long("dont_use_dorado_quality")
+                .action(ArgAction::SetTrue)
+                .help("Don't use dorado q-score calculation. Using dorado quality means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value")
+            )
+            .arg(Arg::new("length")
+                .short('l')
+                .long("length")
+                .value_parser(|x: &str| {
+                    let mut lengths = x.split(",")
+                        .into_iter()
+                        .map(|each| {
+                            match each.parse::<usize>() {
+                                Ok(len) => len,
+                                Err(err) => {
+                                    eprintln!("{:?}", err);
+                                    eprintln!("{}", Color::Red.paint("Error: parse usize from each length, check --length"));
+                                    std::process::exit(1)
+                                }
+                            }
+                        })
+                        .collect::<Vec<usize>>();
+                    lengths.sort_by(|a, b| b.partial_cmp(a).unwrap());
+                    Result::<Vec<usize>, anyhow::Error>::Ok(lengths)
+                })
+                .help("Count the reads number that whose length is bigger than this value if you set this parameter, multi values can be separated by comma"))
+            .arg(Arg::new("gc")
                 // .short('g')
                 .long("gc")
                 .action(ArgAction::SetTrue)
-                .help("Whether gc content is used to filter read [default: false]"),
+                .help("Whether to stats the gc content"))
+        .arg(Arg::new("bam")
+            .short('b')
+            .long("bam")
+            .action(ArgAction::SetTrue)
+            .help("If set, treat input as bam/sam")
         )
-        .arg(
-            Arg::new("min_gc")
-                .short('g')
-                .long("min_gc")
-                .default_value("0.0")
-                .action(ArgAction::Set)
-                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--min_gc", true, 0.0f64, 1.0f64))
-                .help("Min gc content if --gc is set true"),
-        )
-        .arg(
-            Arg::new("max_gc")
-                .short('G')
-                .long("max_gc")
-                .default_value("1.0")
-                .action(ArgAction::Set)
-                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--max_gc", true, 0.0f64, 1.0f64))
-                .help("Max gc content if --gc is set true"),
-        )
-        .arg(thread_arg.clone())
-        .arg(
-            Arg::new("max_bases")
-                .long("max_bases")
-                .action(ArgAction::Set)
-                .value_parser(value_parser!(u64))
-                .help("After the initial filtering based on length and quality values, \
+            .arg(thread_arg.clone())
+            .arg(
+                Arg::new("python")
+                    .long("python")
+                    .default_value("python3")
+                    .action(ArgAction::Set)
+                    .help("the python3 path, and matplotlib is needed")
+            )
+            .arg(Arg::new("plot")
+                .short('p')
+                .long("plot")
+                .help("Whether to make plot, if set, it should be the prefix of figure path without filename extension"))
+            .arg(Arg::new("format")
+                .short('f')
+                .long("format")
+                .action(ArgAction::Append)
+                .value_parser(["png", "pdf", "jpg", "svg"])
+                .default_value("pdf")
+                .help("Which format figure do you want if --plot is true, this para can be set multi times"))
+            .arg(
+                Arg::new("quantile")
+                    .long("quantile")
+                    .default_value("0.01")
+                    .value_parser(|x: &str| positive_number_parse(x, "--quantile", true, 0.0f64, 0.5f64))
+                    .help("the shortest ratio and longest ratio of reads will not be rendered on figure, should be in range(0.0, 1.0)")
+            );
+    let filter_cmd = Command::new("filter")
+            .about("filter nanopore fastq by length, quality or gc content")
+            .arg(&input_arg)
+            .arg(
+                output_arg
+                    .clone()
+                    .value_parser(|output: &str| {
+                        if !(output.ends_with(".fq") || output.ends_with(".fastq")) {
+                            eprintln!(
+                                "{}",
+                                Color::Red.paint("Error: output must ends with .fastq or .fq")
+                            );
+                            std::process::exit(1);
+                        }
+                        Result::<String, anyhow::Error>::Ok(output.to_string())
+                    })
+                    .help("Output the filtered fastq into this file or stdout, it will be truncated if it's a existing file. Compressed file is not supported. [default: stdout]"),
+            )
+            .arg(
+                Arg::new("min_len")
+                    .short('l')
+                    .long("min_len")
+                    .action(ArgAction::Set)
+                    .default_value("1")
+                    .value_parser(|x: &str| positive_number_parse::<usize>(x, "--min_len", false, 1, u32::MAX as usize))
+                    .help("Min read length"),
+            )
+            .arg(
+                Arg::new("max_len")
+                    .short('L')
+                    .long("max_len")
+                    .action(ArgAction::Set)
+                    .default_value(U32_MAX)
+                    .value_parser(|x: &str| positive_number_parse::<usize>(x, "--max_len", false, 1, u32::MAX as usize))
+                    .help("Min read length"),
+            )
+            .arg(
+                Arg::new("min_qual")
+                    .short('q')
+                    .long("min_qual")
+                    .action(ArgAction::Set)
+                    .default_value("1.0")
+                    .value_parser(|x: &str| positive_number_parse::<f64>(x, "--min_qual", true, 1.0f64, 50.0f64))
+                    .help("Min read qual"),
+            )
+            .arg(
+                Arg::new("max_qual")
+                    .short('Q')
+                    .long("max_qual")
+                    .action(ArgAction::Set)
+                    .default_value("50.0")
+                    .value_parser(|x: &str| positive_number_parse::<f64>(x, "--max_qual", true, 1.0f64, 50.0f64))
+                    .help("Max read qual, but in most cases, you do not need to specify this value"),
+            )
+            .arg(Arg::new("dont_use_dorado_quality")
+                .short('d')
+                .long("dont_use_dorado_quality")
+                .action(ArgAction::SetTrue)
+                .help("Don't use dorado q-score calculation. Using dorado quality means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value")
+            )
+            .arg(
+                Arg::new("gc")
+                    // .short('g')
+                    .long("gc")
+                    .action(ArgAction::SetTrue)
+                    .help("Whether gc content is used to filter read [default: false]"),
+            )
+            .arg(
+                Arg::new("min_gc")
+                    .short('g')
+                    .long("min_gc")
+                    .default_value("0.0")
+                    .action(ArgAction::Set)
+                    .value_parser(|x: &str| positive_number_parse::<f64>(x, "--min_gc", true, 0.0f64, 1.0f64))
+                    .help("Min gc content if --gc is set true"),
+            )
+            .arg(
+                Arg::new("max_gc")
+                    .short('G')
+                    .long("max_gc")
+                    .default_value("1.0")
+                    .action(ArgAction::Set)
+                    .value_parser(|x: &str| positive_number_parse::<f64>(x, "--max_gc", true, 0.0f64, 1.0f64))
+                    .help("Max gc content if --gc is set true"),
+            )
+            .arg(thread_arg.clone())
+            .arg(
+                Arg::new("max_bases")
+                    .long("max_bases")
+                    .action(ArgAction::Set)
+                    .value_parser(value_parser!(u64))
+                    .help("After the initial filtering based on length and quality values, \
                 just keep the best reads based on their quality values those total base count is greater \
                 than or equal to this value. If the total bases count \
                 is less than this value, then this parameter is useless.")
-        )
-        .arg(
-            Arg::new("retain_failed")
-                .long("retain_failed")
-                .action(ArgAction::Set)
-                .help("Whether store the failed fastq, if set, this value should be the path of failed fastq. this file will be truncated if it exists")
-        );
+            )
+            .arg(
+                Arg::new("retain_failed")
+                    .long("retain_failed")
+                    .action(ArgAction::Set)
+                    .help("Whether store the failed fastq, if set, this value should be the path of failed fastq. this file will be truncated if it exists")
+            );
     let trim_cmd = Command::new("trim")
-        .about("trim adapter, barcode, primer that artificial sequence in nanopore fastq")
-        .arg(&input_arg)
-        .arg(output_arg
-                 .clone()
-                 .help("Output the trimmed fastq into this file or stdout, it will be truncated if it's a existing file. [default: stdout]"),
-        )
-        .arg(
-            Arg::new("log")
-                .short('l')
-                .long("log")
-                .action(ArgAction::Set)
-                .help("Whether store the trimmed log, if set, this value should be the path of trimmed log file, this file will be truncated if it exists")
-        )
-        .arg(
-            Arg::new("kit")
-                .short('k')
-                .long("kit")
-                .help("Which kit you used. Each kit has its own search parameter, but can be changed by [search parameter]. \
+            .about("trim adapter, barcode, primer that artificial sequence in nanopore fastq")
+            .arg(&input_arg)
+            .arg(output_arg
+                     .clone()
+                     .help("Output the trimmed fastq into this file or stdout, it will be truncated if it's a existing file. [default: stdout]"),
+            )
+            .arg(
+                Arg::new("log")
+                    .short('l')
+                    .long("log")
+                    .action(ArgAction::Set)
+                    .help("Whether store the trimmed log, if set, this value should be the path of trimmed log file, this file will be truncated if it exists")
+            )
+            .arg(
+                Arg::new("kit")
+                    .short('k')
+                    .long("kit")
+                    .help("Which kit you used. Each kit has its own search parameter, but can be changed by [search parameter]. \
 you can choice one from [LSK, RAD, ULK, RBK, PCS, PCB, NBD_1, NBD_2, ..., NBD_95, NBD_96]. NBD_{number} means kit name with barcode number.")
-                .value_parser(|x: &str| {
-                    get_trim_cfg().contains_key(x);
-                    if get_trim_cfg().contains_key(x) {
-                        return Result::<String, anyhow::Error>::Ok(x.to_string());
-                    } else {
-                        eprintln!("Error: invalid \'{}\' for \'--kit <kit>\'", x);
-                        eprintln!("[possible values: LSK, RAD, ULK, RBK, PCS, PCB, NBD_1, NBD_2, ..., NBD_95, NBD_96]");
-                        std::process::exit(1);
-                    }
-                })
-        )
-        .arg(
-            Arg::new("primers")
-                .short('p')
-                .long("primers")
-                .value_parser(|x: &str| {
-                    let bases = [b'A', b'T', b'C', b'G', b'R', b'Y', b'M', b'K', b'S', b'W', b'H', b'B', b'V', b'D', b','];
-                    x.as_bytes().iter().for_each(|base| {
-                        if !bases.contains(base) {
-                            eprintln!("Error: Invalid base char found in primers");
+                    .value_parser(|x: &str| {
+                        get_trim_cfg().contains_key(x);
+                        if get_trim_cfg().contains_key(x) {
+                            return Result::<String, anyhow::Error>::Ok(x.to_string());
+                        } else {
+                            eprintln!("Error: invalid \'{}\' for \'--kit <kit>\'", x);
+                            eprintln!("[possible values: LSK, RAD, ULK, RBK, PCS, PCB, NBD_1, NBD_2, ..., NBD_95, NBD_96]");
                             std::process::exit(1);
                         }
-                    });
-                    let comma_numbers = x.as_bytes().iter().filter(|base| *base == &b',').count();
-                    if comma_numbers != 1 || x.as_bytes().last().unwrap() == &b',' {
-                        eprintln!("One and only one comma must be used to separate paired primers");
-                        std::process::exit(1);
-                    }
-                    Result::<String, anyhow::Error>::Ok(x.to_string())
-                })
-                .help("A paired primers separated by comma, the first one is forward primer and second is reversed, the direction should from 5' end to 3' end. Degenerate bases supported")
-        )
-        .group(
-            ArgGroup::new("seq")
-                .arg("kit")
-                .arg("primers")
-                .required(true)
-                .multiple(false)
-        )
-        .arg(thread_arg.clone())
-        .arg(
-            Arg::new("min_len")
-                .short('L')
-                .long("min_len")
-                .default_value("50")
-                .value_parser(value_parser!(u32).range(1..))
-                .help("If the length of trimmed read is less than this value, do not output it into trimmed fastq")
-        )
-        .arg(
-            Arg::new("match")
-                .short('m')
-                .long("match")
-                .default_value("3")
-                .value_parser(value_parser!(i32).range(1..=100))
-                .help("Match score, positive int")
-        )
-        .arg(
-            Arg::new("mismatch")
-                .short('M')
-                .long("mismatch")
-                .default_value("-3")
-                .value_parser(value_parser!(i32).range(-100..=0))
-                .help("Mismatch penalty score, negative int")
-        )
-        .arg(
-            Arg::new("gap_opened")
-                .short('g')
-                .long("gap_open")
-                .default_value("-5")
-                .value_parser(value_parser!(i32).range(-100..=0))
-                .help("Gap opened penalty score, negative int")
-        )
-        .arg(
-            Arg::new("gap_extend")
-                .short('G')
-                .long("gap_extend")
-                .default_value("-1")
-                .value_parser(value_parser!(i32).range(-100..=0))
-                .help("Gap extend penalty score, negative int")
-        )
-        .arg(
-            Arg::new("rev_com_not_used")
-                .long("rev_com_not_used")
-                .action(ArgAction::SetTrue)
-                .help("Whether used rev com sequences of primers to query in read if primers is used. If it's set, \
+                    })
+            )
+            .arg(
+                Arg::new("primers")
+                    .short('p')
+                    .long("primers")
+                    .value_parser(|x: &str| {
+                        let bases = [b'A', b'T', b'C', b'G', b'R', b'Y', b'M', b'K', b'S', b'W', b'H', b'B', b'V', b'D', b','];
+                        x.as_bytes().iter().for_each(|base| {
+                            if !bases.contains(base) {
+                                eprintln!("Error: Invalid base char found in primers");
+                                std::process::exit(1);
+                            }
+                        });
+                        let comma_numbers = x.as_bytes().iter().filter(|base| *base == &b',').count();
+                        if comma_numbers != 1 || x.as_bytes().last().unwrap() == &b',' {
+                            eprintln!("One and only one comma must be used to separate paired primers");
+                            std::process::exit(1);
+                        }
+                        Result::<String, anyhow::Error>::Ok(x.to_string())
+                    })
+                    .help("A paired primers separated by comma, the first one is forward primer and second is reversed, the direction should from 5' end to 3' end. Degenerate bases supported")
+            )
+            .group(
+                ArgGroup::new("seq")
+                    .arg("kit")
+                    .arg("primers")
+                    .required(true)
+                    .multiple(false)
+            )
+            .arg(thread_arg.clone())
+            .arg(
+                Arg::new("min_len")
+                    .short('L')
+                    .long("min_len")
+                    .default_value("50")
+                    .value_parser(value_parser!(u32).range(1..))
+                    .help("If the length of trimmed read is less than this value, do not output it into trimmed fastq")
+            )
+            .arg(
+                Arg::new("match")
+                    .short('m')
+                    .long("match")
+                    .default_value("3")
+                    .value_parser(value_parser!(i32).range(1..=100))
+                    .help("Match score, positive int")
+            )
+            .arg(
+                Arg::new("mismatch")
+                    .short('M')
+                    .long("mismatch")
+                    .default_value("-3")
+                    .value_parser(value_parser!(i32).range(-100..=0))
+                    .help("Mismatch penalty score, negative int")
+            )
+            .arg(
+                Arg::new("gap_opened")
+                    .short('g')
+                    .long("gap_open")
+                    .default_value("-5")
+                    .value_parser(value_parser!(i32).range(-100..=0))
+                    .help("Gap opened penalty score, negative int")
+            )
+            .arg(
+                Arg::new("gap_extend")
+                    .short('G')
+                    .long("gap_extend")
+                    .default_value("-1")
+                    .value_parser(value_parser!(i32).range(-100..=0))
+                    .help("Gap extend penalty score, negative int")
+            )
+            .arg(
+                Arg::new("rev_com_not_used")
+                    .long("rev_com_not_used")
+                    .action(ArgAction::SetTrue)
+                    .help("Whether used rev com sequences of primers to query in read if primers is used. If it's set, \
                 we will assume that fwd primer is in 5'end of read and rev_com of rev primer is in 3'end of read. [default: false]")
-        )
-        .arg(
-            Arg::new("end5_len")
-                .long("end5_len")
-                .default_value("150")
-                .help("[search parameter]: search in the first N bases from 5'end of reads to find front adapter")
-                .value_parser(value_parser!(u32).range(100..=1000))
-        )
-        .arg(
-            Arg::new("end5_align_pct")
-                .long("end5_align_pct")
-                .help("[search parameter]: the ratio between align length of front adapter and the full length of adapter should be bigger than this value for 5' end")
-                .default_value("0.8")
-                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
-        )
-        .arg(
-            Arg::new("end5_align_ident")
-                .long("end5_align_ident")
-                .default_value("0.8")
-                .help("[search parameter]: the ratio between the identity bases number of align and the align length of adapter should be bigger than this value for 5'end")
-                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
-        )
-        .arg(
-            Arg::new("end3_len")
-                .long("end3_len")
-                .default_value("130")
-                .help("[search parameter]: search in the last N bases from 3'end of reads to find rear adapter")
-                .value_parser(value_parser!(u32).range(100..=1000))
-        )
-        .arg(
-            Arg::new("end3_align_pct")
-                .long("end3_align_pct")
-                .help("[search parameter]: the ratio between align length of rear adapter and the full length of adapter should be bigger than this value for 3' end")
-                .default_value("0.8")
-                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
-        )
-        .arg(
-            Arg::new("end3_align_ident")
-                .long("end3_align_ident")
-                .default_value("0.8")
-                .help("[search parameter]: the ratio between the identity bases number of align and the align length of adapter should be bigger than this value for 3'end")
-                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
-        )
-        .arg(
-            Arg::new("end5_len_rc")
-                .long("end5_len_rc")
-                .default_value("150")
-                .help("[search parameter]: search in the first N bases from 5'end of reads to find front adapter if this read is reverse complementary")
-                .value_parser(value_parser!(u32).range(100..=1000))
-        )
-        .arg(
-            Arg::new("end5_align_pct_rc")
-                .long("end5_align_pct_rc")
-                .help("[search parameter]: the ratio between align length of front adapter and the full length of adapter should be bigger than this value for 5' end if this read is reverse complementary")
-                .default_value("0.8")
-                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
-        )
-        .arg(
-            Arg::new("end5_align_ident_rc")
-                .long("end5_align_ident_rc")
-                .default_value("0.8")
-                .help("[search parameter]: the ratio between the identity bases number of align and the align length of adapter should be bigger than this value for 5'end if this read is reverse complementary")
-                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
-        )
-        .arg(
-            Arg::new("end3_len_rc")
-                .long("end3_len_rc")
-                .default_value("130")
-                .help("[search parameter]: search in the last N bases from 3'end of reads to find rear adapter if this read is reverse complementary")
-                .value_parser(value_parser!(u32).range(100..=1000))
-        )
-        .arg(
-            Arg::new("end3_align_pct_rc")
-                .long("end3_align_pct_rc")
-                .help("[search parameter]: the ratio between align length of rear adapter and the full length of adapter should be bigger than this value for 3' end if this read is reverse complementary")
-                .default_value("0.8")
-                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
-        )
-        .arg(
-            Arg::new("end3_align_ident_rc")
-                .long("end3_align_ident_rc")
-                .default_value("0.8")
-                .help("[search parameter]: the ratio between the identity bases number of align and the align length of adapter should be bigger than this value for 3'end if this read is reverse complementary")
-                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
-        );
+            )
+            .arg(
+                Arg::new("end5_len")
+                    .long("end5_len")
+                    .default_value("150")
+                    .help("[search parameter]: search in the first N bases from 5'end of reads to find front adapter")
+                    .value_parser(value_parser!(u32).range(100..=1000))
+            )
+            .arg(
+                Arg::new("end5_align_pct")
+                    .long("end5_align_pct")
+                    .help("[search parameter]: the ratio between align length of front adapter and the full length of adapter should be bigger than this value for 5' end")
+                    .default_value("0.8")
+                    .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
+            )
+            .arg(
+                Arg::new("end5_align_ident")
+                    .long("end5_align_ident")
+                    .default_value("0.8")
+                    .help("[search parameter]: the ratio between the identity bases number of align and the align length of adapter should be bigger than this value for 5'end")
+                    .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
+            )
+            .arg(
+                Arg::new("end3_len")
+                    .long("end3_len")
+                    .default_value("130")
+                    .help("[search parameter]: search in the last N bases from 3'end of reads to find rear adapter")
+                    .value_parser(value_parser!(u32).range(100..=1000))
+            )
+            .arg(
+                Arg::new("end3_align_pct")
+                    .long("end3_align_pct")
+                    .help("[search parameter]: the ratio between align length of rear adapter and the full length of adapter should be bigger than this value for 3' end")
+                    .default_value("0.8")
+                    .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
+            )
+            .arg(
+                Arg::new("end3_align_ident")
+                    .long("end3_align_ident")
+                    .default_value("0.8")
+                    .help("[search parameter]: the ratio between the identity bases number of align and the align length of adapter should be bigger than this value for 3'end")
+                    .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
+            )
+            .arg(
+                Arg::new("end5_len_rc")
+                    .long("end5_len_rc")
+                    .default_value("150")
+                    .help("[search parameter]: search in the first N bases from 5'end of reads to find front adapter if this read is reverse complementary")
+                    .value_parser(value_parser!(u32).range(100..=1000))
+            )
+            .arg(
+                Arg::new("end5_align_pct_rc")
+                    .long("end5_align_pct_rc")
+                    .help("[search parameter]: the ratio between align length of front adapter and the full length of adapter should be bigger than this value for 5' end if this read is reverse complementary")
+                    .default_value("0.8")
+                    .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
+            )
+            .arg(
+                Arg::new("end5_align_ident_rc")
+                    .long("end5_align_ident_rc")
+                    .default_value("0.8")
+                    .help("[search parameter]: the ratio between the identity bases number of align and the align length of adapter should be bigger than this value for 5'end if this read is reverse complementary")
+                    .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
+            )
+            .arg(
+                Arg::new("end3_len_rc")
+                    .long("end3_len_rc")
+                    .default_value("130")
+                    .help("[search parameter]: search in the last N bases from 3'end of reads to find rear adapter if this read is reverse complementary")
+                    .value_parser(value_parser!(u32).range(100..=1000))
+            )
+            .arg(
+                Arg::new("end3_align_pct_rc")
+                    .long("end3_align_pct_rc")
+                    .help("[search parameter]: the ratio between align length of rear adapter and the full length of adapter should be bigger than this value for 3' end if this read is reverse complementary")
+                    .default_value("0.8")
+                    .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
+            )
+            .arg(
+                Arg::new("end3_align_ident_rc")
+                    .long("end3_align_ident_rc")
+                    .default_value("0.8")
+                    .help("[search parameter]: the ratio between the identity bases number of align and the align length of adapter should be bigger than this value for 3'end if this read is reverse complementary")
+                    .value_parser(|x: &str| positive_number_parse::<f64>(x, "--end5_align_pct", true, 0.0f64, 1.0f64))
+            );
 
     let amplicon_cmd = Command::new("amplicon")
             .about("get draft consensus from Ligation Nanopore Long reads for amplicon")
@@ -558,7 +589,7 @@ you can choice one from [LSK, RAD, ULK, RBK, PCS, PCB, NBD_1, NBD_2, ..., NBD_95
                     .long("fwd")
                     .action(ArgAction::Set)
                     .required(true)
-                    .value_parser(|x: &str|  primer_parse(x) )
+                    .value_parser(|x: &str| primer_parse(x))
                     .help("the forward primer of amplicon")
             )
             .arg(
@@ -567,7 +598,7 @@ you can choice one from [LSK, RAD, ULK, RBK, PCS, PCB, NBD_1, NBD_2, ..., NBD_95
                     .long("rev")
                     .action(ArgAction::Set)
                     .required(true)
-                    .value_parser(|x: &str| primer_parse(x) )
+                    .value_parser(|x: &str| primer_parse(x))
                     .help("the reverse primer of amplicon")
             )
             .arg(
@@ -604,10 +635,10 @@ you can choice one from [LSK, RAD, ULK, RBK, PCS, PCB, NBD_1, NBD_2, ..., NBD_95
                     .value_parser(value_parser!(u32))
                     .help("top n best quality reads with appropriate lengths will be selected for mafft analysis. the bigger n, the slower it gets")
             )
-        ;
+            ;
 
     let cmd = Command::new("nanofq")
-        .version("0.1.3")
+        .version("0.2.0")
         .about("A simple program for nanopore fastq file to stats, filter, trim...")
         .subcommand(stats_cmd)
         .subcommand(filter_cmd)

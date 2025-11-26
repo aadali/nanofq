@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::iter::Sum;
 use uuid;
+use crate::bam::BasicBamStatistics;
 
 #[derive(Default, Debug)]
 pub struct BasicStatistics {
@@ -96,6 +97,7 @@ pub fn get_summary(
     read_lengths: Option<&Vec<usize>>,
     read_qualities: &Vec<f64>,
     n: usize,
+    basic_bam_stats: &BasicBamStatistics
 ) -> (String, BasicStatistics) {
     let mut contents = String::new();
     let total_reads = stats_vec.len();
@@ -235,13 +237,16 @@ pub fn get_summary(
         .enumerate()
         .for_each(|idx_each_stats| {
             contents.push_str(&format!(
-                "{}\t{}\t{}\t{:.2}\n",
+                "{}\t{}\t{}\t{:.8}\n",
                 idx_each_stats.0 + 1,
                 idx_each_stats.1.0,
                 idx_each_stats.1.1,
                 idx_each_stats.1.2.1
             ))
         });
+    if !basic_bam_stats.is_empty() {
+        contents.push_str(&basic_bam_stats.to_string())
+    }
     (
         contents,
         BasicStatistics {
@@ -266,9 +271,10 @@ pub fn write_summary(
     read_lengths: Option<&Vec<usize>>,
     read_qvalues: &Vec<f64>,
     n: usize,
+    basic_bam_stats: &BasicBamStatistics,
     output: &String,
 ) -> BasicStatistics {
-    let (summary_info, basic_stats) = get_summary(stats_vec, read_lengths, read_qvalues, n);
+    let (summary_info, basic_stats) = get_summary(stats_vec, read_lengths, read_qvalues, n, basic_bam_stats);
     std::fs::write(output, &summary_info).expect(&format!(
         "write summary info into {output}. The info is:\n{summary_info}"
     ));
