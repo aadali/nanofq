@@ -11,6 +11,7 @@ git clone https://github.com/aadali/nanofq
 cd nanofq
 cargo build --release 
 ```
+Then you can find `nanofq` in `./target/release`
 > Note: For generating statistical plots, `python3` along with the `matplotlib` library is required.
 
 ## Usage
