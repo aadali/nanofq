@@ -30,7 +30,6 @@ fn main() -> Result<(), anyhow::Error> {
         run_amplicon(amplicon_cmd)
     } else {
         quit_with_error("Error for cmd parse");
-        Ok(())
     };
     if main_result.is_err() {
         quit_with_error(&main_result.err().unwrap().to_string());

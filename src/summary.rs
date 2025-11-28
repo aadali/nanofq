@@ -237,7 +237,7 @@ pub fn get_summary(
         .enumerate()
         .for_each(|idx_each_stats| {
             contents.push_str(&format!(
-                "{}\t{}\t{}\t{:.8}\n",
+                "{}\t{}\t{}\t{:.2}\n",
                 idx_each_stats.0 + 1,
                 idx_each_stats.1.0,
                 idx_each_stats.1.1,

@@ -1,12 +1,13 @@
 use crate::fastq::{DORADO_TRIM_LEADING_BASE_NUMBER, EachStats};
 use crate::utils::{get_q2p_table, quit_with_error};
 use bio::bio_types::genome::AbstractInterval;
-use rust_htslib::bam;
-use rust_htslib::bam::Read;
 use rust_htslib::bam::ext::BamRecordExtensions;
+use rust_htslib::bam::index;
 use rust_htslib::bam::record::{Aux, Cigar};
+use rust_htslib::bam::{self, FetchDefinition, HeaderView, IndexedReader, Read};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::path::Path;
 use std::sync::OnceLock;
 
 static ENCODED_BASES_GC_COUNT: OnceLock<HashMap<u8, usize>> = OnceLock::new();
@@ -82,7 +83,6 @@ impl BamRecordStats for rust_htslib::bam::Record {
                             self.contig(),
                             self.reference_start(),
                         ));
-                        0.0
                     }
                 };
                 (read_quality.powf(read_quality / -10.0), read_quality)
@@ -201,7 +201,6 @@ fn get_nm_aux(record: &bam::Record) -> usize {
                 "Parse NM tag failed for {}",
                 str::from_utf8(record.qname()).unwrap()
             ));
-            0usize
         }
     }
 }
@@ -213,6 +212,105 @@ fn get_cigar_base_length(cigar: &Cigar) -> usize {
         _ => 0usize,
     }
 }
+fn bins_contig(contig_len: u64, bins_number: usize) -> Vec<(u64, u64)> {
+    let mut edges = vec![];
+    let step = contig_len / bins_number as u64;
+    let mut left = 0u64;
+    let mut right = 0u64;
+    for i in 0..bins_number {
+        if i == bins_number - 1 {
+            right = contig_len;
+            edges.push((left, right));
+        } else {
+            right = left + step;
+            edges.push((left, right));
+            left = right
+        }
+    }
+    edges
+}
+fn bins(header: &'_ HeaderView, thread: usize) -> Vec<FetchDefinition<'_>> {
+    let mut contigs_edges = vec![];
+    let contig_numbers = header.target_count();
+    for tig in 0..contig_numbers {
+        let contig_len = header.target_len(tig).unwrap();
+        let edges = bins_contig(contig_len, thread);
+        for edge in edges {
+            contigs_edges.push(FetchDefinition::Region(
+                tig as i32,
+                edge.0 as i64,
+                edge.1 as i64,
+            ))
+        }
+    }
+    contigs_edges.push(FetchDefinition::Unmapped);
+    contigs_edges
+}
+
+#[derive(Debug)]
+enum BamType {
+    SAM,
+    UnalignedBam,
+    UnsortedBam,
+    SortedUnindexedBam,
+    IndexedBam,
+}
+
+fn check_bam_type(bam_file: &str) -> BamType {
+    if !(bam_file.ends_with("bam") || bam_file.ends_with(".sam")) {
+        quit_with_error("input file should be bam or sam file ends with \".bam\" or \".sam\"")
+    }
+    if bam_file.ends_with(".sam") {
+        BamType::SAM
+    } else {
+        let mut bam_reader = rust_htslib::bam::Reader::from_path(bam_file).unwrap();
+        let header_view = bam_reader.header();
+        if 0 == header_view.target_count() {
+            BamType::UnalignedBam
+        } else {
+            let header_hashmap = bam::Header::from_template(header_view).to_hashmap();
+            let hd_opt = header_hashmap.get(&"HD".to_string());
+            if hd_opt.is_none() {
+                BamType::UnsortedBam
+            } else {
+                let hd_linear_map = hd_opt.unwrap().first().unwrap();
+                let so_opt = hd_linear_map.get(&"SO".to_string());
+                match so_opt {
+                    None => BamType::UnsortedBam,
+                    Some(so) => {
+                        if so == "coordinate" {
+                            let bam_file_index_path =
+                                std::path::PathBuf::from(&format!("{}.bai", bam_file));
+                            if bam_file_index_path.exists() {
+                                let bam_file_meta_res = Path::new(bam_file).metadata();
+                                let bam_file_index_meta_res = bam_file_index_path.metadata();
+                                if bam_file_index_meta_res.is_ok() && bam_file_meta_res.is_ok() {
+                                    if bam_file_meta_res.unwrap().created().unwrap()
+                                        < bam_file_index_meta_res.unwrap().created().unwrap()
+                                    {
+                                        BamType::IndexedBam
+                                    } else {
+                                        BamType::SortedUnindexedBam
+                                    }
+                                } else {
+                                    BamType::SortedUnindexedBam
+                                }
+                            } else {
+                                BamType::SortedUnindexedBam
+                            }
+                        } else {
+                            BamType::UnsortedBam
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// ```
+/// for UnalignedBam/UnsortedBam/SAM file or all bam/sam from stdin
+/// ```
 pub fn stats_xam(
     bam_reader: &mut bam::Reader,
     thread: usize,
@@ -271,4 +369,19 @@ pub fn stats_xam(
     basic_bam_stats.map_rate = basic_bam_stats.reads_mapped as f64
         / (basic_bam_stats.reads_mapped + basic_bam_stats.reads_unmapped) as f64;
     (basic_bam_stats, all_stats)
+}
+
+pub fn index_bam(bam_file: &str, thread: usize) -> Result<(), anyhow::Error> {
+    index::build(bam_file, None, index::Type::Bai, thread as u32)?;
+    Ok(())
+}
+
+/// ```
+/// For IndexedBam file. If it's a SortedUnindexBam, index it, turn it into IndexedBam
+/// ```
+pub fn stats_indexed_bam(bam_file: &str, thread: usize, gc: bool, dont_use_dorado_quality: bool) {
+    let bam_type = check_bam_type(bam_file);
+    let indexed_bam_reader = IndexedReader::from_path(bam_file).unwrap();
+    let fetch_regions = bins(indexed_bam_reader.header(), thread);
+
 }
