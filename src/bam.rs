@@ -1,12 +1,15 @@
 use crate::fastq::{DORADO_TRIM_LEADING_BASE_NUMBER, EachStats};
 use crate::utils::{get_q2p_table, quit_with_error};
 use bio::bio_types::genome::AbstractInterval;
+use rayon::prelude::*;
 use rust_htslib::bam::ext::BamRecordExtensions;
 use rust_htslib::bam::index;
 use rust_htslib::bam::record::{Aux, Cigar};
 use rust_htslib::bam::{self, FetchDefinition, HeaderView, IndexedReader, Read};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::ops::AddAssign;
 use std::path::Path;
 use std::sync::OnceLock;
 
@@ -185,6 +188,21 @@ impl Display for BasicBamStatistics {
     }
 }
 
+impl AddAssign for BasicBamStatistics {
+    fn add_assign(&mut self, rhs: Self) {
+        self.reads_mapped += rhs.reads_mapped;
+        self.reads_unmapped += rhs.reads_unmapped;
+        self.reads_mq0 += rhs.reads_mq0;
+        self.primary_alignment += rhs.primary_alignment;
+        self.supplementary_alignment += rhs.supplementary_alignment;
+        self.secondary_alignment += rhs.secondary_alignment;
+        self.bases_mapped += rhs.bases_mapped;
+        self.bases_mapped_cigar += rhs.bases_mapped_cigar;
+        self.mismatches += rhs.mismatches;
+        self.error_rate = self.mismatches as f64 / self.bases_mapped_cigar as f64;
+        self.map_rate = self.reads_mapped as f64 / (self.reads_mapped + self.reads_unmapped) as f64;
+    }
+}
 fn get_nm_aux(record: &bam::Record) -> usize {
     let nm_tag = record.aux(b"NM").unwrap_or(Aux::I32(0));
     match nm_tag {
@@ -233,7 +251,11 @@ fn bins(header: &'_ HeaderView, thread: usize) -> Vec<FetchDefinition<'_>> {
     let mut contigs_edges = vec![];
     let contig_numbers = header.target_count();
     for tig in 0..contig_numbers {
-        let contig_len = header.target_len(tig).unwrap();
+        let contig_len_opt = header.target_len(tig);
+        if contig_len_opt.is_none() {
+            quit_with_error(&format!("Get contig length for {} failed", tig))
+        }
+        let contig_len = contig_len_opt.unwrap();
         let edges = bins_contig(contig_len, thread);
         for edge in edges {
             contigs_edges.push(FetchDefinition::Region(
@@ -247,8 +269,8 @@ fn bins(header: &'_ HeaderView, thread: usize) -> Vec<FetchDefinition<'_>> {
     contigs_edges
 }
 
-#[derive(Debug)]
-enum BamType {
+#[derive(Debug, Eq, PartialEq)]
+pub enum BamType {
     SAM,
     UnalignedBam,
     UnsortedBam,
@@ -256,14 +278,15 @@ enum BamType {
     IndexedBam,
 }
 
-fn check_bam_type(bam_file: &str) -> BamType {
+pub fn check_bam_type(bam_file: &str) -> BamType {
     if !(bam_file.ends_with("bam") || bam_file.ends_with(".sam")) {
         quit_with_error("input file should be bam or sam file ends with \".bam\" or \".sam\"")
     }
     if bam_file.ends_with(".sam") {
         BamType::SAM
     } else {
-        let mut bam_reader = rust_htslib::bam::Reader::from_path(bam_file).unwrap();
+        let bam_reader = rust_htslib::bam::Reader::from_path(bam_file)
+            .expect("Make bam::Reader failed for check_bam_type");
         let header_view = bam_reader.header();
         if 0 == header_view.target_count() {
             BamType::UnalignedBam
@@ -308,23 +331,19 @@ fn check_bam_type(bam_file: &str) -> BamType {
     }
 }
 
-/// ```
-/// for UnalignedBam/UnsortedBam/SAM file or all bam/sam from stdin
-/// ```
-pub fn stats_xam(
-    bam_reader: &mut bam::Reader,
-    thread: usize,
+fn stats_from_bam_reader<R>(
+    bam_reader: &mut R,
     gc: bool,
     dont_use_dorado_quality: bool,
-) -> (BasicBamStatistics, Vec<EachStats>) {
-    debug_assert!(thread > 0);
+    region_start: i64,
+) -> (BasicBamStatistics, Vec<EachStats>)
+where
+    R: bam::Read,
+{
     let mut basic_bam_stats = BasicBamStatistics::default();
     let mut all_stats = vec![];
-    if thread > 0 {
-        bam_reader.set_threads(thread).unwrap();
-    }
     let mut record = bam::Record::new();
-    record.set_qname(b"InitRecord");
+    record.set_qname(b"InitBamRecord");
     while let Some(x) = bam_reader.read(&mut record) {
         if x.is_err() {
             quit_with_error(&format!(
@@ -332,10 +351,14 @@ pub fn stats_xam(
                 str::from_utf8(record.qname()).unwrap()
             ));
         }
+
         if record.is_unmapped() {
             basic_bam_stats.reads_unmapped += 1;
             all_stats.push(record.stats(gc, dont_use_dorado_quality));
         } else {
+            if record.pos() < region_start {
+                continue;
+            }
             if record.flags() & 0x900 == 0 {
                 all_stats.push(record.stats(gc, dont_use_dorado_quality));
                 basic_bam_stats.bases_mapped += record.seq_len();
@@ -371,17 +394,93 @@ pub fn stats_xam(
     (basic_bam_stats, all_stats)
 }
 
+
+fn stats_indexed_bam_fetch(
+    bam_reader: &mut IndexedReader,
+    region: FetchDefinition,
+    gc: bool,
+    dont_use_dorado_quality: bool,
+) -> (BasicBamStatistics, Vec<EachStats>) {
+    let region_start = match &region {
+        FetchDefinition::Region(_, region_start, _) => *region_start,
+        FetchDefinition::Unmapped => i64::MIN,
+        _ => quit_with_error("Bad FetchDefinition"),
+    };
+    let may_be_err_msg = format!("Fetch region: {:?} from IndexedReader failed", &region);
+    let fetch_result = bam_reader.fetch(region);
+    if fetch_result.is_err(){
+        quit_with_error(&may_be_err_msg)
+    }
+    stats_from_bam_reader(bam_reader, gc, dont_use_dorado_quality, region_start)
+}
+
 pub fn index_bam(bam_file: &str, thread: usize) -> Result<(), anyhow::Error> {
     index::build(bam_file, None, index::Type::Bai, thread as u32)?;
     Ok(())
 }
 
 /// ```
+/// for UnalignedBam/UnsortedBam/SAM file or all bam/sam from stdin
+/// ```
+pub fn stats_xam(
+    bam_reader: &mut bam::Reader,
+    thread: usize,
+    gc: bool,
+    dont_use_dorado_quality: bool,
+) -> (BasicBamStatistics, Vec<EachStats>) {
+    debug_assert!(thread > 0);
+    bam_reader.set_threads(thread).unwrap();
+    stats_from_bam_reader(bam_reader, gc, dont_use_dorado_quality, i64::MIN)
+}
+
+thread_local! {
+    static INDEXED_BAM_READER: RefCell<IndexedReader> = panic!("!");
+}
+
+/// ```
 /// For IndexedBam file. If it's a SortedUnindexBam, index it, turn it into IndexedBam
 /// ```
-pub fn stats_indexed_bam(bam_file: &str, thread: usize, gc: bool, dont_use_dorado_quality: bool) {
-    let bam_type = check_bam_type(bam_file);
-    let indexed_bam_reader = IndexedReader::from_path(bam_file).unwrap();
+pub fn stats_indexed_bam(
+    bam_file: &str,
+    thread: usize,
+    gc: bool,
+    dont_use_dorado_quality: bool,
+) -> (BasicBamStatistics, Vec<EachStats>) {
+    debug_assert_eq!(check_bam_type(bam_file), BamType::IndexedBam);
+    let indexed_bam_reader =
+        IndexedReader::from_path(bam_file).expect("Read indexed bam failed for stats_indexed_bam");
     let fetch_regions = bins(indexed_bam_reader.header(), thread);
+    let files = (0..thread)
+        .into_iter()
+        .map(|_| bam_file.to_string())
+        .collect::<Vec<String>>();
 
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(thread)
+        .start_handler(move |index| {
+            let bam_file_string = files[index].clone();
+            let mut reader = IndexedReader::from_path(&bam_file_string).expect("Open failed");
+            reader.set_threads(thread).unwrap();
+            INDEXED_BAM_READER.set(reader);
+        })
+        .thread_name(|x| format!("Thread: {x}"))
+        .build_global()
+        .expect("thread pool builder failed for stats_indexed_bam function");
+
+    let result: Vec<_> = fetch_regions
+        .into_par_iter()
+        .map(|region| {
+            INDEXED_BAM_READER.with_borrow_mut(|indexed_reader| {
+                stats_indexed_bam_fetch(indexed_reader, region, gc, dont_use_dorado_quality)
+            })
+        })
+        .collect();
+
+    let mut basic_bam_stats = BasicBamStatistics::default();
+    let mut all_stats = vec![];
+    for x in result {
+        basic_bam_stats += x.0;
+        all_stats.extend(x.1);
+    }
+    (basic_bam_stats, all_stats)
 }

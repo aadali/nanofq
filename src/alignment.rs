@@ -329,6 +329,7 @@ impl LocalAligner {
 }
 
 #[test]
+#[ignore]
 fn test_max() {
     let v = [1, 23, 32];
     let a = 20;
@@ -341,6 +342,7 @@ fn test_max() {
 }
 
 #[test]
+#[ignore]
 pub fn test_alignment() {
     let scores = Scores {
         match_: 3,

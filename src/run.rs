@@ -406,7 +406,9 @@ pub mod run_entry {
         filter_candidate_amplicon, get_candidate_amplicon, get_consensus_from_msa, mafft_msa,
         write_final_amplicon,
     };
-    use crate::bam::{stats_xam, BasicBamStatistics};
+    use crate::bam::{
+        BamType, BasicBamStatistics, check_bam_type, index_bam, stats_indexed_bam, stats_xam,
+    };
     use crate::fastq::{FastqReader, FilterOption, NanoRead};
     use crate::run::sub_run::filter::{filter, filter_fastq_dir};
     use crate::run::sub_run::stats::{stats, stats_fastq_dir};
@@ -433,6 +435,7 @@ pub mod run_entry {
         let lengths = stats_cmd.get_one::<Vec<usize>>("length");
         let gc = stats_cmd.get_flag("gc");
         let bam = stats_cmd.get_flag("bam");
+        let index = stats_cmd.get_flag("index");
         let thread = stats_cmd.get_one::<u16>("thread").unwrap();
         let plot = stats_cmd.get_one::<String>("plot");
         let python = stats_cmd.get_one::<String>("python").unwrap();
@@ -442,15 +445,11 @@ pub mod run_entry {
             .unwrap()
             .collect::<Vec<&String>>();
 
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(*thread as usize)
-            .build_global()?;
-
-        let mut basic_bam_stats= BasicBamStatistics::default();
+        let mut basic_bam_stats = BasicBamStatistics::default();
         let mut stats_result = match input {
-            // None => stats_result = stats_stdin(*thread as usize, gc),
             None => {
                 if bam {
+                    // stats bam/sam from stdin
                     let mut bam_reader = rust_htslib::bam::Reader::from_stdin()?;
                     let (basic_bam_stats_, all_stats) = stats_xam(
                         &mut bam_reader,
@@ -461,6 +460,10 @@ pub mod run_entry {
                     basic_bam_stats = basic_bam_stats_;
                     all_stats
                 } else {
+                    // stats fastq[.gz] from stdin
+                    rayon::ThreadPoolBuilder::new()
+                        .num_threads(*thread as usize)
+                        .build_global()?;
                     stats(
                         std::io::stdin(),
                         *thread as usize,
@@ -477,6 +480,9 @@ pub mod run_entry {
                         if bam {
                             quit_with_error("--bam should used with bam/sam file")
                         }
+                        rayon::ThreadPoolBuilder::new()
+                            .num_threads(*thread as usize)
+                            .build_global()?;
                         stats(
                             MultiGzDecoder::new(BufReader::new(File::open(input)?)),
                             *thread as usize,
@@ -487,13 +493,46 @@ pub mod run_entry {
                         || input_path.to_str().unwrap().ends_with(".sam")
                     {
                         // stats a bam or sam file
-                        let mut bam_reader = rust_htslib::bam::Reader::from_path(input)?;
-                        let (basic_bam_stats_, all_stats) = stats_xam(
-                            &mut bam_reader,
-                            *thread as usize,
-                            gc,
-                            dont_use_dorado_quality,
-                        );
+                        let bam_type = check_bam_type(input);
+                        let (basic_bam_stats_, all_stats) = match bam_type {
+                            BamType::SAM | BamType::UnsortedBam | BamType::UnalignedBam => {
+                                // stats a Sam/UnsortedBam/UnalignedBam file
+                                let mut bam_reader = rust_htslib::bam::Reader::from_path(input)?;
+                                stats_xam(
+                                    &mut bam_reader,
+                                    *thread as usize,
+                                    gc,
+                                    dont_use_dorado_quality,
+                                )
+                            }
+                            BamType::SortedUnindexedBam => {
+                                // stats a sorted but unindexed bam, build index for bam firstly
+                                if index {
+                                    index_bam(input, *thread as usize)?;
+                                    stats_indexed_bam(
+                                        input,
+                                        *thread as usize,
+                                        gc,
+                                        dont_use_dorado_quality,
+                                    )
+                                } else {
+                                    let mut bam_reader = rust_htslib::bam::Reader::from_path(input)?;
+                                    stats_xam(
+                                        &mut bam_reader,
+                                        *thread as usize,
+                                        gc,
+                                        dont_use_dorado_quality,
+                                    )
+                                }
+                            }
+                            BamType::IndexedBam => stats_indexed_bam(
+                                // stats a indexed bam
+                                input,
+                                *thread as usize,
+                                gc,
+                                dont_use_dorado_quality,
+                            ),
+                        };
                         basic_bam_stats = basic_bam_stats_;
                         all_stats
                     } else {
@@ -501,6 +540,9 @@ pub mod run_entry {
                         if bam {
                             quit_with_error("--bam should used with bam/sam file")
                         }
+                        rayon::ThreadPoolBuilder::new()
+                            .num_threads(*thread as usize)
+                            .build_global()?;
                         stats(
                             BufReader::new(File::open(input)?),
                             *thread as usize,
@@ -512,6 +554,9 @@ pub mod run_entry {
                     if bam {
                         quit_with_error("--bam couldn't used with directory input")
                     }
+                    rayon::ThreadPoolBuilder::new()
+                        .num_threads(*thread as usize)
+                        .build_global()?;
                     stats_fastq_dir(input_path, *thread as usize, gc, dont_use_dorado_quality)
                 }
             }

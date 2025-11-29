@@ -17,17 +17,16 @@ Then you can find `nanofq` in `./target/release`
 ## Usage
 
 ```
-$ ./nanofq --help
 A simple program for nanopore fastq file to stats, filter, trim...
 
 Usage: nanofq [COMMAND]
 
 Commands:
-  stats   stats nanopore fastq, output the stats result, summary and figures
-  filter  filter nanopore fastq by length, quality or gc content
-  trim    trim adapter, barcode, primer that artificial sequence in nanopore fastq
-  amplicon get draft consensus from Ligation Nanopore Long reads for amplicon
-  help    Print this message or the help of the given subcommand(s)
+  stats     stats nanopore fastq/sam/bam, output the stats result, summary and figures
+  filter    filter nanopore fastq by length, quality or gc content
+  trim      trim adapter, barcode, primer that artificial sequence in nanopore fastq
+  amplicon  get draft consensus from Ligation Nanopore Long reads for amplicon
+  help      Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help     Print help
@@ -66,6 +65,7 @@ Options:
   -l, --length <length>          Count the reads number that whose length is bigger than this value if you set this parameter, multi values can be separated by comma
       --gc                       Whether to stats the gc content
   -b, --bam                      If set, treat input as bam/sam
+  -I, --index                    For sorted but unindexed bam file, build index firstly if this para is specified
   -t, --thread <thread>          How many threads will be used [default: 1]
       --python <python>          the python3 path, and matplotlib is needed [default: python3]
   -p, --plot <plot>              Whether to make plot, if set, it should be the prefix of figure path without filename extension
@@ -224,6 +224,9 @@ Trim all sequences outside the primers range, keep the top n reads with the high
 Finally, get consensus sequence from the alignment file as draft consensus of the amplicon
 
 ## ChangeLog
+### nanofq (v0.2.1) 2025-11-29
+1. multi threads supported to stats bam/ubam/sam from file or stdin. bam file could be:
+
 ### nanofq (v0.2.0) 2025-11-26
 1. bam/sam format supported for `stats` subcommand
 

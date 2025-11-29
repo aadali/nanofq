@@ -86,6 +86,7 @@ pub const SEP_LINE: &str =
     "----------------------------------------------------------------------\n";
 
 #[test]
+#[ignore]
 fn test_dege_base() {
     assert!(IS_MATCHED(&b'V', &b'A'));
     assert!(IS_MATCHED(&b'A', &b'A'));

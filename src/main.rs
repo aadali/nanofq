@@ -34,6 +34,6 @@ fn main() -> Result<(), anyhow::Error> {
     if main_result.is_err() {
         quit_with_error(&main_result.err().unwrap().to_string());
     }
-    println!("{:?}", start.elapsed());
+    eprintln!("{:?}", start.elapsed());
     Ok(())
 }
