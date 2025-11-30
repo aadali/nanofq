@@ -225,7 +225,7 @@ Finally, get consensus sequence from the alignment file as draft consensus of th
 
 ## ChangeLog
 ### nanofq (v0.2.1) 2025-11-29
-1. multi threads supported to stats bam/ubam/sam from file or stdin. bam file could be:
+1. multi threads supported to stats bam/ubam/sam from file or stdin.
 
 ### nanofq (v0.2.0) 2025-11-26
 1. bam/sam format supported for `stats` subcommand

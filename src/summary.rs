@@ -1,12 +1,11 @@
 use super::fastq::EachStats;
+use crate::bam::BasicBamStatistics;
 use ansi_term;
 use rayon::prelude::*;
 use std::cmp::max_by_key;
 use std::collections::HashMap;
 use std::io::Write;
-use std::iter::Sum;
 use uuid;
-use crate::bam::BasicBamStatistics;
 
 #[derive(Default, Debug)]
 pub struct BasicStatistics {
@@ -53,8 +52,8 @@ fn get_quality_than_n(stats_vec: &Vec<EachStats>, n: f64) -> (usize, usize) {
     let mut current_total_length = 0usize;
     let mut current_reads_number = 0usize;
     for each_stats in stats_vec {
-        let this_quality = each_stats.2;
-        if this_quality.1 > n {
+        let read_quality = each_stats.2;
+        if read_quality > n {
             current_total_length += each_stats.1;
             current_reads_number += 1;
         }
@@ -62,25 +61,11 @@ fn get_quality_than_n(stats_vec: &Vec<EachStats>, n: f64) -> (usize, usize) {
     (current_total_length, current_reads_number)
 }
 
-#[derive(Default)]
-struct LengthQuality((usize, f64));
-
-impl Sum for LengthQuality {
-    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        let mut length_quality = LengthQuality::default();
-        for ele in iter {
-            length_quality.0.0 += ele.0.0;
-            length_quality.0.1 += ele.0.1;
-        }
-        length_quality
-    }
-}
-
 fn get_read_qual_mode(stats_vec: &Vec<EachStats>) -> f64 {
     let mut counter = HashMap::new();
     let epsilon = 0.01;
     for each_stats in stats_vec {
-        let key = (each_stats.2.1 / epsilon).round() as usize;
+        let key = (each_stats.2 / epsilon).round() as usize;
         counter
             .entry(key)
             .and_modify(|count| *count += 1)
@@ -97,20 +82,19 @@ pub fn get_summary(
     read_lengths: Option<&Vec<usize>>,
     read_qualities: &Vec<f64>,
     n: usize,
-    basic_bam_stats: &BasicBamStatistics
+    basic_bam_stats: &BasicBamStatistics,
 ) -> (String, BasicStatistics) {
     let mut contents = String::new();
     let total_reads = stats_vec.len();
-    let sum_length_err_prob = stats_vec
-        .into_par_iter()
-        .fold(
-            || LengthQuality::default(),
-            |sum, element| LengthQuality((sum.0.0 + element.1, sum.0.1 + element.2.0)),
-        )
-        .sum::<LengthQuality>();
-
-    let (total_bases, all_reads_avg_prob) = sum_length_err_prob.0;
-    let mean_read_qual = (all_reads_avg_prob / total_reads as f64).log10() * -10.0f64;
+    let total_bases = stats_vec
+        .iter()
+        .map(|each_stats| each_stats.1)
+        .sum::<usize>();
+    let total_reads_avg_prob = stats_vec
+        .iter()
+        .map(|each_stats| 10f64.powf(each_stats.2 / -10.0))
+        .sum::<f64>();
+    let mean_read_qual = (total_reads_avg_prob / total_reads as f64).log10() * -10.0f64;
     if total_bases / 1_000_000_000 > 1 {
         contents.push_str(&format!(
             "BaseNumber\t{:.9}Gb\n",
@@ -138,7 +122,7 @@ pub fn get_summary(
                 idx_each_stats.0 + 1,
                 idx_each_stats.1.0,
                 idx_each_stats.1.1,
-                idx_each_stats.1.2.1
+                idx_each_stats.1.2
             ))
         });
 
@@ -190,17 +174,16 @@ pub fn get_summary(
     }
 
     // stats_vec decreased by read quality
-    stats_vec
-        .par_sort_by(|first, second| second.2.1.partial_cmp(&first.2.1).expect("NAN was found"));
-    let max_read_qual = stats_vec[0].2.1;
-    let min_read_qual = stats_vec.iter().last().unwrap().2.1;
-    let read_qual_quantile25 = *&stats_vec[(total_reads as f64 * 0.75) as usize].2.1;
+    stats_vec.par_sort_by(|first, second| second.2.partial_cmp(&first.2).expect("NAN was found"));
+    let max_read_qual = stats_vec[0].2;
+    let min_read_qual = stats_vec.iter().last().unwrap().2;
+    let read_qual_quantile25 = *&stats_vec[(total_reads as f64 * 0.75) as usize].2;
     let read_qual_quantile50 = if total_reads % 2 == 0 {
-        (&stats_vec[total_reads / 2 - 1].2.1 + &stats_vec[total_reads / 2 + 1].2.1) / 2.0
+        (&stats_vec[total_reads / 2 - 1].2 + &stats_vec[total_reads / 2 + 1].2) / 2.0
     } else {
-        *&stats_vec[(total_reads + 1) / 2].2.1
+        *&stats_vec[(total_reads + 1) / 2].2
     };
-    let read_qual_quantile75 = *&stats_vec[(total_reads as f64 * 0.25) as usize].2.1;
+    let read_qual_quantile75 = *&stats_vec[(total_reads as f64 * 0.25) as usize].2;
     contents.push_str(&format!(
         "ReadQualityQuantile25\t{:.2}\n",
         read_qual_quantile25
@@ -241,7 +224,7 @@ pub fn get_summary(
                 idx_each_stats.0 + 1,
                 idx_each_stats.1.0,
                 idx_each_stats.1.1,
-                idx_each_stats.1.2.1
+                idx_each_stats.1.2
             ))
         });
     if !basic_bam_stats.is_empty() {
@@ -274,7 +257,8 @@ pub fn write_summary(
     basic_bam_stats: &BasicBamStatistics,
     output: &String,
 ) -> BasicStatistics {
-    let (summary_info, basic_stats) = get_summary(stats_vec, read_lengths, read_qvalues, n, basic_bam_stats);
+    let (summary_info, basic_stats) =
+        get_summary(stats_vec, read_lengths, read_qvalues, n, basic_bam_stats);
     std::fs::write(output, &summary_info).expect(&format!(
         "write summary info into {output}. The info is:\n{summary_info}"
     ));
@@ -292,7 +276,7 @@ pub fn write_stats<W: Write>(
                 "{}\t{}\t{:.4}\t{:.4}\n",
                 each_stats.0,
                 each_stats.1,
-                each_stats.2.1,
+                each_stats.2,
                 each_stats.3.unwrap()
             ));
         }
@@ -300,7 +284,7 @@ pub fn write_stats<W: Write>(
         stats_vec.iter().for_each(|each_stats| {
             content.push_str(&format!(
                 "{}\t{}\t{:.4}\n",
-                each_stats.0, each_stats.1, each_stats.2.1
+                each_stats.0, each_stats.1, each_stats.2
             ))
         });
     }

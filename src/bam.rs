@@ -42,7 +42,7 @@ pub fn get_encoded_bases_gc_count_table() -> &'static HashMap<u8, usize> {
 }
 pub trait BamRecordStats {
     fn gc_count(&self) -> f64;
-    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> (f64, f64);
+    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> f64;
     fn stats(&self, gc: bool, dont_use_dorado_quality: bool) -> EachStats;
 }
 impl BamRecordStats for rust_htslib::bam::Record {
@@ -57,7 +57,7 @@ impl BamRecordStats for rust_htslib::bam::Record {
         gc_number as f64 / seq_len as f64
     }
 
-    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> (f64, f64) {
+    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> f64 {
         let quals = self.qual();
         let real_seq_len = quals.len();
         if dont_use_dorado_quality {
@@ -68,9 +68,9 @@ impl BamRecordStats for rust_htslib::bam::Record {
                 / real_seq_len as f64;
             if avg_err_prob.is_finite() {
                 let read_quality = avg_err_prob.log10() * -10.0;
-                (avg_err_prob, read_quality)
+                read_quality
             } else {
-                (0.0, 0.0)
+                0.0
             }
         } else {
             let quality_tag_res = self.aux(b"qs");
@@ -88,7 +88,7 @@ impl BamRecordStats for rust_htslib::bam::Record {
                         ));
                     }
                 };
-                (read_quality.powf(read_quality / -10.0), read_quality)
+                read_quality
             } else {
                 let (seq_len, skip) = if real_seq_len > DORADO_TRIM_LEADING_BASE_NUMBER {
                     (
@@ -105,10 +105,9 @@ impl BamRecordStats for rust_htslib::bam::Record {
                     .sum::<f64>()
                     / seq_len as f64;
                 if avg_err_prob.is_finite() {
-                    let quality = avg_err_prob.log10() * -10.0;
-                    (avg_err_prob, quality)
+                    avg_err_prob.log10() * -10.0
                 } else {
-                    (0.0, 0.0)
+                    0.0
                 }
             }
         }
@@ -394,7 +393,6 @@ where
     (basic_bam_stats, all_stats)
 }
 
-
 fn stats_indexed_bam_fetch(
     bam_reader: &mut IndexedReader,
     region: FetchDefinition,
@@ -408,7 +406,7 @@ fn stats_indexed_bam_fetch(
     };
     let may_be_err_msg = format!("Fetch region: {:?} from IndexedReader failed", &region);
     let fetch_result = bam_reader.fetch(region);
-    if fetch_result.is_err(){
+    if fetch_result.is_err() {
         quit_with_error(&may_be_err_msg)
     }
     stats_from_bam_reader(bam_reader, gc, dont_use_dorado_quality, region_start)

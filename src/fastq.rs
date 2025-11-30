@@ -12,9 +12,8 @@ use std::ops::{Deref, DerefMut};
 const BUFF: usize = 1024 * 1024;
 pub const DORADO_TRIM_LEADING_BASE_NUMBER: usize = 60;
 
-// (f64, f64): (this_read_average_error_pro, this_read_quality)
-// (ReadID, Length, (ReadAverageErrProb, ReadQuality), Option<GCContent>)
-pub type EachStats = (Box<String>, usize, (f64, f64), Option<f64>);
+// (ReadID, Length,  ReadQuality, Option<GCContent>)
+pub type EachStats = (Box<String>, usize, f64, Option<f64>);
 
 #[derive(Clone)]
 pub(crate) struct FilterOption<'a> {
@@ -40,7 +39,7 @@ impl<'a> FilterOption<'a> {
 }
 pub trait NanoRead {
     fn gc_count(&self) -> f64;
-    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> (f64, f64);
+    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> f64;
 
     fn stats(&self, gc: bool, dont_use_dorado_quality: bool) -> EachStats;
 
@@ -79,9 +78,10 @@ where
     }
 
     #[inline]
-    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> (f64, f64) {
+    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> f64 {
         let seq_real_len = self.seq().len();
-        let trim_leading = (!dont_use_dorado_quality) && seq_real_len > DORADO_TRIM_LEADING_BASE_NUMBER;
+        let trim_leading =
+            (!dont_use_dorado_quality) && seq_real_len > DORADO_TRIM_LEADING_BASE_NUMBER;
         let seq_len = if trim_leading {
             seq_real_len - DORADO_TRIM_LEADING_BASE_NUMBER
         } else {
@@ -98,11 +98,12 @@ where
             .map(|x| get_q2p_table()[*x as usize])
             .sum::<f64>()
             / seq_len as f64;
-        if avg_err_prob.is_finite() { // for empty record
+        if avg_err_prob.is_finite() {
+            // for empty record
             let quality = avg_err_prob.log10() * -10.0;
-            (avg_err_prob, quality)
+            quality
         } else {
-            (0.0, 0.0)
+            0.0
         }
     }
 
@@ -140,7 +141,7 @@ where
         } else {
             true
         };
-        let this_read_qual = self.calculate_read_quality(fo.dont_use_dorado_quality).1;
+        let this_read_qual = self.calculate_read_quality(fo.dont_use_dorado_quality);
         let is_passed = seq_len >= fo.min_len
             && seq_len <= fo.max_len
             && this_read_qual > fo.min_qual
