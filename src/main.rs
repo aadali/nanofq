@@ -29,7 +29,7 @@ fn main() -> Result<(), anyhow::Error> {
     } else if let Some(amplicon_cmd) = matches.subcommand_matches("amplicon") {
         run_amplicon(amplicon_cmd)
     } else {
-        quit_with_error("Error for cmd parse");
+        unreachable!()
     };
     if main_result.is_err() {
         quit_with_error(&main_result.err().unwrap().to_string());

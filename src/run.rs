@@ -60,7 +60,7 @@ mod sub_run {
                 all_stats.extend(
                     record_vec
                         .into_par_iter()
-                        .map(|x| x.stats(gc, dont_use_dorado_quality))
+                        .filter_map(|x| x.stats(gc, dont_use_dorado_quality))
                         .collect::<Vec<EachStats>>(),
                 );
             }

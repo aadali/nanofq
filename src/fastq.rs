@@ -38,10 +38,10 @@ impl<'a> FilterOption<'a> {
     }
 }
 pub trait NanoRead {
-    fn gc_count(&self) -> f64;
-    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> f64;
+    fn gc_count(&self) -> Option<f64>;
+    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> Option<f64>;
 
-    fn stats(&self, gc: bool, dont_use_dorado_quality: bool) -> EachStats;
+    fn stats(&self, gc: bool, dont_use_dorado_quality: bool) -> Option<EachStats>;
 
     fn is_passed(&self, fo: &FilterOption) -> (bool, Box<String>, usize, f64);
 
@@ -61,8 +61,15 @@ where
     T: Record,
 {
     #[inline]
-    fn gc_count(&self) -> f64 {
-        let seq_len = self.seq().len() as f64;
+    fn gc_count(&self) -> Option<f64> {
+        let seq_len = self.seq().len();
+        if seq_len == 0 {
+            eprintln!(
+                "Empty sequence found for: {:?}",
+                self.id().unwrap_or("UnknowReadName")
+            );
+            return None;
+        }
         let gc_number: usize = self
             .seq()
             .iter()
@@ -74,18 +81,25 @@ where
                 }
             })
             .sum();
-        gc_number as f64 / seq_len
+        Some(gc_number as f64 / seq_len as f64)
     }
 
     #[inline]
-    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> f64 {
-        let seq_real_len = self.seq().len();
+    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> Option<f64> {
+        let qual_real_len = self.qual().len();
+        if qual_real_len == 0 {
+            eprintln!(
+                "Empty quality found for: {:?}",
+                self.id().unwrap_or("UnknowReadName")
+            );
+            return None;
+        }
         let trim_leading =
-            (!dont_use_dorado_quality) && seq_real_len > DORADO_TRIM_LEADING_BASE_NUMBER;
+            (!dont_use_dorado_quality) && qual_real_len > DORADO_TRIM_LEADING_BASE_NUMBER;
         let seq_len = if trim_leading {
-            seq_real_len - DORADO_TRIM_LEADING_BASE_NUMBER
+            qual_real_len - DORADO_TRIM_LEADING_BASE_NUMBER
         } else {
-            seq_real_len
+            qual_real_len
         };
         let avg_err_prob = self
             .qual()
@@ -98,50 +112,58 @@ where
             .map(|x| get_q2p_table()[*x as usize])
             .sum::<f64>()
             / seq_len as f64;
-        if avg_err_prob.is_finite() {
-            // for empty record
-            let quality = avg_err_prob.log10() * -10.0;
-            quality
-        } else {
-            0.0
-        }
+        let quality = avg_err_prob.log10() * -10.0;
+        Some(quality)
     }
 
     #[inline]
-    fn stats(&self, gc: bool, dont_use_dorado_quality: bool) -> EachStats {
+    fn stats(&self, gc: bool, dont_use_dorado_quality: bool) -> Option<EachStats> {
         let len = self.seq().len();
-        let read_quality = self.calculate_read_quality(dont_use_dorado_quality);
-        let gc = if gc { Some(self.gc_count()) } else { None };
-        (
-            Box::new(
-                str::from_utf8(
-                    self.head()
-                        .split(|b| *b == b' ' || *b == b'\t') // the header of dorado basecaller output fastq separated by tab
-                        .next()
-                        .unwrap(),
-                )
-                .expect(&Color::Red.paint(format!(
-                    "parse read id failed in record header: {}",
-                    str::from_utf8(self.head()).unwrap_or("unknow header")
-                )))
-                .to_string(),
-            ),
-            len,
-            read_quality,
-            gc,
-        )
+        if len == 0 {
+            return None;
+        }
+        let read_quality_opt = self.calculate_read_quality(dont_use_dorado_quality);
+        let gc = if gc { self.gc_count() } else { None };
+        match read_quality_opt {
+            Some(read_quality) => Some((
+                Box::new(
+                    str::from_utf8(
+                        self.head()
+                            .split(|b| *b == b' ' || *b == b'\t') // the header of dorado basecaller output fastq separated by tab
+                            .next()
+                            .unwrap(),
+                    )
+                    .expect(&Color::Red.paint(format!(
+                        "parse read id failed in record header: {}",
+                        str::from_utf8(self.head()).unwrap_or("unknow header")
+                    )))
+                    .to_string(),
+                ),
+                len,
+                read_quality,
+                gc,
+            )),
+            None => None,
+        }
     }
 
     #[inline]
     fn is_passed(&self, fo: &FilterOption) -> (bool, Box<String>, usize, f64) {
         let seq_len = self.seq().len();
         let gc_passed = if fo.gc {
-            let gc = self.gc_count();
-            gc > fo.min_gc && gc < fo.max_gc
+            let gc_opt = self.gc_count();
+            if gc_opt.is_some() {
+                let gc = gc_opt.unwrap();
+                gc > fo.min_gc && gc < fo.max_gc
+            } else {
+                false
+            }
         } else {
             true
         };
-        let this_read_qual = self.calculate_read_quality(fo.dont_use_dorado_quality);
+        let this_read_qual = self
+            .calculate_read_quality(fo.dont_use_dorado_quality)
+            .unwrap_or(0.0);
         let is_passed = seq_len >= fo.min_len
             && seq_len <= fo.max_len
             && this_read_qual > fo.min_qual
@@ -226,15 +248,16 @@ impl<R: Read> FastqReader<R> {
         loop {
             let ref_record_opt = self.next();
             if let Some(ref_record) = ref_record_opt {
-                stats_result.push(
-                    ref_record
-                        .expect(
-                            &Color::Red
-                                .paint("Error: failed to get fastq record")
-                                .to_string(),
-                        )
-                        .stats(gc, dont_use_dorado_quality),
-                )
+                let each_stats = ref_record
+                    .expect(
+                        &Color::Red
+                            .paint("Error: failed to get fastq record")
+                            .to_string(),
+                    )
+                    .stats(gc, dont_use_dorado_quality);
+                if each_stats.is_some() {
+                    stats_result.push(each_stats.unwrap());
+                }
             } else {
                 break;
             }

@@ -42,7 +42,7 @@ pub fn get_encoded_bases_gc_count_table() -> &'static HashMap<u8, usize> {
 }
 pub trait BamRecordStats {
     fn gc_count(&self) -> f64;
-    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> f64;
+    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> Option<f64>;
     fn stats(&self, gc: bool, dont_use_dorado_quality: bool) -> EachStats;
 }
 impl BamRecordStats for rust_htslib::bam::Record {
@@ -57,8 +57,15 @@ impl BamRecordStats for rust_htslib::bam::Record {
         gc_number as f64 / seq_len as f64
     }
 
-    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> f64 {
+    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> Option<f64> {
         let quals = self.qual();
+        if quals.len() == 0 {
+            eprintln!(
+                "Empty quality found for: {}",
+                str::from_utf8(self.qname()).unwrap()
+            );
+            return None;
+        }
         let real_seq_len = quals.len();
         if dont_use_dorado_quality {
             let avg_err_prob = quals
@@ -66,12 +73,8 @@ impl BamRecordStats for rust_htslib::bam::Record {
                 .map(|x| get_q2p_table()[*x as usize + 33])
                 .sum::<f64>()
                 / real_seq_len as f64;
-            if avg_err_prob.is_finite() {
-                let read_quality = avg_err_prob.log10() * -10.0;
-                read_quality
-            } else {
-                0.0
-            }
+            let read_quality = avg_err_prob.log10() * -10.0;
+            Some(read_quality)
         } else {
             let quality_tag_res = self.aux(b"qs");
             if quality_tag_res.is_ok() {
@@ -88,7 +91,7 @@ impl BamRecordStats for rust_htslib::bam::Record {
                         ));
                     }
                 };
-                read_quality
+                Some(read_quality)
             } else {
                 let (seq_len, skip) = if real_seq_len > DORADO_TRIM_LEADING_BASE_NUMBER {
                     (
@@ -104,11 +107,7 @@ impl BamRecordStats for rust_htslib::bam::Record {
                     .map(|x| get_q2p_table()[*x as usize + 33])
                     .sum::<f64>()
                     / seq_len as f64;
-                if avg_err_prob.is_finite() {
-                    avg_err_prob.log10() * -10.0
-                } else {
-                    0.0
-                }
+                Some(avg_err_prob.log10() * -10.0)
             }
         }
     }
@@ -117,10 +116,16 @@ impl BamRecordStats for rust_htslib::bam::Record {
         let len = self.qual().len();
         let read_quality = self.calculate_read_quality(dont_use_dorado_quality);
         let gc = if gc { Some(self.gc_count()) } else { None };
+        if read_quality.is_none() {
+            quit_with_error(&format!(
+                "Empty quality found for: {}",
+                str::from_utf8(self.qname()).unwrap()
+            ))
+        }
         (
             Box::new(str::from_utf8(self.qname()).unwrap().to_string()),
             len,
-            read_quality,
+            read_quality.unwrap(),
             gc,
         )
     }

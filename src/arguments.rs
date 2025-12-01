@@ -560,7 +560,8 @@ you can choice one from [LSK, RAD, ULK, RBK, PCS, PCB, NBD_1, NBD_2, ..., NBD_95
 
     let cmd = Command::new("nanofq")
         .version("0.2.1")
-        .about("A simple program for nanopore fastq file to stats, filter, trim...")
+        .about("A simple program for nanopore long reads to stats, filter, trim...")
+        .arg_required_else_help(true)
         .subcommand(stats_cmd)
         .subcommand(filter_cmd)
         .subcommand(trim_cmd)
