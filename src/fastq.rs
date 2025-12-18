@@ -28,12 +28,12 @@ pub(crate) struct FilterOption<'a> {
     pub retain_failed: Option<&'a String>,
 }
 impl<'a> FilterOption<'a> {
-    pub(crate) fn set_failed_fastq_file(&self) -> Result<Option<BufWriter<File>>, anyhow::Error> {
+    pub(crate) fn set_failed_fastq_file(&self) -> Result<Option<Box<dyn Write>>, anyhow::Error> {
         match self.retain_failed {
-            None => Ok(Some(BufWriter::new(File::create(
-                "/tmp/NanoFqFailed.fastq",
-            )?))),
-            Some(failed_fastq_file) => Ok(Some(BufWriter::new(File::create(failed_fastq_file)?))),
+            None => {
+                Ok(Some(Box::new(std::io::sink())))
+            }
+            Some(failed_fastq_file) => Ok(Some(Box::new(BufWriter::new(File::create(failed_fastq_file)?))))
         }
     }
 }
@@ -270,7 +270,7 @@ impl<R: Read> FastqReader<R> {
         writer: &mut dyn Write,
         fo: &FilterOption,
         retain_failed: bool,
-        failed_writer: &mut BufWriter<File>,
+        failed_writer: &mut dyn Write,
     ) -> Result<Vec<(Box<String>, usize, f64)>, anyhow::Error> {
         let mut stats_results = Vec::new();
         if retain_failed {

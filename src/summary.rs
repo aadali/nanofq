@@ -80,7 +80,7 @@ fn get_read_qual_mode(stats_vec: &Vec<EachStats>) -> f64 {
 pub fn get_summary(
     stats_vec: &mut Vec<EachStats>,
     read_lengths: Option<&Vec<usize>>,
-    read_qualities: &Vec<f64>,
+    read_qualities: &[f64],
     n: usize,
     basic_bam_stats: &BasicBamStatistics,
 ) -> (String, BasicStatistics) {
@@ -90,11 +90,10 @@ pub fn get_summary(
         .iter()
         .map(|each_stats| each_stats.1)
         .sum::<usize>();
-    let total_reads_avg_prob = stats_vec
+    let mean_read_qual = stats_vec
         .iter()
-        .map(|each_stats| 10f64.powf(each_stats.2 / -10.0))
-        .sum::<f64>();
-    let mean_read_qual = (total_reads_avg_prob / total_reads as f64).log10() * -10.0f64;
+        .map(|each_stats| each_stats.2)
+        .sum::<f64>() / stats_vec.len() as f64;
     if total_bases / 1_000_000_000 > 1 {
         contents.push_str(&format!(
             "BaseNumber\t{:.9}Gb\n",
@@ -252,10 +251,10 @@ pub fn get_summary(
 pub fn write_summary(
     stats_vec: &mut Vec<EachStats>,
     read_lengths: Option<&Vec<usize>>,
-    read_qvalues: &Vec<f64>,
+    read_qvalues: &[f64],
     n: usize,
     basic_bam_stats: &BasicBamStatistics,
-    output: &String,
+    output: &str,
 ) -> BasicStatistics {
     let (summary_info, basic_stats) =
         get_summary(stats_vec, read_lengths, read_qvalues, n, basic_bam_stats);

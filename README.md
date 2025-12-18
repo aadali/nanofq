@@ -224,6 +224,9 @@ Trim all sequences outside the primers range, keep the top n reads with the high
 Finally, get consensus sequence from the alignment file as draft consensus of the amplicon
 
 ## ChangeLog
+### nanofq (v0.2.2) 2025-12-18
+1. change mean_read_quality to sum(read_quality) / reads_number just like [fastcat](https://github.com/epi2me-labs/fastcat)
+
 ### nanofq (v0.2.1) 2025-11-29
 1. multi threads supported to stats bam/ubam/sam from file or stdin.
 

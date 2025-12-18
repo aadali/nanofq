@@ -146,7 +146,7 @@ mod sub_run {
             fo: &FilterOption,
             writer: &mut dyn Write,
             retain_failed: bool,
-            failed_writer: &mut BufWriter<File>,
+            failed_writer: &mut dyn Write,
         ) -> Result<Vec<(Box<String>, usize, f64)>, anyhow::Error> {
             let mut this_receiver_stats = Vec::<(Box<String>, usize, f64)>::new();
             for record_set in receiver {
@@ -186,7 +186,7 @@ mod sub_run {
             writer: &mut dyn Write,
             fo: &FilterOption,
             retain_failed: bool,
-            failed_writer: &mut BufWriter<File>,
+            failed_writer: &mut dyn Write,
         ) -> Result<Vec<(Box<String>, usize, f64)>, anyhow::Error>
         where
             R: Read + Send + Any,
@@ -223,7 +223,7 @@ mod sub_run {
             writer: &mut dyn Write,
             fo: &FilterOption,
             retain_failed: bool,
-            failed_writer: &mut BufWriter<File>,
+            failed_writer: &mut dyn Write,
         ) -> Result<Vec<(Box<String>, usize, f64)>, anyhow::Error> {
             let mut filter_stats = Vec::<(Box<String>, usize, f64)>::new();
             let fastqs = collect_fastq_dir(path).unwrap();

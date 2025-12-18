@@ -1,6 +1,5 @@
 use crate::fastq::{DORADO_TRIM_LEADING_BASE_NUMBER, EachStats};
 use crate::utils::{get_q2p_table, quit_with_error};
-use bio::bio_types::genome::AbstractInterval;
 use rayon::prelude::*;
 use rust_htslib::bam::ext::BamRecordExtensions;
 use rust_htslib::bam::index;
@@ -84,9 +83,9 @@ impl BamRecordStats for rust_htslib::bam::Record {
                     Aux::Double(quality) => quality,
                     _ => {
                         quit_with_error(&format!(
-                            "Parse qs tag for {:?} in chr: {}, at position: {}",
+                            "Parse qs tag for {:?} in tid: {}, at position: {}",
                             str::from_utf8(self.qname()).unwrap(),
-                            self.contig(),
+                            self.tid(),
                             self.reference_start(),
                         ));
                     }
@@ -229,7 +228,7 @@ fn get_nm_aux(record: &bam::Record) -> usize {
 
 fn get_cigar_base_length(cigar: &Cigar) -> usize {
     match cigar {
-        Cigar::Match(m) => *m as usize,
+        Cigar::Match(m) | Cigar::Equal(m) | Cigar::Diff(m)=> *m as usize,
         Cigar::Ins(i) => *i as usize,
         _ => 0usize,
     }
