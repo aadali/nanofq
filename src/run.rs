@@ -460,7 +460,7 @@ pub mod run_entry {
                     basic_bam_stats = basic_bam_stats_;
                     all_stats
                 } else {
-                    // stats fastq[.gz] from stdin
+                    // stats fastq from stdin
                     rayon::ThreadPoolBuilder::new()
                         .num_threads(*thread as usize)
                         .build_global()?;

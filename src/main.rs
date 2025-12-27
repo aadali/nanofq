@@ -12,6 +12,7 @@ mod summary;
 mod trim;
 mod utils;
 mod bam;
+mod input_type;
 
 use crate::run::run_entry::{run_amplicon, run_filter, run_stats, run_trim};
 use std::time::Instant;
