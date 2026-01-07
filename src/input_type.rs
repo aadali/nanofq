@@ -2,6 +2,7 @@ use crate::utils::quit_with_error;
 use rust_htslib::bam::{self, Read};
 use std::path::Path;
 
+#[derive(Debug)]
 pub enum InputType {
     FastqFromStdin,
     DirectoryContainFastqsOrFastqsGzipped,
@@ -13,7 +14,7 @@ pub enum InputType {
     UnalignedBam,
     SortedUnindexedBam,
     IndexedBam,
-    WrongType(String),
+    WrongType,
 }
 
 fn check_bam_type(bam_file: &str) -> InputType {
@@ -100,7 +101,7 @@ pub fn check_input_type<P: AsRef<Path> + ToString>(p: Option<P>, bam: bool) -> I
             } else if input_fn.ends_with(".bam") {
                 check_bam_type(&input_fn)
             } else {
-                InputType::WrongType("Bad file extension name".to_string())
+                InputType::WrongType
             }
         } else if input_path.is_dir() {
             let mut count = 0;
@@ -130,7 +131,7 @@ pub fn check_input_type<P: AsRef<Path> + ToString>(p: Option<P>, bam: bool) -> I
                 InputType::DirectoryContainFastqsOrFastqsGzipped
             }
         } else {
-            InputType::WrongType("Unknow input type".to_string())
+            InputType::WrongType
         }
     }
 }

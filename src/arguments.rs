@@ -1,84 +1,11 @@
 use crate::trim::adapter::get_trim_cfg;
-use crate::utils::quit_with_error;
 use ansi_term::Color;
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, value_parser};
 use std::collections::HashSet;
 use std::fmt::Display;
-use std::path::Path;
 use std::str::FromStr;
 
 const U32_MAX: &str = "4294967295";
-fn input_value_parser(input: &str, stats: bool) {
-    let input_path = Path::new(input);
-    match input_path.try_exists() {
-        Ok(ok) => {
-            if !ok {
-                quit_with_error(&format!(
-                    "{}: no such file or directory, check --input",
-                    input
-                ));
-            } else {
-                if stats {
-                    if input_path.is_file() {
-                        if !(input.ends_with(".fastq")
-                            || input.ends_with(".fq")
-                            || input.ends_with(".fastq.gz")
-                            || input.ends_with(".fq.gz")
-                            || input.ends_with(".sam")
-                            || input.ends_with(".bam"))
-                        {
-                            quit_with_error(
-                                "bad suffix for input file, possible suffix is one of [.fastq, .fq, .fastq.gz, .fq.gz, .sam, .bam], check --input",
-                            );
-                        }
-                    } else {
-                        if input_path.is_file() {
-                            if !(input.ends_with(".fastq")
-                                || input.ends_with(".fq")
-                                || input.ends_with(".fastq.gz")
-                                || input.ends_with(".fq.gz"))
-                            {
-                                quit_with_error(
-                                    "bad suffix for input file, possible suffix is one of [.fastq, .fq, .fastq.gz, .fq.gz], check --input",
-                                );
-                            }
-                        }
-                    }
-                } else if input_path.is_dir() {
-                    let mut count = 0;
-                    let read_dir_res = input_path.read_dir();
-                    if read_dir_res.is_err() {
-                        quit_with_error(&format!("Open directory: {:?} failed", input_path));
-                    }
-                    for entry in read_dir_res.unwrap() {
-                        if let Ok(entry) = entry {
-                            let p = entry.path();
-                            let p = p.to_str().unwrap();
-                            if p.ends_with(".fastq")
-                                || p.ends_with(".fq")
-                                || p.ends_with(".fastq.gz")
-                                || p.ends_with(".fq.gz")
-                            {
-                                count += 1;
-                            }
-                        }
-                    }
-                    if count == 0 {
-                        quit_with_error(&format!(
-                            "No fastq or fastq.gz file found in directory: {}, check --input",
-                            input
-                        ));
-                    }
-                } else {
-                    quit_with_error("input should be file or directory, check --input");
-                }
-            }
-        }
-        Err(error) => {
-            quit_with_error(&format!("{:?}, check --input", error.to_string()));
-        }
-    }
-}
 
 fn positive_number_parse<T: FromStr + PartialOrd + Display>(
     x: &str,
@@ -145,10 +72,6 @@ fn get_input_arg(stats: bool) -> Arg {
         .short('i')
         .long("input")
         .action(ArgAction::Set)
-        .value_parser(move |input: &str| {
-            input_value_parser(&input, stats);
-            Result::<String, anyhow::Error>::Ok(input.to_string())
-        })
         .help(if is_stats {
             stats_input_help
         } else {

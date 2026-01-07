@@ -135,7 +135,7 @@ mod sub_run {
         use seq_io::fastq::{RecordSet, RefRecord};
         use std::any::Any;
         use std::fs::File;
-        use std::io::{BufReader, BufWriter, Read, Write};
+        use std::io::{BufReader, Read, Write};
         use std::path::Path;
         use std::sync::mpsc;
         use std::sync::mpsc::Receiver;
@@ -406,10 +406,9 @@ pub mod run_entry {
         filter_candidate_amplicon, get_candidate_amplicon, get_consensus_from_msa, mafft_msa,
         write_final_amplicon,
     };
-    use crate::bam::{
-        BamType, BasicBamStatistics, check_bam_type, index_bam, stats_indexed_bam, stats_xam,
-    };
+    use crate::bam::{BasicBamStatistics, index_bam, stats_indexed_bam, stats_xam};
     use crate::fastq::{FastqReader, FilterOption, NanoRead};
+    use crate::input_type::{InputType, check_input_type};
     use crate::run::sub_run::filter::{filter, filter_fastq_dir};
     use crate::run::sub_run::stats::{stats, stats_fastq_dir};
     use crate::run::sub_run::trim::{trim, trim_fastq_dir};
@@ -444,121 +443,125 @@ pub mod run_entry {
             .get_many::<String>("format")
             .unwrap()
             .collect::<Vec<&String>>();
-
+        let input_t = check_input_type(input, bam);
         let mut basic_bam_stats = BasicBamStatistics::default();
-        let mut stats_result = match input {
-            None => {
+        let mut stats_result = match input_t {
+            InputType::OneBamOrSamFromStdin => {
+                // stats bam/sam from stdin
+                let mut bam_reader = rust_htslib::bam::Reader::from_stdin()?;
+                let (basic_bam_stats_, all_stats) = stats_xam(
+                    &mut bam_reader,
+                    *thread as usize,
+                    gc,
+                    dont_use_dorado_quality,
+                );
+                basic_bam_stats = basic_bam_stats_;
+                all_stats
+            }
+            InputType::FastqFromStdin => {
+                //stats fastq from stdin
+                rayon::ThreadPoolBuilder::new()
+                    .num_threads(*thread as usize)
+                    .build_global()?;
+                stats(
+                    std::io::stdin(),
+                    *thread as usize,
+                    gc,
+                    dont_use_dorado_quality,
+                )
+            }
+            InputType::OneFastqFile => {
+                // stats one fastq file
                 if bam {
-                    // stats bam/sam from stdin
-                    let mut bam_reader = rust_htslib::bam::Reader::from_stdin()?;
-                    let (basic_bam_stats_, all_stats) = stats_xam(
-                        &mut bam_reader,
-                        *thread as usize,
-                        gc,
-                        dont_use_dorado_quality,
-                    );
-                    basic_bam_stats = basic_bam_stats_;
-                    all_stats
-                } else {
-                    // stats fastq from stdin
-                    rayon::ThreadPoolBuilder::new()
-                        .num_threads(*thread as usize)
-                        .build_global()?;
-                    stats(
-                        std::io::stdin(),
+                    quit_with_error("--bam should used with bam/sam file")
+                }
+                rayon::ThreadPoolBuilder::new()
+                    .num_threads(*thread as usize)
+                    .build_global()?;
+                stats(
+                    BufReader::new(File::open(input.unwrap())?),
+                    *thread as usize,
+                    gc,
+                    dont_use_dorado_quality,
+                )
+            }
+            InputType::OneFastqGzippedFile => {
+                // stats a fastq.gz file
+                if bam {
+                    quit_with_error("--bam should used with bam/sam file")
+                }
+                rayon::ThreadPoolBuilder::new()
+                    .num_threads(*thread as usize)
+                    .build_global()?;
+                stats(
+                    MultiGzDecoder::new(BufReader::new(File::open(input.unwrap())?)),
+                    *thread as usize,
+                    gc,
+                    dont_use_dorado_quality,
+                )
+            }
+            InputType::OneSamFile | InputType::UnsortedBam | InputType::UnalignedBam => {
+                // stats a Sam/UnsortedBam/UnalignedBam file
+                let mut bam_reader = rust_htslib::bam::Reader::from_path(input.unwrap())?;
+                let (basic_bam_stats_, all_stats) = stats_xam(
+                    &mut bam_reader,
+                    *thread as usize,
+                    gc,
+                    dont_use_dorado_quality,
+                );
+                basic_bam_stats = basic_bam_stats_;
+                all_stats
+            }
+            InputType::SortedUnindexedBam => {
+                // stats sorted but unindexed bam file
+                let (basic_bam_stats_, all_stats) = if index {
+                    index_bam(input.unwrap(), *thread as usize)?;
+                    stats_indexed_bam(
+                        input.unwrap(),
                         *thread as usize,
                         gc,
                         dont_use_dorado_quality,
                     )
-                }
-            }
-            Some(input) => {
-                let input_path = Path::new(input);
-                if input_path.is_file() {
-                    if input_path.to_str().unwrap().ends_with(".gz") {
-                        // stats a fastq.gz file
-                        if bam {
-                            quit_with_error("--bam should used with bam/sam file")
-                        }
-                        rayon::ThreadPoolBuilder::new()
-                            .num_threads(*thread as usize)
-                            .build_global()?;
-                        stats(
-                            MultiGzDecoder::new(BufReader::new(File::open(input)?)),
-                            *thread as usize,
-                            gc,
-                            dont_use_dorado_quality,
-                        )
-                    } else if input_path.to_str().unwrap().ends_with(".bam")
-                        || input_path.to_str().unwrap().ends_with(".sam")
-                    {
-                        // stats a bam or sam file
-                        let bam_type = check_bam_type(input);
-                        let (basic_bam_stats_, all_stats) = match bam_type {
-                            BamType::SAM | BamType::UnsortedBam | BamType::UnalignedBam => {
-                                // stats a Sam/UnsortedBam/UnalignedBam file
-                                let mut bam_reader = rust_htslib::bam::Reader::from_path(input)?;
-                                stats_xam(
-                                    &mut bam_reader,
-                                    *thread as usize,
-                                    gc,
-                                    dont_use_dorado_quality,
-                                )
-                            }
-                            BamType::SortedUnindexedBam => {
-                                // stats a sorted but unindexed bam, build index for bam firstly
-                                if index {
-                                    index_bam(input, *thread as usize)?;
-                                    stats_indexed_bam(
-                                        input,
-                                        *thread as usize,
-                                        gc,
-                                        dont_use_dorado_quality,
-                                    )
-                                } else {
-                                    let mut bam_reader = rust_htslib::bam::Reader::from_path(input)?;
-                                    stats_xam(
-                                        &mut bam_reader,
-                                        *thread as usize,
-                                        gc,
-                                        dont_use_dorado_quality,
-                                    )
-                                }
-                            }
-                            BamType::IndexedBam => stats_indexed_bam(
-                                // stats a indexed bam
-                                input,
-                                *thread as usize,
-                                gc,
-                                dont_use_dorado_quality,
-                            ),
-                        };
-                        basic_bam_stats = basic_bam_stats_;
-                        all_stats
-                    } else {
-                        // stats a fastq file
-                        if bam {
-                            quit_with_error("--bam should used with bam/sam file")
-                        }
-                        rayon::ThreadPoolBuilder::new()
-                            .num_threads(*thread as usize)
-                            .build_global()?;
-                        stats(
-                            BufReader::new(File::open(input)?),
-                            *thread as usize,
-                            gc,
-                            dont_use_dorado_quality,
-                        )
-                    }
                 } else {
-                    if bam {
-                        quit_with_error("--bam couldn't used with directory input")
-                    }
-                    rayon::ThreadPoolBuilder::new()
-                        .num_threads(*thread as usize)
-                        .build_global()?;
-                    stats_fastq_dir(input_path, *thread as usize, gc, dont_use_dorado_quality)
+                    let mut bam_reader = rust_htslib::bam::Reader::from_path(input.unwrap())?;
+                    stats_xam(
+                        &mut bam_reader,
+                        *thread as usize,
+                        gc,
+                        dont_use_dorado_quality,
+                    )
+                };
+
+                basic_bam_stats = basic_bam_stats_;
+                all_stats
+            }
+            InputType::IndexedBam => {
+                let (basic_bam_stats_, all_stats) = stats_indexed_bam(
+                    input.unwrap(),
+                    *thread as usize,
+                    gc,
+                    dont_use_dorado_quality,
+                );
+                basic_bam_stats = basic_bam_stats_;
+                all_stats
+            }
+            InputType::DirectoryContainFastqsOrFastqsGzipped => {
+                // stats one directory containing some fastq or fastq.gz files
+                if bam {
+                    quit_with_error("--bam couldn't used with directory input")
                 }
+                rayon::ThreadPoolBuilder::new()
+                    .num_threads(*thread as usize)
+                    .build_global()?;
+                stats_fastq_dir(
+                    std::path::Path::new(input.unwrap()),
+                    *thread as usize,
+                    gc,
+                    dont_use_dorado_quality,
+                )
+            }
+            InputType::WrongType => {
+                quit_with_error("Bad input type suffix type, please check --input");
             }
         };
 
@@ -651,8 +654,9 @@ pub mod run_entry {
         let tmp_filter_fastq = format!("./.{}.tmp.filter.fastq", uuid::Uuid::new_v4());
         let mut filter_stats = {
             let mut tmp_writer = BufWriter::new(File::create(&tmp_filter_fastq)?);
-            match input {
-                None => filter(
+            let input_t = check_input_type(input, false);
+            match input_t {
+                InputType::FastqFromStdin => filter(
                     std::io::stdin(),
                     *thread as usize,
                     &mut tmp_writer,
@@ -660,43 +664,39 @@ pub mod run_entry {
                     failed_retain,
                     &mut failed_writer,
                 )?,
-                Some(input_path) => {
-                    let ends_with_gz = input_path.ends_with(".gz");
-                    let input_path = Path::new(input_path);
-                    if input_path.is_file() {
-                        if ends_with_gz {
-                            let reader =
-                                MultiGzDecoder::new(BufReader::new(File::open(input_path)?));
-                            filter(
-                                reader,
-                                *thread as usize,
-                                &mut tmp_writer,
-                                &filter_option,
-                                failed_retain,
-                                &mut failed_writer,
-                            )?
-                        } else {
-                            let reader = BufReader::new(File::open(input_path)?);
-                            filter(
-                                reader,
-                                *thread as usize,
-                                &mut tmp_writer,
-                                &filter_option,
-                                failed_retain,
-                                &mut failed_writer,
-                            )?
-                        }
-                    } else {
-                        filter_fastq_dir(
-                            input_path,
-                            *thread as usize,
-                            &mut tmp_writer,
-                            &filter_option,
-                            failed_retain,
-                            &mut failed_writer,
-                        )?
-                    }
+                InputType::OneFastqFile => {
+                    let reader = BufReader::new(File::open(input.unwrap())?);
+                    filter(
+                        reader,
+                        *thread as usize,
+                        &mut tmp_writer,
+                        &filter_option,
+                        failed_retain,
+                        &mut failed_writer,
+                    )?
                 }
+                InputType::OneFastqGzippedFile => {
+                    let reader = MultiGzDecoder::new(BufReader::new(File::open(input.unwrap())?));
+                    filter(
+                        reader,
+                        *thread as usize,
+                        &mut tmp_writer,
+                        &filter_option,
+                        failed_retain,
+                        &mut failed_writer,
+                    )?
+                }
+                InputType::DirectoryContainFastqsOrFastqsGzipped => filter_fastq_dir(
+                    std::path::Path::new(input.unwrap()),
+                    *thread as usize,
+                    &mut tmp_writer,
+                    &filter_option,
+                    failed_retain,
+                    &mut failed_writer,
+                )?,
+                _ => quit_with_error(
+                    "Bad input type, only 1). fastq from stdin; 2). fastq[.gz] file; 3). directory containing some fastq[.gz] files supported. Check --input",
+                ),
             }
         };
 
@@ -798,6 +798,7 @@ pub mod run_entry {
 
         Ok(())
     }
+
     pub fn run_trim(trim_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
         let input = trim_cmd.get_one::<String>("input");
         let output = trim_cmd.get_one::<String>("output");
@@ -951,9 +952,9 @@ pub mod run_entry {
             None => Box::new(BufWriter::new(std::io::stdout())),
             Some(output_file_path) => Box::new(BufWriter::new(File::create(output_file_path)?)),
         };
-
-        match input {
-            None => trim(
+        let input_t = check_input_type(input, false);
+        match input_t {
+            InputType::FastqFromStdin => trim(
                 std::io::stdin(),
                 &mut writer,
                 ref_trim_cfg,
@@ -961,42 +962,39 @@ pub mod run_entry {
                 pretty_log,
                 &mut log_writer,
             )?,
-            Some(input_path) => {
-                let ends_with_gz = input_path.ends_with(".gz");
-                let input_path = Path::new(input_path);
-                if input_path.is_file() {
-                    if ends_with_gz {
-                        let reader = MultiGzDecoder::new(BufReader::new(File::open(input_path)?));
-                        trim(
-                            reader,
-                            &mut writer,
-                            ref_trim_cfg,
-                            min_len,
-                            pretty_log,
-                            &mut log_writer,
-                        )?
-                    } else {
-                        let reader = BufReader::new(File::open(input_path)?);
-                        trim(
-                            reader,
-                            &mut writer,
-                            ref_trim_cfg,
-                            min_len,
-                            pretty_log,
-                            &mut log_writer,
-                        )?
-                    }
-                } else {
-                    trim_fastq_dir(
-                        input_path,
-                        &mut writer,
-                        ref_trim_cfg,
-                        min_len,
-                        pretty_log,
-                        &mut log_writer,
-                    )?
-                }
+            InputType::OneFastqFile => {
+                let reader = BufReader::new(File::open(input.unwrap())?);
+                trim(
+                    reader,
+                    &mut writer,
+                    ref_trim_cfg,
+                    min_len,
+                    pretty_log,
+                    &mut log_writer,
+                )?
             }
+            InputType::OneFastqGzippedFile => {
+                let reader = MultiGzDecoder::new(BufReader::new(File::open(input.unwrap())?));
+                trim(
+                    reader,
+                    &mut writer,
+                    ref_trim_cfg,
+                    min_len,
+                    pretty_log,
+                    &mut log_writer,
+                )?
+            }
+            InputType::DirectoryContainFastqsOrFastqsGzipped => trim_fastq_dir(
+                std::path::Path::new(input.unwrap()),
+                &mut writer,
+                ref_trim_cfg,
+                min_len,
+                pretty_log,
+                &mut log_writer,
+            )?,
+            _ => quit_with_error(
+                "Bad input type, only 1). fastq from stdin; 2). fastq[.gz] file; 3). directory containing some fastq[.gz] files supported. Check --input",
+            ),
         }
         Ok(())
     }
@@ -1015,10 +1013,16 @@ pub mod run_entry {
         if !output_dir.exists() {
             std::fs::create_dir_all(&output_dir)?;
         }
-        let candidate_amplicon = if let Some(input) = input {
-            let input_path = Path::new(input);
-            if input_path.is_dir() {
-                let fqs = collect_fastq_dir(input_path)?;
+        let input_t = check_input_type(input, false);
+        let candidate_amplicon = match input_t {
+            InputType::FastqFromStdin => {
+                get_candidate_amplicon(Option::<&String>::None, fwd, rev, est_len, *range)?
+            }
+            InputType::OneFastqGzippedFile | InputType::OneFastqFile => {
+                get_candidate_amplicon(input, fwd, rev, est_len, *range)?
+            }
+            InputType::DirectoryContainFastqsOrFastqsGzipped => {
+                let fqs = collect_fastq_dir(std::path::Path::new(input.unwrap()))?;
                 debug_assert!(fqs.len() > 0);
                 fqs.iter()
                     .map(|fq| {
@@ -1031,12 +1035,10 @@ pub mod run_entry {
                     })
                     .flatten()
                     .collect::<Vec<_>>()
-            } else {
-                get_candidate_amplicon(Some(input_path), fwd, rev, est_len, *range)
-                    .expect(&format!("Get candidate amplicon from {} failed", input))
             }
-        } else {
-            get_candidate_amplicon(Option::<&str>::None, fwd, rev, est_len, *range)?
+            _ => quit_with_error(
+                "Bad input type, only 1). fastq from stdin; 2). fastq[.gz] file; 3). directory containing some fastq[.gz] files supported. Check --input",
+            ),
         };
         let final_amplicon = filter_candidate_amplicon(candidate_amplicon, number);
         let fq_file_path = output_dir.join("candidate_amplicon.fastq");
