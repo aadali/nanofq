@@ -568,7 +568,7 @@ pub mod run_entry {
         let tmp_stats_outfile = format!("/tmp/NanofqStatsTmpResult_{}.tsv", uuid::Uuid::new_v4());
         match output {
             None => {
-                write_stats(&stats_result, &mut std::io::stdout(), gc)?;
+                // write_stats(&stats_result, &mut std::io::stdout(), gc)?;
                 if plot.is_some() {
                     let mut writer = std::fs::File::create(&tmp_stats_outfile)?;
                     write_stats(&stats_result, &mut writer, gc)?;

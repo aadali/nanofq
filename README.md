@@ -17,7 +17,7 @@ Then you can find `nanofq` in `./target/release`
 ## Usage
 
 ```
-A simple program for nanopore fastq file to stats, filter, trim...
+A simple program for nanopore long reads to stats, filter, trim...
 
 Usage: nanofq [COMMAND]
 
@@ -57,7 +57,7 @@ Options:
                                          3. a bam or sam file
                                          4. fastq from stdin [default]
                                          5. bam or sam from stdin with --bam specified
-  -o, --output <output>          Output the stats result into this, a tsv file or stdout. it will be truncated if it's a existing file. [default: stdout]
+  -o, --output <output>          Output the stats result into this tsv file if specified. it will be truncated if it's a existing file.
   -s, --summary <summary>        Output stats summary into this file, it will be truncated if it exists [default: ./NanofqStatsSummary.txt]
   -n, --topn <topn>              Write the top N longest reads and highest quality reads info into summary file [default: 5]
   -q, --quality <quality>        Count the reads number that whose quality is bigger than this value, multi value can be separated by comma [default: 25,20,18,15,12,10]

@@ -98,7 +98,7 @@ pub fn parse_arguments() -> ArgMatches {
     let stats_cmd = Command::new("stats")
             .about("stats nanopore fastq/sam/bam, output the stats result, summary and figures")
             .arg(&stats_input_arg)
-            .arg(output_arg.clone().help("Output the stats result into this, a tsv file or stdout. it will be truncated if it's a existing file. [default: stdout]"))
+            .arg(output_arg.clone().help("Output the stats result into this tsv file if specified. it will be truncated if it's a existing file."))
             .arg(Arg::new("summary")
                 .short('s')
                 .long("summary")
