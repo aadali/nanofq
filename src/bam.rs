@@ -40,12 +40,12 @@ pub fn get_encoded_bases_gc_count_table() -> &'static HashMap<u8, usize> {
     })
 }
 pub trait BamRecordStats {
-    fn gc_count(&self) -> f64;
+    fn gc_count(&self) -> f32;
     fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> Option<f64>;
     fn stats(&self, gc: bool, dont_use_dorado_quality: bool) -> EachStats;
 }
 impl BamRecordStats for rust_htslib::bam::Record {
-    fn gc_count(&self) -> f64 {
+    fn gc_count(&self) -> f32 {
         let seq_len = self.qual().len();
         let gc_number: usize = self
             .seq()
@@ -53,7 +53,7 @@ impl BamRecordStats for rust_htslib::bam::Record {
             .iter()
             .map(|x| *get_encoded_bases_gc_count_table().get(x).unwrap_or(&0usize))
             .sum();
-        gc_number as f64 / seq_len as f64
+        gc_number as f32 / seq_len as f32
     }
 
     fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> Option<f64> {
@@ -123,8 +123,8 @@ impl BamRecordStats for rust_htslib::bam::Record {
         }
         (
             Box::new(str::from_utf8(self.qname()).unwrap().to_string()),
-            len,
-            read_quality.unwrap(),
+            len as u32,
+            read_quality.unwrap() as f32,
             gc,
         )
     }

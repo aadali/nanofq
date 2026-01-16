@@ -13,18 +13,18 @@ const BUFF: usize = 1024 * 1024;
 pub const DORADO_TRIM_LEADING_BASE_NUMBER: usize = 60;
 
 // (ReadID, Length,  ReadQuality, Option<GCContent>)
-pub type EachStats = (Box<String>, usize, f64, Option<f64>);
+pub type EachStats = (Box<String>, u32, f32, Option<f32>);
 
 #[derive(Clone)]
 pub(crate) struct FilterOption<'a> {
-    pub min_len: usize,
-    pub max_len: usize,
+    pub min_len: u32,
+    pub max_len: u32,
     pub dont_use_dorado_quality: bool,
-    pub min_qual: f64,
-    pub max_qual: f64,
+    pub min_qual: f32,
+    pub max_qual: f32,
     pub gc: bool,
-    pub min_gc: f64,
-    pub max_gc: f64,
+    pub min_gc: f32,
+    pub max_gc: f32,
     pub retain_failed: Option<&'a String>,
 }
 impl<'a> FilterOption<'a> {
@@ -38,12 +38,12 @@ impl<'a> FilterOption<'a> {
     }
 }
 pub trait NanoRead {
-    fn gc_count(&self) -> Option<f64>;
-    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> Option<f64>;
+    fn gc_count(&self) -> Option<f32>;
+    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> Option<f32>;
 
     fn stats(&self, gc: bool, dont_use_dorado_quality: bool) -> Option<EachStats>;
 
-    fn is_passed(&self, fo: &FilterOption) -> (bool, Box<String>, usize, f64);
+    fn is_passed(&self, fo: &FilterOption) -> (bool, Box<String>, u32, f32);
 
     fn write(&self, writer: &mut dyn Write) -> Result<(), anyhow::Error>;
 
@@ -61,7 +61,7 @@ where
     T: Record,
 {
     #[inline]
-    fn gc_count(&self) -> Option<f64> {
+    fn gc_count(&self) -> Option<f32> {
         let seq_len = self.seq().len();
         if seq_len == 0 {
             eprintln!(
@@ -81,11 +81,11 @@ where
                 }
             })
             .sum();
-        Some(gc_number as f64 / seq_len as f64)
+        Some(gc_number as f32 / seq_len as f32)
     }
 
     #[inline]
-    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> Option<f64> {
+    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> Option<f32> {
         let qual_real_len = self.qual().len();
         if qual_real_len == 0 {
             eprintln!(
@@ -113,7 +113,7 @@ where
             .sum::<f64>()
             / seq_len as f64;
         let quality = avg_err_prob.log10() * -10.0;
-        Some(quality)
+        Some(quality as f32)
     }
 
     #[inline]
@@ -139,7 +139,7 @@ where
                     )))
                     .to_string(),
                 ),
-                len,
+                len as u32,
                 read_quality,
                 gc,
             )),
@@ -148,8 +148,8 @@ where
     }
 
     #[inline]
-    fn is_passed(&self, fo: &FilterOption) -> (bool, Box<String>, usize, f64) {
-        let seq_len = self.seq().len();
+    fn is_passed(&self, fo: &FilterOption) -> (bool, Box<String>, u32, f32) {
+        let seq_len = self.seq().len() as u32;
         let gc_passed = if fo.gc {
             let gc_opt = self.gc_count();
             if gc_opt.is_some() {
@@ -271,7 +271,7 @@ impl<R: Read> FastqReader<R> {
         fo: &FilterOption,
         retain_failed: bool,
         failed_writer: &mut dyn Write,
-    ) -> Result<Vec<(Box<String>, usize, f64)>, anyhow::Error> {
+    ) -> Result<Vec<(Box<String>, u32, f32)>, anyhow::Error> {
         let mut stats_results = Vec::new();
         if retain_failed {
             loop {

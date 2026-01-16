@@ -1,33 +1,47 @@
 use super::fastq::EachStats;
 use crate::bam::BasicBamStatistics;
 use ansi_term;
+use polars::prelude::*;
 use rayon::prelude::*;
 use std::cmp::max_by_key;
 use std::collections::HashMap;
 use std::io::Write;
 use uuid;
 
+fn stats_vec_to_dataframe(stats_vec: Vec<EachStats>) -> PolarsResult<DataFrame> {
+    let lengths = stats_vec.iter().map(|x| x.1 as u32).collect::<Series>();
+    let qualities = stats_vec.iter().map(|x| x.2).collect::<Series>();
+    let gc = stats_vec.iter().map(|x| x.3).collect::<Series>();
+    let names = stats_vec.into_iter().map(|x| *x.0).collect::<Series>();
+    df!(
+        "names" => names,
+        "lengths" => lengths,
+        "qualities" => qualities,
+        "gc" => gc,
+    )
+}
+
 #[derive(Default, Debug)]
 pub struct BasicStatistics {
     reads_number: usize,
     bases_number: usize,
-    median_qual: f64,
-    mode_qual: f64,
-    max_qual: f64,
-    min_qual: f64,
-    mean_qual: f64,
-    n50: usize,
-    min_len: usize,
-    max_len: usize,
-    mean_len: f64,
-    std_len: f64,
+    median_qual: f32,
+    mode_qual: f32,
+    max_qual: f32,
+    min_qual: f32,
+    mean_qual: f32,
+    n50: u32,
+    min_len: u32,
+    max_len: u32,
+    mean_len: f32,
+    std_len: f32,
 }
 
-fn get_nx(stats_vec: &Vec<EachStats>, total_length: usize, x: f64) -> Option<usize> {
+fn get_nx(stats_vec: &Vec<EachStats>, total_length: usize, x: f64) -> Option<u32> {
     let total_length = total_length as f64;
     let mut current_total_length = 0usize;
     for each_stats in stats_vec {
-        current_total_length += each_stats.1;
+        current_total_length += each_stats.1 as usize;
         if current_total_length as f64 / total_length > x {
             return Some(each_stats.1);
         }
@@ -35,33 +49,43 @@ fn get_nx(stats_vec: &Vec<EachStats>, total_length: usize, x: f64) -> Option<usi
     None
 }
 
-fn get_length_than_n(stats_vec: &Vec<EachStats>, n: usize) -> (usize, usize) {
+fn get_nx2<I>(lengths: I, total_length: usize, x: f64) -> Option<usize>
+where
+    I: IntoIterator<Item = Option<u32>>,
+{
+    for x in lengths {
+        println!("{x:?}")
+    }
+    Some(24)
+}
+
+fn get_length_than_n(stats_vec: &Vec<EachStats>, n: u32) -> (usize, usize) {
     let mut current_total_length = 0usize;
     let mut current_reads_number = 0usize;
     for each_stats in stats_vec {
         let this_length = each_stats.1;
         if this_length > n {
-            current_total_length += this_length;
+            current_total_length += this_length as usize;
             current_reads_number += 1;
         }
     }
     (current_total_length, current_reads_number)
 }
 
-fn get_quality_than_n(stats_vec: &Vec<EachStats>, n: f64) -> (usize, usize) {
+fn get_quality_than_n(stats_vec: &Vec<EachStats>, n: f32) -> (usize, usize) {
     let mut current_total_length = 0usize;
     let mut current_reads_number = 0usize;
     for each_stats in stats_vec {
         let read_quality = each_stats.2;
         if read_quality > n {
-            current_total_length += each_stats.1;
+            current_total_length += each_stats.1 as usize;
             current_reads_number += 1;
         }
     }
     (current_total_length, current_reads_number)
 }
 
-fn get_read_qual_mode(stats_vec: &Vec<EachStats>) -> f64 {
+fn get_read_qual_mode(stats_vec: &Vec<EachStats>) -> f32 {
     let mut counter = HashMap::new();
     let epsilon = 0.01;
     for each_stats in stats_vec {
@@ -74,9 +98,98 @@ fn get_read_qual_mode(stats_vec: &Vec<EachStats>) -> f64 {
     let res = counter.iter().fold((0usize, 0usize), |x, y| {
         max_by_key(x, (*y.0, *y.1), |a| a.1)
     });
-    res.0 as f64 / 100.0
+    res.0 as f32 / 100.0
 }
+pub fn get_summary2(
+    stats_vec: Vec<EachStats>,
+    read_lengths: Option<&Vec<u32>>,
+    read_qualities: &[f64],
+    n: usize,
+    basic_bam_statistics: &BasicBamStatistics,
+) -> (String, BasicStatistics) {
+    let mut contents: String = String::default();
+    let stats_df =
+        stats_vec_to_dataframe(stats_vec).expect("Covert stats vector ot DataFrame failed");
+    let lengths_col = stats_df["lengths"].as_series().unwrap().u32().unwrap();
+    get_nx2(lengths_col, 2932, 9.32);
+    let stats_lazy = stats_df.lazy();
+    // names, lengths, qualities, gc
+    stats_lazy
+        .clone()
+        .select([
+            col("lengths").count().alias("ReadsNumber"),
+            col("lengths").sum().alias("BaseNumber"),
+            col("lengths")
+                .quantile(lit(0.25), QuantileMethod::Linear)
+                .round(2, RoundMode::default())
+                .alias("ReadLengthQuantile25"),
+            col("lengths")
+                .quantile(lit(0.5), QuantileMethod::Linear)
+                .round(2, RoundMode::default())
+                .alias("ReadLengthQuantile50"),
+            col("lengths")
+                .quantile(lit(0.75), QuantileMethod::Linear)
+                .round(2, RoundMode::default())
+                .alias("ReadLengthQuantile75"),
+            col("lengths")
+                .mean()
+                .round(2, RoundMode::default())
+                .alias("ReadMeanLen"),
+            col("lengths")
+                .std(0)
+                .round(2, RoundMode::default())
+                .alias("ReadLenStd"),
+            col("qualities")
+                .quantile(lit(0.25), QuantileMethod::Linear)
+                .round(2, RoundMode::default())
+                .alias("ReadQualityQuantile25"),
+            col("qualities")
+                .quantile(lit(0.5), QuantileMethod::Linear)
+                .round(2, RoundMode::default())
+                .alias("ReadQualityMedia"),
+            col("qualities")
+                .quantile(lit(0.75), QuantileMethod::Linear)
+                .round(2, RoundMode::default())
+                .alias("ReadQualityQuantile75"),
+            col("qualities")
+                .mean()
+                .round(2, RoundMode::default())
+                .alias("ReadMeanQuality"),
+        ])
+        .collect()
+        .expect("Collect summary dataframe failed");
 
+    let topn_qualities = stats_lazy
+        .clone()
+        .sort(
+            ["qualities"],
+            SortMultipleOptions::default().with_order_descending(true),
+        )
+        .collect()
+        .unwrap()
+        .head(Some(n))
+        .insert_column(
+            0,
+            Series::new("nth".into(), (1..=n as u32).collect::<Vec<u32>>()),
+        )
+        .unwrap();
+
+    let topn_lengths = stats_lazy
+        .clone()
+        .sort(
+            ["lengths"],
+            SortMultipleOptions::default().with_order_descending(true),
+        )
+        .collect()
+        .unwrap()
+        .head(Some(n))
+        .insert_column(
+            0,
+            Series::new("nth".into(), (1..=n as u32).collect::<Vec<u32>>()),
+        )
+        .unwrap();
+    (contents, BasicStatistics::default())
+}
 pub fn get_summary(
     stats_vec: &mut Vec<EachStats>,
     read_lengths: Option<&Vec<usize>>,
@@ -88,12 +201,10 @@ pub fn get_summary(
     let total_reads = stats_vec.len();
     let total_bases = stats_vec
         .iter()
-        .map(|each_stats| each_stats.1)
+        .map(|each_stats| each_stats.1 as usize)
         .sum::<usize>();
-    let mean_read_qual = stats_vec
-        .iter()
-        .map(|each_stats| each_stats.2)
-        .sum::<f64>() / stats_vec.len() as f64;
+    let mean_read_qual =
+        stats_vec.iter().map(|each_stats| each_stats.2).sum::<f32>() / stats_vec.len() as f32;
     if total_bases / 1_000_000_000 > 1 {
         contents.push_str(&format!(
             "BaseNumber\t{:.9}Gb\n",
@@ -146,11 +257,11 @@ pub fn get_summary(
     contents.push_str(&format!("ReadLengthQuantile25\t{read_len_quantile25}\n"));
     contents.push_str(&format!("ReadLengthQuantile50\t{read_len_quantile50}\n"));
     contents.push_str(&format!("ReadLengthQuantile75\t{read_len_quantile75}\n"));
-    let mean_read_length = total_bases as f64 / total_reads as f64;
+    let mean_read_length = total_bases as f32 / total_reads as f32;
     contents.push_str(&format!("ReadMeanLen\t{:.2}\n", mean_read_length));
     let len_std = (stats_vec.iter().fold(0.0, |sum, item| {
-        (item.1 as f64 - mean_read_length).powf(2.0) + sum
-    }) / stats_vec.len() as f64)
+        (item.1 as f32 - mean_read_length).powf(2.0) + sum
+    }) / stats_vec.len() as f32)
         .sqrt();
     contents.push_str(&format!("ReadLenStd\t{:.2}\n", len_std));
 
@@ -160,7 +271,7 @@ pub fn get_summary(
             "#ReadLength > SpecifiedValue\tReadsNumber(ReadsPercent); BasesNumber(BasesPercent)\n",
         );
         read_lengths.iter().for_each(|each_length| {
-            let (bases_number, reads_number) = get_length_than_n(stats_vec, *each_length);
+            let (bases_number, reads_number) = get_length_than_n(stats_vec, *each_length as u32);
             let reads_info = format!(
                 "{}({:.2}%); {:.6}Mb({:.2}%)",
                 reads_number,
@@ -197,7 +308,7 @@ pub fn get_summary(
         "#ReadQuality > SpecifiedValue\tReadsNumber(ReadsPercent); BasesNumber(BasesPercent)\n",
     );
     read_qualities.iter().for_each(|each_qual| {
-        let (bases_number, reads_number) = get_quality_than_n(stats_vec, *each_qual);
+        let (bases_number, reads_number) = get_quality_than_n(stats_vec, *each_qual as f32);
         let reads_info = format!(
             "{}({:.2}%); {:.6}Mb({:.2})%",
             reads_number,

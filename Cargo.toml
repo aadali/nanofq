@@ -18,3 +18,4 @@ seq_io = "0.3.4"
 uuid = {version = "1.17.0", features = ["v4"]}
 bio = "2.3.0"
 rust-htslib = "0.51.0"
+polars = {version = "0.52.0", features = ["lazy", "timezones", "round_series"]}

@@ -147,14 +147,14 @@ mod sub_run {
             writer: &mut dyn Write,
             retain_failed: bool,
             failed_writer: &mut dyn Write,
-        ) -> Result<Vec<(Box<String>, usize, f64)>, anyhow::Error> {
-            let mut this_receiver_stats = Vec::<(Box<String>, usize, f64)>::new();
+        ) -> Result<Vec<(Box<String>, u32, f32)>, anyhow::Error> {
+            let mut this_receiver_stats = Vec::<(Box<String>, u32, f32)>::new();
             for record_set in receiver {
                 let record_vec = record_set.into_iter().collect::<Vec<RefRecord>>();
                 let vec2 = record_vec
                     .par_iter()
                     .map(|x| x.is_passed(fo))
-                    .collect::<Vec<(bool, Box<String>, usize, f64)>>();
+                    .collect::<Vec<(bool, Box<String>, u32, f32)>>();
                 if retain_failed {
                     for (ref_record, (is_passed, read_name, read_len, read_qual)) in
                         record_vec.iter().zip(vec2)
@@ -187,11 +187,11 @@ mod sub_run {
             fo: &FilterOption,
             retain_failed: bool,
             failed_writer: &mut dyn Write,
-        ) -> Result<Vec<(Box<String>, usize, f64)>, anyhow::Error>
+        ) -> Result<Vec<(Box<String>, u32, f32)>, anyhow::Error>
         where
             R: Read + Send + Any,
         {
-            let mut filter_stats = Vec::<(Box<String>, usize, f64)>::new();
+            let mut filter_stats = Vec::<(Box<String>, u32, f32)>::new();
             if thread == 1 {
                 let x =
                     FastqReader::new(reader).filter(writer, fo, retain_failed, failed_writer)?;
@@ -224,8 +224,8 @@ mod sub_run {
             fo: &FilterOption,
             retain_failed: bool,
             failed_writer: &mut dyn Write,
-        ) -> Result<Vec<(Box<String>, usize, f64)>, anyhow::Error> {
-            let mut filter_stats = Vec::<(Box<String>, usize, f64)>::new();
+        ) -> Result<Vec<(Box<String>, u32, f32)>, anyhow::Error> {
+            let mut filter_stats = Vec::<(Box<String>, u32, f32)>::new();
             let fastqs = collect_fastq_dir(path).unwrap();
             for fq in fastqs {
                 if fq.to_str().unwrap().ends_with(".gz") {
@@ -631,14 +631,14 @@ pub mod run_entry {
         let max_bases = filter_cmd.get_one::<u64>("max_bases");
         let failed_fq_path = filter_cmd.get_one::<String>("retain_failed");
         let filter_option = FilterOption {
-            min_len: *min_len,
-            max_len: *max_len,
+            min_len: *min_len as u32,
+            max_len: *max_len as u32,
             dont_use_dorado_quality,
-            min_qual: *min_qual,
-            max_qual: *max_qual,
+            min_qual: *min_qual as f32,
+            max_qual: *max_qual as f32,
             gc,
-            min_gc: *min_gc,
-            max_gc: *max_gc,
+            min_gc: *min_gc as f32,
+            max_gc: *max_gc as f32,
             retain_failed: failed_fq_path,
         };
         let failed_retain = if failed_fq_path.is_none() {
@@ -742,7 +742,7 @@ pub mod run_entry {
                 let target_bases_count = *target_bases_count as usize;
                 let mut total_filter_bases = 0usize;
                 for each in &filter_stats {
-                    total_filter_bases += each.1
+                    total_filter_bases += each.1 as usize
                 }
                 if total_filter_bases < target_bases_count {
                     if output.is_none() {
@@ -765,7 +765,7 @@ pub mod run_entry {
                     filter_stats.sort_by(|x, y| y.2.partial_cmp(&x.2).unwrap());
                     let mut total_retain_bases = 0usize;
                     for each in filter_stats {
-                        total_retain_bases += each.1;
+                        total_retain_bases += each.1 as usize;
                         read_names.insert(*each.0);
                         if total_retain_bases >= target_bases_count {
                             break;
