@@ -13,7 +13,7 @@ const BUFF: usize = 1024 * 1024;
 pub const DORADO_TRIM_LEADING_BASE_NUMBER: usize = 60;
 
 // (ReadID, Length,  ReadQuality, Option<GCContent>)
-pub type EachStats = (Box<String>, u32, f32, Option<f32>);
+pub type EachStats = (String, u32, f32, Option<f32>);
 
 #[derive(Clone)]
 pub(crate) struct FilterOption<'a> {
@@ -30,10 +30,10 @@ pub(crate) struct FilterOption<'a> {
 impl<'a> FilterOption<'a> {
     pub(crate) fn set_failed_fastq_file(&self) -> Result<Option<Box<dyn Write>>, anyhow::Error> {
         match self.retain_failed {
-            None => {
-                Ok(Some(Box::new(std::io::sink())))
-            }
-            Some(failed_fastq_file) => Ok(Some(Box::new(BufWriter::new(File::create(failed_fastq_file)?))))
+            None => Ok(Some(Box::new(std::io::sink()))),
+            Some(failed_fastq_file) => Ok(Some(Box::new(BufWriter::new(File::create(
+                failed_fastq_file,
+            )?)))),
         }
     }
 }
@@ -43,7 +43,7 @@ pub trait NanoRead {
 
     fn stats(&self, gc: bool, dont_use_dorado_quality: bool) -> Option<EachStats>;
 
-    fn is_passed(&self, fo: &FilterOption) -> (bool, Box<String>, u32, f32);
+    fn is_passed(&self, fo: &FilterOption) -> (bool, String, u32, f32);
 
     fn write(&self, writer: &mut dyn Write) -> Result<(), anyhow::Error>;
 
@@ -126,19 +126,17 @@ where
         let gc = if gc { self.gc_count() } else { None };
         match read_quality_opt {
             Some(read_quality) => Some((
-                Box::new(
-                    str::from_utf8(
-                        self.head()
-                            .split(|b| *b == b' ' || *b == b'\t') // the header of dorado basecaller output fastq separated by tab
-                            .next()
-                            .unwrap(),
-                    )
-                    .expect(&Color::Red.paint(format!(
-                        "parse read id failed in record header: {}",
-                        str::from_utf8(self.head()).unwrap_or("unknow header")
-                    )))
-                    .to_string(),
-                ),
+                str::from_utf8(
+                    self.head()
+                        .split(|b| *b == b' ' || *b == b'\t') // the header of dorado basecaller output fastq separated by tab
+                        .next()
+                        .unwrap(),
+                )
+                .expect(&Color::Red.paint(format!(
+                    "parse read id failed in record header: {}",
+                    str::from_utf8(self.head()).unwrap_or("unknow header")
+                )))
+                .to_string(),
                 len as u32,
                 read_quality,
                 gc,
@@ -148,7 +146,7 @@ where
     }
 
     #[inline]
-    fn is_passed(&self, fo: &FilterOption) -> (bool, Box<String>, u32, f32) {
+    fn is_passed(&self, fo: &FilterOption) -> (bool, String, u32, f32) {
         let seq_len = self.seq().len() as u32;
         let gc_passed = if fo.gc {
             let gc_opt = self.gc_count();
@@ -171,19 +169,17 @@ where
             && gc_passed;
         (
             is_passed,
-            Box::new(
-                str::from_utf8(
-                    self.head()
-                        .split(|b| *b == b' ' || *b == b'\t')
-                        .next()
-                        .unwrap(),
-                )
-                .expect(&Color::Red.paint(format!(
-                    "parse read id failed in record header: {}",
-                    str::from_utf8(self.head()).unwrap_or("unknow header")
-                )))
-                .to_string(),
-            ),
+            str::from_utf8(
+                self.head()
+                    .split(|b| *b == b' ' || *b == b'\t')
+                    .next()
+                    .unwrap(),
+            )
+            .expect(&Color::Red.paint(format!(
+                "parse read id failed in record header: {}",
+                str::from_utf8(self.head()).unwrap_or("unknow header")
+            )))
+            .to_string(),
             seq_len,
             this_read_qual,
         )
@@ -271,7 +267,7 @@ impl<R: Read> FastqReader<R> {
         fo: &FilterOption,
         retain_failed: bool,
         failed_writer: &mut dyn Write,
-    ) -> Result<Vec<(Box<String>, u32, f32)>, anyhow::Error> {
+    ) -> Result<Vec<(String, u32, f32)>, anyhow::Error> {
         let mut stats_results = Vec::new();
         if retain_failed {
             loop {

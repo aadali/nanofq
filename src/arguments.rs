@@ -147,7 +147,7 @@ pub fn parse_arguments() -> ArgMatches {
                     let mut lengths = x.split(",")
                         .into_iter()
                         .map(|each| {
-                            match each.parse::<usize>() {
+                            match each.parse::<u32>() {
                                 Ok(len) => len,
                                 Err(err) => {
                                     eprintln!("{:?}", err);
@@ -156,9 +156,9 @@ pub fn parse_arguments() -> ArgMatches {
                                 }
                             }
                         })
-                        .collect::<Vec<usize>>();
+                        .collect::<Vec<u32>>();
                     lengths.sort_by(|a, b| b.partial_cmp(a).unwrap());
-                    Result::<Vec<usize>, anyhow::Error>::Ok(lengths)
+                    Result::<Vec<u32>, anyhow::Error>::Ok(lengths)
                 })
                 .help("Count the reads number that whose length is bigger than this value if you set this parameter, multi values can be separated by comma"))
             .arg(Arg::new("gc")

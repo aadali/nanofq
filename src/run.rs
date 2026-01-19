@@ -147,14 +147,14 @@ mod sub_run {
             writer: &mut dyn Write,
             retain_failed: bool,
             failed_writer: &mut dyn Write,
-        ) -> Result<Vec<(Box<String>, u32, f32)>, anyhow::Error> {
-            let mut this_receiver_stats = Vec::<(Box<String>, u32, f32)>::new();
+        ) -> Result<Vec<(String, u32, f32)>, anyhow::Error> {
+            let mut this_receiver_stats = Vec::<(String, u32, f32)>::new();
             for record_set in receiver {
                 let record_vec = record_set.into_iter().collect::<Vec<RefRecord>>();
                 let vec2 = record_vec
                     .par_iter()
                     .map(|x| x.is_passed(fo))
-                    .collect::<Vec<(bool, Box<String>, u32, f32)>>();
+                    .collect::<Vec<(bool, String, u32, f32)>>();
                 if retain_failed {
                     for (ref_record, (is_passed, read_name, read_len, read_qual)) in
                         record_vec.iter().zip(vec2)
@@ -187,11 +187,11 @@ mod sub_run {
             fo: &FilterOption,
             retain_failed: bool,
             failed_writer: &mut dyn Write,
-        ) -> Result<Vec<(Box<String>, u32, f32)>, anyhow::Error>
+        ) -> Result<Vec<(String, u32, f32)>, anyhow::Error>
         where
             R: Read + Send + Any,
         {
-            let mut filter_stats = Vec::<(Box<String>, u32, f32)>::new();
+            let mut filter_stats = Vec::<(String, u32, f32)>::new();
             if thread == 1 {
                 let x =
                     FastqReader::new(reader).filter(writer, fo, retain_failed, failed_writer)?;
@@ -224,8 +224,8 @@ mod sub_run {
             fo: &FilterOption,
             retain_failed: bool,
             failed_writer: &mut dyn Write,
-        ) -> Result<Vec<(Box<String>, u32, f32)>, anyhow::Error> {
-            let mut filter_stats = Vec::<(Box<String>, u32, f32)>::new();
+        ) -> Result<Vec<(String, u32, f32)>, anyhow::Error> {
+            let mut filter_stats = Vec::<(String, u32, f32)>::new();
             let fastqs = collect_fastq_dir(path).unwrap();
             for fq in fastqs {
                 if fq.to_str().unwrap().ends_with(".gz") {
@@ -413,7 +413,7 @@ pub mod run_entry {
     use crate::run::sub_run::stats::{stats, stats_fastq_dir};
     use crate::run::sub_run::trim::{trim, trim_fastq_dir};
     use crate::run::{LOCAL_ALIGNER, collect_fastq_dir};
-    use crate::summary::{make_plot, write_stats, write_summary};
+    use crate::summary::{make_plot, stats_vec_to_dataframe,  write_summary};
     use crate::trim::adapter::{TrimConfig, get_trim_cfg};
     use crate::utils::{quit_with_error, rev_com};
     use clap::ArgMatches;
@@ -423,6 +423,7 @@ pub mod run_entry {
     use std::fs::File;
     use std::io::{BufReader, BufWriter, Read, Write};
     use std::path::Path;
+    use polars::prelude::*;
 
     pub fn run_stats(stats_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
         let input = stats_cmd.get_one::<String>("input");
@@ -431,7 +432,7 @@ pub mod run_entry {
         let topn = stats_cmd.get_one::<u16>("topn").unwrap();
         let quality = stats_cmd.get_one::<Vec<f64>>("quality").unwrap();
         let dont_use_dorado_quality = stats_cmd.get_flag("dont_use_dorado_quality");
-        let lengths = stats_cmd.get_one::<Vec<usize>>("length");
+        let lengths = stats_cmd.get_one::<Vec<u32>>("length");
         let gc = stats_cmd.get_flag("gc");
         let bam = stats_cmd.get_flag("bam");
         let index = stats_cmd.get_flag("index");
@@ -445,7 +446,7 @@ pub mod run_entry {
             .collect::<Vec<&String>>();
         let input_t = check_input_type(input, bam);
         let mut basic_bam_stats = BasicBamStatistics::default();
-        let mut stats_result = match input_t {
+        let stats_result = match input_t {
             InputType::OneBamOrSamFromStdin => {
                 // stats bam/sam from stdin
                 let mut bam_reader = rust_htslib::bam::Reader::from_stdin()?;
@@ -565,23 +566,32 @@ pub mod run_entry {
             }
         };
 
+        let mut stats_result_df = stats_vec_to_dataframe(stats_result).expect("Convert stats vector to DataFrame failed");
+        if !gc {
+            let _ = stats_result_df.drop_in_place("gc")?;
+        }
         let tmp_stats_outfile = format!("/tmp/NanofqStatsTmpResult_{}.tsv", uuid::Uuid::new_v4());
         match output {
             None => {
-                // write_stats(&stats_result, &mut std::io::stdout(), gc)?;
                 if plot.is_some() {
-                    let mut writer = std::fs::File::create(&tmp_stats_outfile)?;
-                    write_stats(&stats_result, &mut writer, gc)?;
+                    let writer = std::fs::File::create(&tmp_stats_outfile)?;
+                    CsvWriter::new(writer)
+                        .with_separator(b'\t')
+                        .with_float_precision(Some(2))
+                        .include_header(false)
+                        .finish(&mut stats_result_df)?;
                 }
             }
-            Some(output_file) => write_stats(
-                &stats_result,
-                &mut std::io::BufWriter::new(File::create(output_file).unwrap()),
-                gc,
-            )?,
+            Some(output_file) => {
+                CsvWriter::new(std::fs::File::create(output_file)?)
+                    .with_separator(b'\t')
+                    .with_float_precision(Some(2))
+                    .include_header(false)
+                    .finish(&mut stats_result_df)?
+            }
         }
         let basic_stats = write_summary(
-            &mut stats_result,
+            stats_result_df,
             lengths,
             quality,
             *topn as usize,
@@ -761,12 +771,12 @@ pub mod run_entry {
                         mv_tmp_to_final(&tmp_filter_fastq, output.unwrap())?;
                     }
                 } else {
-                    let mut read_names = HashSet::new();
+                    let mut read_names = HashSet::<String>::new();
                     filter_stats.sort_by(|x, y| y.2.partial_cmp(&x.2).unwrap());
                     let mut total_retain_bases = 0usize;
                     for each in filter_stats {
                         total_retain_bases += each.1 as usize;
-                        read_names.insert(*each.0);
+                        read_names.insert(each.0);
                         if total_retain_bases >= target_bases_count {
                             break;
                         }

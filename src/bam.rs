@@ -122,7 +122,7 @@ impl BamRecordStats for rust_htslib::bam::Record {
             ))
         }
         (
-            Box::new(str::from_utf8(self.qname()).unwrap().to_string()),
+            str::from_utf8(self.qname()).unwrap().to_string(),
             len as u32,
             read_quality.unwrap() as f32,
             gc,
