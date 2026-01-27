@@ -40,7 +40,7 @@ mod sub_run {
         use crate::run::collect_fastq_dir;
         use flate2::bufread::MultiGzDecoder;
         use rayon::prelude::*;
-        use seq_io::fastq::{RecordSet, RefRecord};
+        use seq_io::fastq::{Error, RecordSet, RefRecord};
         use std::any::Any;
         use std::fs::File;
         use std::io::{BufReader, Read};
@@ -48,6 +48,7 @@ mod sub_run {
         use std::sync::mpsc;
         use std::sync::mpsc::Receiver;
         use std::thread;
+        use crate::utils::quit_with_error;
 
         fn stats_receiver(
             receiver: Receiver<RecordSet>,
@@ -64,6 +65,7 @@ mod sub_run {
                         .collect::<Vec<EachStats>>(),
                 );
             }
+            println!("all_stats: {all_stats:?}");
             all_stats
         }
 
@@ -84,10 +86,18 @@ mod sub_run {
                     let mut reader = FastqReader::<R>::new(reader);
                     loop {
                         let mut record_set = RecordSet::default();
-                        if reader.read_record_set(&mut record_set).is_none() {
-                            break;
+                        let read_set_result = reader.read_record_set(&mut record_set);
+                        if read_set_result.is_none() {
+                            break
+                        } else {
+                            match read_set_result.unwrap() {
+                                Ok(_) => {}
+                                Err(err) => {quit_with_error(&err.to_string())}
+                            }
                         }
-                        if sender.send(record_set).is_err() {
+                        let x = sender.send(record_set);
+                        println!("{:?}", x);
+                        if x.is_err() {
                             break;
                         }
                     }
@@ -445,6 +455,7 @@ pub mod run_entry {
             .unwrap()
             .collect::<Vec<&String>>();
         let input_t = check_input_type(input, bam);
+        println!("{input_t:?}");
         let mut basic_bam_stats = BasicBamStatistics::default();
         let stats_result = match input_t {
             InputType::OneBamOrSamFromStdin => {
@@ -565,6 +576,8 @@ pub mod run_entry {
                 quit_with_error("Bad input type suffix type, please check --input");
             }
         };
+        println!("stats_finished");
+        println!("{}", stats_result.len());
 
         let mut stats_result_df = stats_vec_to_dataframe(stats_result).expect("Convert stats vector to DataFrame failed");
         if !gc {
