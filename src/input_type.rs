@@ -2,7 +2,7 @@ use crate::utils::quit_with_error;
 use rust_htslib::bam::{self, Read};
 use std::path::Path;
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum InputType {
     FastqFromStdin,
     DirectoryContainFastqsOrFastqsGzipped,

@@ -38,9 +38,10 @@ mod sub_run {
     pub mod stats {
         use crate::fastq::{EachStats, FastqReader, NanoRead};
         use crate::run::collect_fastq_dir;
+        use crate::utils::quit_with_error;
         use flate2::bufread::MultiGzDecoder;
         use rayon::prelude::*;
-        use seq_io::fastq::{Error, RecordSet, RefRecord};
+        use seq_io::fastq::{RecordSet, RefRecord};
         use std::any::Any;
         use std::fs::File;
         use std::io::{BufReader, Read};
@@ -48,7 +49,6 @@ mod sub_run {
         use std::sync::mpsc;
         use std::sync::mpsc::Receiver;
         use std::thread;
-        use crate::utils::quit_with_error;
 
         fn stats_receiver(
             receiver: Receiver<RecordSet>,
@@ -88,11 +88,11 @@ mod sub_run {
                         let mut record_set = RecordSet::default();
                         let read_set_result = reader.read_record_set(&mut record_set);
                         if read_set_result.is_none() {
-                            break
+                            break;
                         } else {
                             match read_set_result.unwrap() {
                                 Ok(_) => {}
-                                Err(err) => {quit_with_error(&err.to_string())}
+                                Err(err) => quit_with_error(&err.to_string()),
                             }
                         }
                         let x = sender.send(record_set);
@@ -423,17 +423,19 @@ pub mod run_entry {
     use crate::run::sub_run::stats::{stats, stats_fastq_dir};
     use crate::run::sub_run::trim::{trim, trim_fastq_dir};
     use crate::run::{LOCAL_ALIGNER, collect_fastq_dir};
-    use crate::summary::{make_plot, stats_vec_to_dataframe,  write_summary};
+    use crate::sub_reads::{ReadNames, ReadsInBam, reads_from_bam, reads_from_fastq};
+    use crate::summary::{make_plot, stats_vec_to_dataframe, write_summary};
     use crate::trim::adapter::{TrimConfig, get_trim_cfg};
     use crate::utils::{quit_with_error, rev_com};
     use clap::ArgMatches;
     use flate2::bufread::MultiGzDecoder;
+    use polars::prelude::*;
+    use rust_htslib::bam::{IndexedReader, Read as BamRead};
     use seq_io::fastq::Record;
     use std::collections::HashSet;
     use std::fs::File;
     use std::io::{BufReader, BufWriter, Read, Write};
     use std::path::Path;
-    use polars::prelude::*;
 
     pub fn run_stats(stats_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
         let input = stats_cmd.get_one::<String>("input");
@@ -579,7 +581,8 @@ pub mod run_entry {
         println!("stats_finished");
         println!("{}", stats_result.len());
 
-        let mut stats_result_df = stats_vec_to_dataframe(stats_result).expect("Convert stats vector to DataFrame failed");
+        let mut stats_result_df =
+            stats_vec_to_dataframe(stats_result).expect("Convert stats vector to DataFrame failed");
         if !gc {
             let _ = stats_result_df.drop_in_place("gc")?;
         }
@@ -595,13 +598,11 @@ pub mod run_entry {
                         .finish(&mut stats_result_df)?;
                 }
             }
-            Some(output_file) => {
-                CsvWriter::new(std::fs::File::create(output_file)?)
-                    .with_separator(b'\t')
-                    .with_float_precision(Some(2))
-                    .include_header(false)
-                    .finish(&mut stats_result_df)?
-            }
+            Some(output_file) => CsvWriter::new(std::fs::File::create(output_file)?)
+                .with_separator(b'\t')
+                .with_float_precision(Some(2))
+                .include_header(false)
+                .finish(&mut stats_result_df)?,
         }
         let basic_stats = write_summary(
             stats_result_df,
@@ -1082,6 +1083,94 @@ pub mod run_entry {
             output_dir.join(format!("{}.fasta", name)),
             consensus_fasta_content,
         )?;
+        Ok(())
+    }
+
+    pub fn run_subseq(subseq_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
+        let input = subseq_cmd.get_one::<String>("input").unwrap();
+        let output = subseq_cmd.get_one::<String>("output");
+        let names = subseq_cmd.get_one::<String>("names");
+        let names_file = subseq_cmd.get_one::<String>("names_file");
+        let region = subseq_cmd.get_one::<String>("region");
+        let bed = subseq_cmd.get_one::<String>("bed");
+        let input_t = check_input_type(Some(input), false);
+        let names_sum = names.is_some() as u8 + names_file.is_some() as u8;
+        let names_region_sum = names_sum + region.is_some() as u8 + bed.is_some() as u8;
+        match input_t {
+            InputType::OneFastqGzippedFile | InputType::OneFastqFile => {
+                if names_sum != 1 {
+                    quit_with_error(
+                        "For fastq[.gz] input, JUST one of [\"names\", \"names_file\"] must be specified",
+                    )
+                }
+                let read_names = if names.is_some() {
+                    ReadNames::FromCli(names.unwrap())
+                } else {
+                    ReadNames::FromFile(names_file.unwrap())
+                };
+                if input_t == InputType::OneFastqFile {
+                    let mut reader = FastqReader::new(std::fs::File::open(input)?);
+                    match output {
+                        None => reads_from_fastq(read_names, &mut reader, &mut std::io::stdout()),
+                        Some(output_file) => {
+                            let mut writer = File::create(output_file)?;
+                            reads_from_fastq(read_names, &mut reader, &mut writer);
+                        }
+                    }
+                } else {
+                    let mut gz_reader =
+                        FastqReader::new(MultiGzDecoder::new(BufReader::new(File::open(input)?)));
+                    match output {
+                        None => {
+                            reads_from_fastq(read_names, &mut gz_reader, &mut std::io::stdout())
+                        }
+                        Some(output_file) => {
+                            let mut writer = File::create(output_file)?;
+                            reads_from_fastq(read_names, &mut gz_reader, &mut writer);
+                        }
+                    }
+                }
+            }
+
+            InputType::IndexedBam => {
+                if names_region_sum != 1 {
+                    quit_with_error(
+                        "For indexed bam, JUST one of [\"names\", \"names_file\", \"region\", \"bed\"] must be specified",
+                    )
+                }
+                let reads_in_bam = if names.is_some() {
+                    ReadsInBam::from_names_string(&names.unwrap())
+                } else if names_file.is_some() {
+                    ReadsInBam::from_names_file(&names_file.unwrap())
+                } else if region.is_some() {
+                    ReadsInBam::from_region_string(&region.unwrap())
+                } else {
+                    ReadsInBam::from_bed(&bed.unwrap())
+                };
+                let mut bam_reader1 = IndexedReader::from_path(input).unwrap();
+                bam_reader1.set_threads(4).unwrap();
+                let mut bam_reader2 = IndexedReader::from_path(input).unwrap();
+                bam_reader2.set_threads(2).unwrap();
+                match output {
+                    None => reads_from_bam(
+                        reads_in_bam,
+                        &mut bam_reader1,
+                        &mut bam_reader2,
+                        &mut std::io::stdout(),
+                    ),
+                    Some(output_file) => {
+                        let mut writer = File::create(output_file)?;
+                        reads_from_bam(
+                            reads_in_bam,
+                            &mut bam_reader1,
+                            &mut bam_reader2,
+                            &mut writer,
+                        );
+                    }
+                }
+            }
+            _ => quit_with_error("Only fastq[.gz] or indexed bam file supported, check your input"),
+        }
         Ok(())
     }
 }

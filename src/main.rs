@@ -13,8 +13,9 @@ mod trim;
 mod utils;
 mod bam;
 mod input_type;
+mod sub_reads;
 
-use crate::run::run_entry::{run_amplicon, run_filter, run_stats, run_trim};
+use crate::run::run_entry::{run_amplicon, run_filter, run_stats, run_subseq, run_trim};
 use std::time::Instant;
 use crate::utils::quit_with_error;
 
@@ -29,6 +30,8 @@ fn main() -> Result<(), anyhow::Error> {
         run_trim(trim_cmd)
     } else if let Some(amplicon_cmd) = matches.subcommand_matches("amplicon") {
         run_amplicon(amplicon_cmd)
+    }  else if let Some(subseq_cmd) = matches.subcommand_matches("subseq") {
+        run_subseq(subseq_cmd)
     } else {
         unreachable!()
     };

@@ -17,12 +17,13 @@ Then you can find `nanofq` in `./target/release`
 ## Usage
 
 ```
-A simple program for nanopore long reads to stats, filter, trim...
+A simple program for nanopore long reads to stats, subseq, filter, trim...
 
 Usage: nanofq [COMMAND]
 
 Commands:
   stats     stats nanopore fastq/sam/bam, output the stats result, summary and figures
+  subseq    get sub fastq records from a fastq[.gz] or indexed bam file
   filter    filter nanopore fastq by length, quality or gc content
   trim      trim adapter, barcode, primer that artificial sequence in nanopore fastq
   amplicon  get draft consensus from Ligation Nanopore Long reads for amplicon
@@ -33,7 +34,7 @@ Options:
   -V, --version  Print version
 ```
 ### Input Parameters
-For all subcommand, there are some possible input scenarios:
+In generally, for subcommand, there are some possible input scenarios:
 1. a single fastq or fastq.gz
 2. a directory containing some fastq or fastq.gz files
 3. fastq from stdin [default]
@@ -86,6 +87,39 @@ nanofq stats -i test.fastq -o test001.stats.tsv -s test001.summary.txt -t 4 --pl
 # output stats result: test001.stats.tsv and summary file: test001.summary.txt 
 # make plot, ./test001.pdf, ./test001.png, ./test001.svg
 ```
+
+### subseq
+```
+get sub fastq records from a fastq[.gz] or indexed bam file
+
+Usage: nanofq subseq [OPTIONS] --input <input>
+
+Options:
+  -i, --input <input>            A fastq[.gz] or indexed bam file used to search sub fastq records
+  -o, --output <output>          Output uncompressed fastq file
+  -n, --names <names>            Read names separated by comma
+  -N, --names_file <names_file>  Read names list file, one read name per line
+  -r, --region <region>          Interested region in indexed bam, format should be: ContigStr:StartPosition-EndPosition, with 0-based half-open intervals, multi region can be separated by comma
+  -L, --bed <bed>                Bed file of interested region, the first 3 columns needed
+  -h, --help                     Print help
+```
+The `subseq` subcommand is used to extract specified read records from a FASTQ[.gz] or indexed BAM file
+* Input must be a FASTQ or indexed BAM file.
+* If --output is specified, the output will be written to the specified file; otherwise, it will be sent to standard output.
+* For FASTQ input, either --names or --names_file must be provided, but not both.
+* For indexed BAM files, one of --names, --names_file, --region, or --bed must be specified to indicate the reads to extract, but only one of these options can be used.
+
+```shell
+# Extract specific reads from a FASTQ file and output to stdout
+nanofq subseq -i sample.fastq.gz -n read1,read2,read3
+
+# Extract reads based on a region from an indexed BAM file and save the result to a new file
+nanofq subseq -i sample.bam -r chr1:1000-2000 -o extracted_reads.fastq
+
+# Extract reads from an indexed BAM file using regions defined in a BED file
+nanofq subseq -i sample.bam -L regions.bed -o extracted_from_bed.fastq
+```
+
 ### filter
 ```
 filter nanopore fastq by length, quality or gc content
@@ -224,6 +258,9 @@ Trim all sequences outside the primers range, keep the top n reads with the high
 Finally, get consensus sequence from the alignment file as draft consensus of the amplicon
 
 ## ChangeLog
+### nanofq (V0.3.0) 2026-3-4
+1. add `subseq` subcommand to extract sub Fastq Records from fastq[.gz] or indexed bam
+
 ### nanofq (v0.2.2) 2025-12-18
 1. change mean_read_quality to sum(read_quality) / reads_number just like [fastcat](https://github.com/epi2me-labs/fastcat)
 
