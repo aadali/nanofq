@@ -65,7 +65,6 @@ mod sub_run {
                         .collect::<Vec<EachStats>>(),
                 );
             }
-            println!("all_stats: {all_stats:?}");
             all_stats
         }
 
@@ -96,7 +95,6 @@ mod sub_run {
                             }
                         }
                         let x = sender.send(record_set);
-                        println!("{:?}", x);
                         if x.is_err() {
                             break;
                         }
@@ -457,7 +455,7 @@ pub mod run_entry {
             .unwrap()
             .collect::<Vec<&String>>();
         let input_t = check_input_type(input, bam);
-        println!("{input_t:?}");
+        // println!("{input_t:?}");
         let mut basic_bam_stats = BasicBamStatistics::default();
         let stats_result = match input_t {
             InputType::OneBamOrSamFromStdin => {
@@ -579,7 +577,6 @@ pub mod run_entry {
             }
         };
         println!("stats_finished");
-        println!("{}", stats_result.len());
 
         let mut stats_result_df =
             stats_vec_to_dataframe(stats_result).expect("Convert stats vector to DataFrame failed");

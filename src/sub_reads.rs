@@ -39,12 +39,12 @@ impl<'a> ReadsInBam<'a> {
                 let y = x[1].split('-').collect::<Vec<&str>>();
                 let start = y[0].parse::<u32>().unwrap_or_else(|x| {
                     quit_with_error(&format!(
-                        "Bad region: {region}, pos should be less than 4294967296"
+                        "{x}, Bad region: {region}, pos should be less than 4294967296"
                     ))
                 });
                 let end = y[1].parse::<u32>().unwrap_or_else(|x| {
                     quit_with_error(&format!(
-                        "Bad region: {region}, pos should be less than 4294967296"
+                        "{x}, Bad region: {region}, pos should be less than 4294967296"
                     ))
                 });
                 fetch_regions.push((contig.to_string(), start, end));
