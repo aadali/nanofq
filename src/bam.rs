@@ -1,8 +1,6 @@
-use crate::fastq::{DORADO_TRIM_LEADING_BASE_NUMBER, EachStats};
 use crate::fastq2::RecordEachStats;
-use crate::utils::{get_q2p_table, quit_with_error};
+use crate::utils::{calculate_read_q,  quit_with_error, };
 use rayon::prelude::*;
-use rust_htslib::bam::ext::BamRecordExtensions;
 use rust_htslib::bam::index;
 use rust_htslib::bam::record::{Aux, Cigar};
 use rust_htslib::bam::{self, FetchDefinition, HeaderView, IndexedReader, Read};
@@ -42,7 +40,7 @@ pub fn get_encoded_bases_gc_count_table() -> &'static HashMap<u8, usize> {
 }
 pub trait BamRecordStats {
     fn gc_count(&self) -> f32;
-    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> Option<f64>;
+    fn calculate_read_quality(&self, use_dorado_q: bool) -> f32;
     fn stats(&self, gc: bool, dont_use_dorado_quality: bool) -> RecordEachStats;
 }
 impl BamRecordStats for rust_htslib::bam::Record {
@@ -57,7 +55,9 @@ impl BamRecordStats for rust_htslib::bam::Record {
         gc_number as f32 / seq_len as f32
     }
 
-    fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> Option<f64> {
+    fn calculate_read_quality(&self, use_dorado_q: bool) -> f32 {
+        calculate_read_q(self.qual(), use_dorado_q)
+        /*
         let quals = self.qual();
         if quals.len() == 0 {
             eprintln!(
@@ -67,10 +67,10 @@ impl BamRecordStats for rust_htslib::bam::Record {
             return None;
         }
         let real_seq_len = quals.len();
-        if dont_use_dorado_quality {
+        if !use_dorado_q {
             let avg_err_prob = quals
                 .iter()
-                .map(|x| get_q2p_table()[*x as usize + 33])
+                .map(|x| ERR_PROB_TABLE[*x as usize + 33])
                 .sum::<f64>()
                 / real_seq_len as f64;
             let read_quality = avg_err_prob.log10() * -10.0;
@@ -110,22 +110,18 @@ impl BamRecordStats for rust_htslib::bam::Record {
                 Some(avg_err_prob.log10() * -10.0)
             }
         }
+
+         */
     }
 
     fn stats(&self, gc: bool, dont_use_dorado_quality: bool) -> RecordEachStats {
         let len = self.qual().len();
         let read_quality = self.calculate_read_quality(dont_use_dorado_quality);
         let gc = if gc { Some(self.gc_count()) } else { None };
-        if read_quality.is_none() {
-            quit_with_error(&format!(
-                "Empty quality found for: {}",
-                str::from_utf8(self.qname()).unwrap()
-            ))
-        }
         RecordEachStats::new(
             str::from_utf8(self.qname()).unwrap().to_string(),
             len,
-            read_quality.unwrap() as f32,
+            read_quality,
             gc,
         )
     }

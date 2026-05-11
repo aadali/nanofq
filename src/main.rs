@@ -1,4 +1,4 @@
-#![allow(unused_assignments)]
+// #![allow(unused_assignments)]
 // #![allow(unused_mut)]
 // #![allow(dead_code)]
 // #![allow(unused_imports)]
@@ -16,8 +16,9 @@ mod input_type;
 mod sub_reads;
 mod fastq2;
 mod stats;
+mod filter;
 
-use crate::run::run_entry::{run_amplicon, run_filter,  run_subseq, run_trim};
+use crate::run::run_entry::{run_amplicon, run_filter, run_subseq, run_trim};
 use std::time::Instant;
 use crate::utils::quit_with_error;
 
