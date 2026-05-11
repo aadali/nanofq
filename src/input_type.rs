@@ -4,17 +4,17 @@ use std::path::Path;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum InputType {
-    FastqFromStdin,
+    // FastqFromStdin,
     DirectoryContainFastqsOrFastqsGzipped,
     OneFastqFile,
     OneFastqGzippedFile,
-    OneBamOrSamFromStdin,
+    // OneBamOrSamFromStdin,
     OneSamFile,
     UnsortedBam,
     UnalignedBam,
     SortedUnindexedBam,
     IndexedBam,
-    WrongType,
+    // WrongType,
 }
 
 fn check_bam_type(bam_file: &str) -> InputType {
@@ -78,60 +78,53 @@ fn check_bam_type(bam_file: &str) -> InputType {
     }
 }
 
-pub fn check_input_type<P: AsRef<Path> + ToString>(p: Option<P>, bam: bool) -> InputType {
-    if p.is_none() {
-        if bam {
-            InputType::OneBamOrSamFromStdin
+pub fn check_input_type<P: AsRef<Path> + ToString>(p: P) -> InputType {
+    let p = p.as_ref();
+    let input_fn = p.to_str().unwrap();
+    let input_path = std::path::PathBuf::from(&input_fn);
+    if !input_path.exists() {
+        quit_with_error(&format!("No such file or directory: {}", &input_fn))
+    }
+    if input_path.is_file() {
+        if input_fn.ends_with(".fastq") || input_fn.ends_with(".fq") {
+            InputType::OneFastqFile
+        } else if input_fn.ends_with(".fastq.gz") || input_fn.ends_with(".fq.gz") {
+            InputType::OneFastqGzippedFile
+        } else if input_fn.ends_with(".sam") {
+            InputType::OneSamFile
+        } else if input_fn.ends_with(".bam") {
+            check_bam_type(&input_fn)
         } else {
-            InputType::FastqFromStdin
+            quit_with_error("Wrong input path type")
         }
-    } else {
-        let input_fn = p.unwrap().to_string();
-        let input_path = std::path::PathBuf::from(&input_fn);
-        if !input_path.exists() {
-            quit_with_error(&format!("No such file or directory: {}", &input_fn))
+    } else if input_path.is_dir() {
+        let mut count = 0;
+        let read_dir_res = input_path.read_dir();
+        if read_dir_res.is_err() {
+            quit_with_error(&format!("Failed to open directory: {}", input_fn))
         }
-        if input_path.is_file() {
-            if input_fn.ends_with(".fastq") || input_fn.ends_with(".fq") {
-                InputType::OneFastqFile
-            } else if input_fn.ends_with(".fastq.gz") || input_fn.ends_with(".fq.gz") {
-                InputType::OneFastqGzippedFile
-            } else if input_fn.ends_with(".sam") {
-                InputType::OneSamFile
-            } else if input_fn.ends_with(".bam") {
-                check_bam_type(&input_fn)
-            } else {
-                InputType::WrongType
-            }
-        } else if input_path.is_dir() {
-            let mut count = 0;
-            let read_dir_res = input_path.read_dir();
-            if read_dir_res.is_err() {
-                quit_with_error(&format!("Open directory: {} failed", input_fn))
-            }
-            for entry in read_dir_res.unwrap() {
-                if let Ok(entry) = entry {
-                    let p = entry.path();
-                    let p = p.to_str().unwrap();
-                    if p.ends_with(".fastq")
-                        || p.ends_with(".fq")
-                        || p.ends_with(".fastq.gz")
-                        || p.ends_with(".fa.gz")
-                    {
-                        count += 1;
-                    }
+        for entry in read_dir_res.unwrap() {
+            if let Ok(entry) = entry {
+                let p = entry.path();
+                let p = p.to_str().unwrap();
+                if p.ends_with(".fastq")
+                    || p.ends_with(".fq")
+                    || p.ends_with(".fastq.gz")
+                    || p.ends_with(".fa.gz")
+                {
+                    count += 1;
                 }
             }
-            if count == 0 {
-                quit_with_error(&format!(
-                    "No fastq or fastq.gz file found in directory: {}",
-                    input_fn
-                ))
-            } else {
-                InputType::DirectoryContainFastqsOrFastqsGzipped
-            }
-        } else {
-            InputType::WrongType
         }
+        if count == 0 {
+            quit_with_error(&format!(
+                "No fastq or fastq.gz file found in directory: {}",
+                input_fn
+            ))
+        } else {
+            InputType::DirectoryContainFastqsOrFastqsGzipped
+        }
+    } else {
+        quit_with_error("Wrong input path type")
     }
 }

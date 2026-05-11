@@ -422,12 +422,11 @@ pub mod run_entry {
     use crate::run::sub_run::trim::{trim, trim_fastq_dir};
     use crate::run::{LOCAL_ALIGNER, collect_fastq_dir};
     use crate::sub_reads::{ReadNames, ReadsInBam, reads_from_bam, reads_from_fastq};
-    use crate::summary::{make_plot, stats_vec_to_dataframe, write_summary};
+    use crate::summary::{make_plot,  write_summary};
     use crate::trim::adapter::{TrimConfig, get_trim_cfg};
     use crate::utils::{quit_with_error, rev_com};
     use clap::ArgMatches;
     use flate2::bufread::MultiGzDecoder;
-    use polars::prelude::*;
     use rust_htslib::bam::{IndexedReader, Read as BamRead};
     use seq_io::fastq::Record;
     use std::collections::HashSet;
@@ -435,207 +434,6 @@ pub mod run_entry {
     use std::io::{BufReader, BufWriter, Read, Write};
     use std::path::Path;
 
-    pub fn run_stats(stats_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
-        let input = stats_cmd.get_one::<String>("input");
-        let output = stats_cmd.get_one::<String>("output");
-        let summary = stats_cmd.get_one::<String>("summary").unwrap();
-        let topn = stats_cmd.get_one::<u16>("topn").unwrap();
-        let quality = stats_cmd.get_one::<Vec<f64>>("quality").unwrap();
-        let dont_use_dorado_quality = stats_cmd.get_flag("dont_use_dorado_quality");
-        let lengths = stats_cmd.get_one::<Vec<u32>>("length");
-        let gc = stats_cmd.get_flag("gc");
-        let bam = stats_cmd.get_flag("bam");
-        let index = stats_cmd.get_flag("index");
-        let thread = stats_cmd.get_one::<u16>("thread").unwrap();
-        let plot = stats_cmd.get_one::<String>("plot");
-        let python = stats_cmd.get_one::<String>("python").unwrap();
-        let quantile = stats_cmd.get_one::<f64>("quantile").unwrap();
-        let format = stats_cmd
-            .get_many::<String>("format")
-            .unwrap()
-            .collect::<Vec<&String>>();
-        let input_t = check_input_type(input, bam);
-        // println!("{input_t:?}");
-        let mut basic_bam_stats = BasicBamStatistics::default();
-        let stats_result = match input_t {
-            InputType::OneBamOrSamFromStdin => {
-                // stats bam/sam from stdin
-                let mut bam_reader = rust_htslib::bam::Reader::from_stdin()?;
-                let (basic_bam_stats_, all_stats) = stats_xam(
-                    &mut bam_reader,
-                    *thread as usize,
-                    gc,
-                    dont_use_dorado_quality,
-                );
-                basic_bam_stats = basic_bam_stats_;
-                all_stats
-            }
-            InputType::FastqFromStdin => {
-                //stats fastq from stdin
-                rayon::ThreadPoolBuilder::new()
-                    .num_threads(*thread as usize)
-                    .build_global()?;
-                stats(
-                    std::io::stdin(),
-                    *thread as usize,
-                    gc,
-                    dont_use_dorado_quality,
-                )
-            }
-            InputType::OneFastqFile => {
-                // stats one fastq file
-                if bam {
-                    quit_with_error("--bam should used with bam/sam file")
-                }
-                rayon::ThreadPoolBuilder::new()
-                    .num_threads(*thread as usize)
-                    .build_global()?;
-                stats(
-                    BufReader::new(File::open(input.unwrap())?),
-                    *thread as usize,
-                    gc,
-                    dont_use_dorado_quality,
-                )
-            }
-            InputType::OneFastqGzippedFile => {
-                // stats a fastq.gz file
-                if bam {
-                    quit_with_error("--bam should used with bam/sam file")
-                }
-                rayon::ThreadPoolBuilder::new()
-                    .num_threads(*thread as usize)
-                    .build_global()?;
-                stats(
-                    MultiGzDecoder::new(BufReader::new(File::open(input.unwrap())?)),
-                    *thread as usize,
-                    gc,
-                    dont_use_dorado_quality,
-                )
-            }
-            InputType::OneSamFile | InputType::UnsortedBam | InputType::UnalignedBam => {
-                // stats a Sam/UnsortedBam/UnalignedBam file
-                let mut bam_reader = rust_htslib::bam::Reader::from_path(input.unwrap())?;
-                let (basic_bam_stats_, all_stats) = stats_xam(
-                    &mut bam_reader,
-                    *thread as usize,
-                    gc,
-                    dont_use_dorado_quality,
-                );
-                basic_bam_stats = basic_bam_stats_;
-                all_stats
-            }
-            InputType::SortedUnindexedBam => {
-                // stats sorted but unindexed bam file
-                let (basic_bam_stats_, all_stats) = if index {
-                    index_bam(input.unwrap(), *thread as usize)?;
-                    stats_indexed_bam(
-                        input.unwrap(),
-                        *thread as usize,
-                        gc,
-                        dont_use_dorado_quality,
-                    )
-                } else {
-                    let mut bam_reader = rust_htslib::bam::Reader::from_path(input.unwrap())?;
-                    stats_xam(
-                        &mut bam_reader,
-                        *thread as usize,
-                        gc,
-                        dont_use_dorado_quality,
-                    )
-                };
-
-                basic_bam_stats = basic_bam_stats_;
-                all_stats
-            }
-            InputType::IndexedBam => {
-                let (basic_bam_stats_, all_stats) = stats_indexed_bam(
-                    input.unwrap(),
-                    *thread as usize,
-                    gc,
-                    dont_use_dorado_quality,
-                );
-                basic_bam_stats = basic_bam_stats_;
-                all_stats
-            }
-            InputType::DirectoryContainFastqsOrFastqsGzipped => {
-                // stats one directory containing some fastq or fastq.gz files
-                if bam {
-                    quit_with_error("--bam couldn't used with directory input")
-                }
-                rayon::ThreadPoolBuilder::new()
-                    .num_threads(*thread as usize)
-                    .build_global()?;
-                stats_fastq_dir(
-                    std::path::Path::new(input.unwrap()),
-                    *thread as usize,
-                    gc,
-                    dont_use_dorado_quality,
-                )
-            }
-            InputType::WrongType => {
-                quit_with_error("Bad input type suffix type, please check --input");
-            }
-        };
-        println!("stats_finished");
-
-        let mut stats_result_df =
-            stats_vec_to_dataframe(stats_result).expect("Convert stats vector to DataFrame failed");
-        if !gc {
-            let _ = stats_result_df.drop_in_place("gc")?;
-        }
-        let tmp_stats_outfile = format!("/tmp/NanofqStatsTmpResult_{}.tsv", uuid::Uuid::new_v4());
-        match output {
-            None => {
-                if plot.is_some() {
-                    let writer = std::fs::File::create(&tmp_stats_outfile)?;
-                    CsvWriter::new(writer)
-                        .with_separator(b'\t')
-                        .with_float_precision(Some(2))
-                        .include_header(false)
-                        .finish(&mut stats_result_df)?;
-                }
-            }
-            Some(output_file) => CsvWriter::new(std::fs::File::create(output_file)?)
-                .with_separator(b'\t')
-                .with_float_precision(Some(2))
-                .include_header(false)
-                .finish(&mut stats_result_df)?,
-        }
-        let basic_stats = write_summary(
-            stats_result_df,
-            lengths,
-            quality,
-            *topn as usize,
-            &basic_bam_stats,
-            summary,
-        );
-        let formats = format
-            .iter()
-            .map(|x| (**x).clone())
-            .collect::<Vec<String>>();
-        if plot.is_some() {
-            if output.is_none() {
-                make_plot(
-                    &basic_stats,
-                    *quantile,
-                    plot.unwrap(),
-                    &formats,
-                    python,
-                    &tmp_stats_outfile,
-                )?;
-            } else {
-                make_plot(
-                    &basic_stats,
-                    *quantile,
-                    plot.unwrap(),
-                    &formats,
-                    python,
-                    output.unwrap(),
-                )?;
-            }
-        }
-        Ok(())
-    }
 
     pub fn run_filter(filter_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
         let input = filter_cmd.get_one::<String>("input");
@@ -675,16 +473,16 @@ pub mod run_entry {
         let tmp_filter_fastq = format!("./.{}.tmp.filter.fastq", uuid::Uuid::new_v4());
         let mut filter_stats = {
             let mut tmp_writer = BufWriter::new(File::create(&tmp_filter_fastq)?);
-            let input_t = check_input_type(input, false);
+            let input_t = check_input_type(input.unwrap());
             match input_t {
-                InputType::FastqFromStdin => filter(
-                    std::io::stdin(),
-                    *thread as usize,
-                    &mut tmp_writer,
-                    &filter_option,
-                    failed_retain,
-                    &mut failed_writer,
-                )?,
+                // InputType::FastqFromStdin => filter(
+                //     std::io::stdin(),
+                //     *thread as usize,
+                //     &mut tmp_writer,
+                //     &filter_option,
+                //     failed_retain,
+                //     &mut failed_writer,
+                // )?,
                 InputType::OneFastqFile => {
                     let reader = BufReader::new(File::open(input.unwrap())?);
                     filter(
@@ -973,16 +771,16 @@ pub mod run_entry {
             None => Box::new(BufWriter::new(std::io::stdout())),
             Some(output_file_path) => Box::new(BufWriter::new(File::create(output_file_path)?)),
         };
-        let input_t = check_input_type(input, false);
+        let input_t = check_input_type(input.unwrap());
         match input_t {
-            InputType::FastqFromStdin => trim(
-                std::io::stdin(),
-                &mut writer,
-                ref_trim_cfg,
-                min_len,
-                pretty_log,
-                &mut log_writer,
-            )?,
+            // InputType::FastqFromStdin => trim(
+            //     std::io::stdin(),
+            //     &mut writer,
+            //     ref_trim_cfg,
+            //     min_len,
+            //     pretty_log,
+            //     &mut log_writer,
+            // )?,
             InputType::OneFastqFile => {
                 let reader = BufReader::new(File::open(input.unwrap())?);
                 trim(
@@ -1034,11 +832,11 @@ pub mod run_entry {
         if !output_dir.exists() {
             std::fs::create_dir_all(&output_dir)?;
         }
-        let input_t = check_input_type(input, false);
+        let input_t = check_input_type(input.unwrap());
         let candidate_amplicon = match input_t {
-            InputType::FastqFromStdin => {
-                get_candidate_amplicon(Option::<&String>::None, fwd, rev, est_len, *range)?
-            }
+            // InputType::FastqFromStdin => {
+            //     get_candidate_amplicon(Option::<&String>::None, fwd, rev, est_len, *range)?
+            // }
             InputType::OneFastqGzippedFile | InputType::OneFastqFile => {
                 get_candidate_amplicon(input, fwd, rev, est_len, *range)?
             }
@@ -1090,7 +888,7 @@ pub mod run_entry {
         let names_file = subseq_cmd.get_one::<String>("names_file");
         let region = subseq_cmd.get_one::<String>("region");
         let bed = subseq_cmd.get_one::<String>("bed");
-        let input_t = check_input_type(Some(input), false);
+        let input_t = check_input_type(input);
         let names_sum = names.is_some() as u8 + names_file.is_some() as u8;
         let names_region_sum = names_sum + region.is_some() as u8 + bed.is_some() as u8;
         match input_t {

@@ -14,16 +14,20 @@ mod utils;
 mod bam;
 mod input_type;
 mod sub_reads;
+mod fastq2;
+mod stats;
 
-use crate::run::run_entry::{run_amplicon, run_filter, run_stats, run_subseq, run_trim};
+use crate::run::run_entry::{run_amplicon, run_filter,  run_subseq, run_trim};
 use std::time::Instant;
 use crate::utils::quit_with_error;
 
+use crate::stats::t;
 fn main() -> Result<(), anyhow::Error> {
     let start = Instant::now();
     let matches = arguments::parse_arguments();
     let main_result = if let Some(stats_cmd) = matches.subcommand_matches("stats") {
-        run_stats(stats_cmd)
+        stats::run_stats(stats_cmd);
+        Ok(())
     } else if let Some(filter_cmd) = matches.subcommand_matches("filter") {
         run_filter(filter_cmd)
     } else if let Some(trim_cmd) = matches.subcommand_matches("trim") {

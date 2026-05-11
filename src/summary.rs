@@ -1,22 +1,13 @@
 use super::fastq::EachStats;
 use crate::bam::BasicBamStatistics;
-use crate::utils::quit_with_error;
+use crate::fastq2::RecordEachStats;
+use crate::utils::{collect_fastq_dir, quit_with_error};
 use ansi_term;
-use polars::prelude::*;
+use rayon::prelude::*;
+use statrs::statistics::{Data, Distribution, Max, Median, Min, OrderStatistics, Statistics};
+use std::cmp::Reverse;
 use uuid;
 
-pub fn stats_vec_to_dataframe(stats_vec: Vec<EachStats>) -> PolarsResult<DataFrame> {
-    let lengths = stats_vec.iter().map(|x| x.1).collect::<Series>();
-    let qualities = stats_vec.iter().map(|x| x.2).collect::<Series>();
-    let gc = stats_vec.iter().map(|x| x.3).collect::<Series>();
-    let names = stats_vec.into_iter().map(|x| x.0).collect::<Series>();
-    df!(
-        "names" => names,
-        "lengths" => lengths,
-        "qualities" => qualities,
-        "gc" => gc,
-    )
-}
 
 #[derive(Default, Debug)]
 pub struct BasicStatistics {
@@ -82,12 +73,8 @@ impl BasicStatistics {
     }
 }
 
-fn get_n10_n50_n90(lengths_lazy: LazyFrame, total_length: f64) -> (u32, u32, u32) {
-    let lengths_df = lengths_lazy.select([col("lengths")]).collect().unwrap();
-    let lengths = lengths_df["lengths"]
-        .as_series()
-        .expect("as series failed for lengths column");
-    let mut current_total_length = 0.0f64;
+fn get_n10_n50_n90(all_stats: &Vec<RecordEachStats>, total_length: f64) -> (u32, u32, u32) {
+    let mut current_total_length = 0f64;
     let n10 = total_length * 0.10;
     let n50 = total_length * 0.50;
     let n90 = total_length * 0.90;
@@ -97,340 +84,192 @@ fn get_n10_n50_n90(lengths_lazy: LazyFrame, total_length: f64) -> (u32, u32, u32
     let mut n10_length: u32 = 0;
     let mut n50_length: u32 = 0;
     let mut n90_length: u32 = 0;
-    let mut lengths_iter = lengths.iter();
-    while let Some(AnyValue::UInt32(read_length)) = lengths_iter.next() {
+    let mut all_stats_iter = all_stats.iter();
+    while let Some(each_stats) = all_stats_iter.next() {
         if find_n10 && find_n50 && find_n90 {
             break;
         }
-        current_total_length += read_length as f64;
+        current_total_length += each_stats.length as f64;
         if !find_n10 && current_total_length > n10 {
             find_n10 = true;
-            n10_length = read_length
+            n10_length = each_stats.length;
         }
         if !find_n50 && current_total_length > n50 {
             find_n50 = true;
-            n50_length = read_length
+            n50_length = each_stats.length;
         }
         if !find_n90 && current_total_length > n90 {
             find_n90 = true;
-            n90_length = read_length
+            n90_length = each_stats.length;
         }
     }
     (n10_length, n50_length, n90_length)
 }
 
 pub fn get_summary(
-    // stats_vec: Vec<EachStats>,
-    stats_df: DataFrame,
-    read_lengths: Option<&Vec<u32>>,
+    all_stats: Vec<RecordEachStats>,
+    read_lengths: Option<&[u32]>,
     read_qualities: &[f64],
     n: usize,
     basic_bam_statistics: &BasicBamStatistics,
 ) -> (String, BasicStatistics) {
-    // unsafe {
-    //     std::env::set_var("POLARS_FMT_MAX_ROWS", "-1");
-    //     std::env::set_var("POLARS_FMT_MAX_COLS", "-1");
-    // }
-    let mut contents: String = String::default();
     let basic: BasicStatistics;
-    let stats_lazy = stats_df.lazy();
-    // names, lengths, qualities, gc
-    let summary_df = stats_lazy
-        .clone()
-        .select([
-            col("lengths")
-                .count()
-                .cast(DataType::UInt64)
-                .alias("ReadsNumber"),
-            col("lengths")
-                .cast(DataType::UInt64)
-                .sum()
-                .alias("BasesNumber"),
-            col("lengths").min().alias("ReadMinLen"),
-            col("lengths").max().alias("ReadMaxLen"),
-            col("lengths")
-                .mean()
-                .cast(DataType::Float32)
-                .round(2, RoundMode::default())
-                .alias("ReadMeanLen"),
-            col("lengths")
-                .std(0)
-                .cast(DataType::Float32)
-                .round(2, RoundMode::default())
-                .alias("ReadStdLen"),
-            col("lengths")
-                .quantile(lit(0.25), QuantileMethod::Linear)
-                .cast(DataType::Float32)
-                .round(2, RoundMode::default())
-                .alias("ReadLenQuantile25"),
-            col("lengths")
-                .median()
-                .cast(DataType::Float32)
-                .round(2, RoundMode::default())
-                .alias("ReadMedianLen"),
-            col("lengths")
-                .quantile(lit(0.75), QuantileMethod::Linear)
-                .cast(DataType::Float32)
-                .round(2, RoundMode::default())
-                .alias("ReadLenQuantile75"),
-            col("qualities")
-                .min()
-                .round(2, RoundMode::default())
-                .alias("ReadMinQual"),
-            col("qualities")
-                .max()
-                .round(2, RoundMode::default())
-                .alias("ReadMaxQual"),
-            col("qualities")
-                .mean()
-                .round(2, RoundMode::default())
-                .alias("ReadMeanQual"),
-            col("qualities")
-                .std(0)
-                .round(2, RoundMode::default())
-                .alias("ReadStdQual"),
-            col("qualities")
-                .quantile(lit(0.25), QuantileMethod::Linear)
-                .round(2, RoundMode::default())
-                .alias("ReadQualQuantile25"),
-            col("qualities")
-                .median()
-                .round(2, RoundMode::default())
-                .alias("ReadMedianQual"),
-            col("qualities")
-                .quantile(lit(0.75), QuantileMethod::Linear)
-                .round(2, RoundMode::default())
-                .alias("ReadQualQuantile75"),
-        ])
-        .collect()
-        .expect("Collect summary dataframe failed");
-    let first_row = summary_df
-        .get_row(0)
-        .expect("Get first row from summary_df failed");
-    match first_row.0[..] {
-        [
-            AnyValue::UInt64(reads_number),
-            AnyValue::UInt64(bases_number),
-            AnyValue::UInt32(min_len),
-            AnyValue::UInt32(max_len),
-            AnyValue::Float32(mean_len),
-            AnyValue::Float32(std_len),
-            AnyValue::Float32(quantile25_len),
-            AnyValue::Float32(median_len),
-            AnyValue::Float32(quantile75_len),
-            AnyValue::Float32(min_qual),
-            AnyValue::Float32(max_qual),
-            AnyValue::Float32(mean_qual),
-            AnyValue::Float32(std_qual),
-            AnyValue::Float32(quantile25_qual),
-            AnyValue::Float32(median_qual),
-            AnyValue::Float32(quantile75_qual),
-        ] => {
-            let (n10, n50, n90) = get_n10_n50_n90(
-                stats_lazy.clone().sort(
-                    ["lengths"],
-                    SortMultipleOptions::default().with_order_descending(true),
-                ),
-                bases_number as f64,
-            );
-            basic = BasicStatistics {
-                reads_number: reads_number as usize,
-                bases_number: bases_number as usize,
-                n10,
-                n50,
-                n90,
-                min_len,
-                max_len,
-                mean_len,
-                std_len,
-                quantile25_len,
-                median_len,
-                quantile75_len,
-                min_qual,
-                max_qual,
-                mean_qual,
-                std_qual,
-                quantile25_qual,
-                median_qual,
-                quantile75_qual,
-            };
-        }
-        _ => quit_with_error("Get summary from first row of summary_df failed"),
-    };
-    contents.push_str(&basic.basic_info());
-    if let Some(read_lengths) = read_lengths {
-        contents.push_str(
-            "#ReadLength > SpecifiedValue\tReadsNumber(ReadsPercent); BasesNumber(BasesPercent)\n",
-        );
-        for each_length in read_lengths {
-            let gt_length_df = stats_lazy
-                .clone()
-                .filter(col("lengths").gt(lit(*each_length)))
-                .select([
-                    col("lengths")
-                        .count()
-                        .cast(DataType::UInt64)
-                        .alias("ReadsNumber"),
-                    col("lengths")
-                        .cast(DataType::UInt64)
-                        .sum()
-                        .alias("BasesNumber"),
-                ])
-                .collect()
-                .expect(&format!(
-                    "Get sub dataframe that length > {each_length} failed"
-                ));
-            let (this_reads_number, this_bases_number) = if !gt_length_df.is_empty() {
-                let first_row = gt_length_df.get_row(0).expect(&format!(
-                    "Get first row from dataframe that lengths > {each_length} failed"
-                ));
-                match &first_row.0[..] {
-                    [
-                        AnyValue::UInt64(reads_number),
-                        AnyValue::UInt64(bases_number),
-                    ] => (*reads_number, *bases_number),
-                    _ => quit_with_error("Get stats info for specified length failed"),
-                }
-            } else {
-                (0, 0)
-            };
-            let reads_info = format!(
-                "{}({:.2}%); {:.6}Mb({:.2}%)\n",
-                this_reads_number,
-                this_reads_number as f64 / basic.reads_number as f64 * 100.0,
-                this_bases_number as f64 / 1_000_000.0,
-                this_bases_number as f64 / basic.bases_number as f64 * 100.0
-            );
-            contents.push_str(&format!("ReadLength > {each_length}\t{reads_info}"));
-        }
-    }
-    contents.push_str(
-        "#ReadQuality > SpecifiedValue\tReadsNumber(ReadsPercent); BasesNumber(BasesPercent)\n",
-    );
-    for each_quality in read_qualities {
-        let gt_quality_df = stats_lazy
-            .clone()
-            .filter(col("qualities").gt(lit(*each_quality as f32)))
-            .select([
-                col("lengths")
-                    .count()
-                    .cast(DataType::UInt64)
-                    .alias("ReadsNumber"),
-                col("lengths")
-                    .cast(DataType::UInt64)
-                    .sum()
-                    .alias("BasesNumber"),
-            ])
-            .collect()
-            .expect(&format!(
-                "Get sub dataframe that quality > {each_quality} failed"
-            ));
-        let (this_reads_number, this_bases_number) = if !gt_quality_df.is_empty() {
-            let first_row = gt_quality_df.get_row(0).expect(&format!(
-                "Get first row from dataframe that lengths > {each_quality} failed"
-            ));
-            match &first_row.0[..] {
-                [
-                    AnyValue::UInt64(reads_number),
-                    AnyValue::UInt64(bases_number),
-                ] => (*reads_number, *bases_number),
-                _ => quit_with_error("Get stats info for specified quality failed"),
-            }
-        } else {
-            (0, 0)
-        };
-        let reads_info = format!(
-            "{}({:.2}%); {:.6}Mb({:.2}%)\n",
-            this_reads_number,
-            this_reads_number as f64 / basic.reads_number as f64 * 100.0,
-            this_bases_number as f64 / 1_000_000.0,
-            this_bases_number as f64 / basic.bases_number as f64 * 100.0
-        );
-        contents.push_str(&format!("ReadQual > {each_quality}\t{reads_info}"));
-    }
-
-    let mut topn_lengths = stats_lazy
-        .clone()
-        .sort(
-            ["lengths", "qualities"],
-            SortMultipleOptions::default().with_order_descending_multi([true, false]),
-        )
-        .select([col("names"), col("lengths"), col("qualities")])
-        .collect()
-        .unwrap()
-        .head(Some(n));
-    topn_lengths
-        .insert_column(
-            0,
-            Series::new("nth".into(), (1..=n as u32).collect::<Vec<u32>>()),
-        )
-        .unwrap();
-
-    let n = topn_lengths.height().min(n);
-    contents.push_str(&format!(
+    let mut topn_length_contents = String::from(&format!(
         "#Top {n} longest reads\nnth\tReadName\tReadLen\tReadQuality\n"
     ));
-    for i in 0..n {
-        let row = topn_lengths.get_row(i).unwrap().0;
-        match &row[..] {
-            [
-                AnyValue::UInt32(idx),
-                AnyValue::String(name),
-                AnyValue::UInt32(len),
-                AnyValue::Float32(quality),
-            ] => contents.push_str(&format!("{}\t{}\t{}\t{:.2}\n", idx, name, len, quality)),
-            _ => quit_with_error("Match row from topn_lengths df failed"),
+    let mut all_stats = all_stats;
+    all_stats.sort_by_key(|x| Reverse(x.length));
+    for i in 0usize..(*[n as usize, all_stats.len()].iter().min().unwrap()) {
+        let this_stats = &all_stats[i];
+        topn_length_contents.push_str(&format!(
+            "{}\t{}\t{}\t{:.2}\n",
+            i, this_stats.name, this_stats.length, this_stats.qual
+        ))
+    }
+    let mut lengths = Data::new(
+        all_stats
+            .iter()
+            .map(|x| x.length as f64)
+            .collect::<Vec<_>>(),
+    );
+    let reads_number = all_stats.len();
+    let total_length = lengths.iter().sum::<f64>();
+    let (n10, n50, n90) = get_n10_n50_n90(&all_stats, total_length);
+    let min_len = lengths.min() as u32;
+    let max_len = lengths.max() as u32;
+    let mean_len = lengths.mean().unwrap();
+    let std_len = lengths.iter().population_std_dev();
+    let len_quantile_25 = lengths.quantile(0.25);
+    let len_quantile_median = lengths.median();
+    let len_quantile_75 = lengths.quantile(0.75);
+
+    let mut sub_reads_info = String::new();
+    if read_lengths.is_some() {
+        sub_reads_info.push_str(
+            "#ReadLength > SpecifiedValue\tReadsNumber(ReadsPercent); BasesNumber(BasesPercent)\n",
+        );
+        let reads_infos = read_lengths
+            .unwrap()
+            .into_par_iter()
+            .map(|each_length| {
+                let longer_reads = all_stats
+                    .iter()
+                    .take_while(|each_stats| each_stats.length > *each_length)
+                    .map(|each_stats| each_stats.length as usize)
+                    .collect::<Vec<_>>();
+                let longer_reads_number = longer_reads.len();
+                let longer_bases_number = longer_reads.iter().sum::<usize>();
+                let mut longer_reads_info = String::from(&format!("ReadLength > {each_length}\t"));
+                // let longer_reads_info =
+                longer_reads_info.push_str(&format!(
+                    "{}({:.2}%); {:.6}Mb({:.2}%)\n",
+                    longer_reads_number,
+                    longer_bases_number as f64 / reads_number as f64 * 100.0,
+                    longer_bases_number as f64 / 1_000_000.0,
+                    longer_bases_number as f64 / total_length as f64 * 100.0
+                ));
+                longer_reads_info
+            })
+            .collect::<Vec<_>>();
+        for each_sub_reads_info in reads_infos {
+            sub_reads_info.push_str(&each_sub_reads_info)
         }
     }
 
-    let mut topn_qualities = stats_lazy
-        .clone()
-        .sort(
-            ["qualities"],
-            SortMultipleOptions::default().with_order_descending(true),
-        )
-        .select([col("names"), col("lengths"), col("qualities")])
-        .collect()
-        .unwrap()
-        .head(Some(n));
-    topn_qualities
-        .insert_column(
-            0,
-            Series::new("nth".into(), (1..=n as u32).collect::<Vec<u32>>()),
-        )
-        .unwrap();
-
-    let n = topn_qualities.height().min(n);
-    contents.push_str(&format!(
+    let mut topn_quality_contents = String::from(&format!(
         "#Top {n} highest quality reads\nnth\tReadName\tReadLen\tReadQuality\n"
     ));
-    for i in 0..n {
-        let row = topn_qualities.get_row(i).unwrap().0;
-        match &row[..] {
-            [
-                AnyValue::UInt32(idx),
-                AnyValue::String(name),
-                AnyValue::UInt32(len),
-                AnyValue::Float32(quality),
-            ] => contents.push_str(&format!("{}\t{}\t{}\t{:.2}\n", idx, name, len, quality)),
-            _ => quit_with_error("Match row from topn_qualities df failed"),
-        }
+    all_stats.sort_unstable_by(|x, y| y.qual.partial_cmp(&x.qual).unwrap());
+    for i in 0usize..(*[n as usize, all_stats.len()].iter().min().unwrap()) {
+        let this_stats = &all_stats[i];
+        topn_quality_contents.push_str(&format!(
+            "{}\t{}\t{}\t{:.2}\n",
+            i, this_stats.name, this_stats.length, this_stats.qual
+        ))
     }
+    sub_reads_info.push_str(
+        "#ReadQuality > SpecifiedValue\tReadsNumber(ReadsPercent); BasesNumber(BasesPercent)\n",
+    );
+    let reads_infos = read_qualities
+        .into_par_iter()
+        .map(|each_qual| {
+            let better_reads = all_stats
+                .iter()
+                .take_while(|each_stats| each_stats.qual as f64 > *each_qual)
+                .map(|each_stats| each_stats.length as usize)
+                .collect::<Vec<_>>();
+            let better_reads_number = better_reads.len();
+            let better_bases_number = better_reads.iter().sum::<usize>();
+            let mut longer_reads_info = String::from(&format!("ReadQuality > {each_qual}\t"));
+            // let longer_reads_info =
+            longer_reads_info.push_str(&format!(
+                "{}({:.2}%); {:.6}Mb({:.2}%)\n",
+                better_reads_number,
+                better_reads_number as f64 / reads_number as f64 * 100.0,
+                better_bases_number as f64 / 1_000_000.0,
+                better_bases_number as f64 / total_length as f64 * 100.0
+            ));
+            longer_reads_info
+        })
+        .collect::<Vec<_>>();
+    for each_sub_read_info in reads_infos {
+        sub_reads_info.push_str(&each_sub_read_info);
+    }
+    let mut qualities = Data::new(
+        all_stats
+            .iter()
+            .map(|x| x.qual as f64)
+            .collect::<Vec<f64>>(),
+    );
+    let min_qual = qualities.min();
+    let max_qual = qualities.max();
+    let mean_qual = qualities.mean().unwrap();
+    let std_qual = qualities.iter().population_std_dev();
+    let qual_quantile_25 = qualities.quantile(0.25);
+    let qual_quantile_median = qualities.median();
+    let qual_quantile_75 = qualities.quantile(0.75);
+    basic = BasicStatistics {
+        reads_number,
+        bases_number: total_length as usize,
+        n10,
+        n50,
+        n90,
+        min_len,
+        max_len,
+        mean_len: mean_len as f32,
+        std_len: std_len as f32,
+        quantile25_len: len_quantile_25 as f32,
+        median_len: len_quantile_median as f32,
+        quantile75_len: len_quantile_75 as f32,
+        min_qual: min_qual as f32,
+        max_qual: max_qual as f32,
+        mean_qual: mean_qual as f32,
+        std_qual: std_qual as f32,
+        quantile25_qual: qual_quantile_25 as f32,
+        median_qual: qual_quantile_median as f32,
+        quantile75_qual: qual_quantile_75 as f32,
+    };
+    let mut contents: String = String::default();
+    contents.push_str(&basic.basic_info());
+    contents.push_str(&sub_reads_info);
+    contents.push_str(&topn_length_contents);
+    contents.push_str(&topn_quality_contents);
     if !basic_bam_statistics.is_empty() {
         contents.push_str(&basic_bam_statistics.to_string())
     }
     (contents, basic)
 }
+
 pub fn write_summary(
-    stats_df: DataFrame,
-    read_lengths: Option<&Vec<u32>>,
+    all_stats: Vec<RecordEachStats>,
+    read_lengths: Option<&[u32]>,
     read_qvalues: &[f64],
     n: usize,
     basic_bam_stats: &BasicBamStatistics,
     output: &str,
 ) -> BasicStatistics {
     let (summary_info, basic_stats) =
-        get_summary(stats_df, read_lengths, read_qvalues, n, basic_bam_stats);
+        get_summary(all_stats, read_lengths, read_qvalues, n, basic_bam_stats);
     std::fs::write(output, &summary_info).expect(&format!(
         "write summary info into {output}. The info is:\n{summary_info}"
     ));

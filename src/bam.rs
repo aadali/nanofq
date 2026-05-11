@@ -1,4 +1,5 @@
 use crate::fastq::{DORADO_TRIM_LEADING_BASE_NUMBER, EachStats};
+use crate::fastq2::RecordEachStats;
 use crate::utils::{get_q2p_table, quit_with_error};
 use rayon::prelude::*;
 use rust_htslib::bam::ext::BamRecordExtensions;
@@ -42,7 +43,7 @@ pub fn get_encoded_bases_gc_count_table() -> &'static HashMap<u8, usize> {
 pub trait BamRecordStats {
     fn gc_count(&self) -> f32;
     fn calculate_read_quality(&self, dont_use_dorado_quality: bool) -> Option<f64>;
-    fn stats(&self, gc: bool, dont_use_dorado_quality: bool) -> EachStats;
+    fn stats(&self, gc: bool, dont_use_dorado_quality: bool) -> RecordEachStats;
 }
 impl BamRecordStats for rust_htslib::bam::Record {
     fn gc_count(&self) -> f32 {
@@ -111,7 +112,7 @@ impl BamRecordStats for rust_htslib::bam::Record {
         }
     }
 
-    fn stats(&self, gc: bool, dont_use_dorado_quality: bool) -> EachStats {
+    fn stats(&self, gc: bool, dont_use_dorado_quality: bool) -> RecordEachStats {
         let len = self.qual().len();
         let read_quality = self.calculate_read_quality(dont_use_dorado_quality);
         let gc = if gc { Some(self.gc_count()) } else { None };
@@ -121,9 +122,9 @@ impl BamRecordStats for rust_htslib::bam::Record {
                 str::from_utf8(self.qname()).unwrap()
             ))
         }
-        (
+        RecordEachStats::new(
             str::from_utf8(self.qname()).unwrap().to_string(),
-            len as u32,
+            len,
             read_quality.unwrap() as f32,
             gc,
         )
@@ -228,7 +229,7 @@ fn get_nm_aux(record: &bam::Record) -> usize {
 
 fn get_cigar_base_length(cigar: &Cigar) -> usize {
     match cigar {
-        Cigar::Match(m) | Cigar::Equal(m) | Cigar::Diff(m)=> *m as usize,
+        Cigar::Match(m) | Cigar::Equal(m) | Cigar::Diff(m) => *m as usize,
         Cigar::Ins(i) => *i as usize,
         _ => 0usize,
     }
@@ -339,7 +340,7 @@ fn stats_from_bam_reader<R>(
     gc: bool,
     dont_use_dorado_quality: bool,
     region_start: i64,
-) -> (BasicBamStatistics, Vec<EachStats>)
+) -> (BasicBamStatistics, Vec<RecordEachStats>)
 where
     R: bam::Read,
 {
@@ -402,7 +403,7 @@ fn stats_indexed_bam_fetch(
     region: FetchDefinition,
     gc: bool,
     dont_use_dorado_quality: bool,
-) -> (BasicBamStatistics, Vec<EachStats>) {
+) -> (BasicBamStatistics, Vec<RecordEachStats>) {
     let region_start = match &region {
         FetchDefinition::Region(_, region_start, _) => *region_start,
         FetchDefinition::Unmapped => i64::MIN,
@@ -429,7 +430,7 @@ pub fn stats_xam(
     thread: usize,
     gc: bool,
     dont_use_dorado_quality: bool,
-) -> (BasicBamStatistics, Vec<EachStats>) {
+) -> (BasicBamStatistics, Vec<RecordEachStats>) {
     debug_assert!(thread > 0);
     bam_reader.set_threads(thread).unwrap();
     stats_from_bam_reader(bam_reader, gc, dont_use_dorado_quality, i64::MIN)
@@ -447,7 +448,7 @@ pub fn stats_indexed_bam(
     thread: usize,
     gc: bool,
     dont_use_dorado_quality: bool,
-) -> (BasicBamStatistics, Vec<EachStats>) {
+) -> (BasicBamStatistics, Vec<RecordEachStats>) {
     debug_assert_eq!(check_bam_type(bam_file), BamType::IndexedBam);
     let indexed_bam_reader =
         IndexedReader::from_path(bam_file).expect("Read indexed bam failed for stats_indexed_bam");

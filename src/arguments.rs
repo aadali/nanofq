@@ -65,13 +65,12 @@ fn get_input_arg(stats: bool) -> Arg {
     let stats_input_help = "The input file, could be
         1. a single fastq[.gz]
         2. a directory containing some fastq[.gz]
-        3. a bam or sam file
-        4. fastq from stdin [default]
-        5. bam or sam from stdin with --bam specified";
+        3. a bam or sam file";
     Arg::new("input")
         .short('i')
         .long("input")
         .action(ArgAction::Set)
+        .required(true)
         .help(if is_stats {
             stats_input_help
         } else {
@@ -134,11 +133,11 @@ pub fn parse_arguments() -> ArgMatches {
                 })
                 .default_value("25,20,18,15,12,10")
                 .help("Count the reads number that whose quality is bigger than this value, multi value can be separated by comma"))
-            .arg(Arg::new("dont_use_dorado_quality")
-                .short('d')
-                .long("dont_use_dorado_quality")
+            .arg(Arg::new("use_dorado_quality")
+                .short('u')
+                .long("use_dorado_quality")
                 .action(ArgAction::SetTrue)
-                .help("Don't use dorado q-score calculation. Using dorado quality means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value")
+                .help("Use dorado q-score calculation. Using dorado quality means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value")
             )
             .arg(Arg::new("length")
                 .short('l')
@@ -166,17 +165,19 @@ pub fn parse_arguments() -> ArgMatches {
                 .long("gc")
                 .action(ArgAction::SetTrue)
                 .help("Whether to stats the gc content"))
-            .arg(Arg::new("bam")
-                .short('b')
-                .long("bam")
-                .action(ArgAction::SetTrue)
-                .help("If set, treat input as bam/sam"))
             .arg(Arg::new("index")
                 .short('I')
                 .long("index")
                 .action(ArgAction::SetTrue)
                 .help("For sorted but unindexed bam file, build index firstly if this para is specified"))
             .arg(thread_arg.clone())
+            .arg(Arg::new("chunk")
+                .short('c')
+                .long("chunk")
+                .action(ArgAction::Set)
+                .value_parser(|x: &str| positive_number_parse(x, "--chunk", false, 20000, u32::MAX))
+                .default_value("50000")
+                .help("Reads chunk size when multi threads used"))
             .arg(Arg::new("python")
                     .long("python")
                     .default_value("python3")
