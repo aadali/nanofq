@@ -144,7 +144,6 @@ pub fn run_stats(stats_cmd: &ArgMatches) {
             let (basic_bam_stats_, all_stats) = if index {
                 index_bam(input_file, *thread as usize)
                     .expect(&format!("Failed to index {}", input_file));
-                // todo adjust stats bam logic for dorado quality
                 stats_indexed_bam(input_file, *thread as usize, use_dorado_q, use_gc)
             } else {
                 let mut bam_reader = rust_htslib::bam::Reader::from_path(input_file)

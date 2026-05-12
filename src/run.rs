@@ -421,7 +421,7 @@ pub mod run_entry {
     use crate::run::sub_run::stats::{stats, stats_fastq_dir};
     use crate::run::sub_run::trim::{trim, trim_fastq_dir};
     use crate::run::{LOCAL_ALIGNER, collect_fastq_dir};
-    use crate::sub_reads::{ReadNames, ReadsInBam, reads_from_bam, reads_from_fastq};
+    use crate::subseq::{ReadNames, ReadsInBam, reads_from_bam, reads_from_fastq};
     use crate::summary::{make_plot,  write_summary};
     use crate::trim::adapter::{TrimConfig, get_trim_cfg};
     use crate::utils::{quit_with_error, rev_com};
@@ -881,91 +881,91 @@ pub mod run_entry {
         Ok(())
     }
 
-    pub fn run_subseq(subseq_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
-        let input = subseq_cmd.get_one::<String>("input").unwrap();
-        let output = subseq_cmd.get_one::<String>("output");
-        let names = subseq_cmd.get_one::<String>("names");
-        let names_file = subseq_cmd.get_one::<String>("names_file");
-        let region = subseq_cmd.get_one::<String>("region");
-        let bed = subseq_cmd.get_one::<String>("bed");
-        let input_t = check_input_type(input);
-        let names_sum = names.is_some() as u8 + names_file.is_some() as u8;
-        let names_region_sum = names_sum + region.is_some() as u8 + bed.is_some() as u8;
-        match input_t {
-            InputType::OneFastqGzippedFile | InputType::OneFastqFile => {
-                if names_sum != 1 {
-                    quit_with_error(
-                        "For fastq[.gz] input, JUST one of [\"names\", \"names_file\"] must be specified",
-                    )
-                }
-                let read_names = if names.is_some() {
-                    ReadNames::FromCli(names.unwrap())
-                } else {
-                    ReadNames::FromFile(names_file.unwrap())
-                };
-                if input_t == InputType::OneFastqFile {
-                    let mut reader = FastqReader::new(std::fs::File::open(input)?);
-                    match output {
-                        None => reads_from_fastq(read_names, &mut reader, &mut std::io::stdout()),
-                        Some(output_file) => {
-                            let mut writer = File::create(output_file)?;
-                            reads_from_fastq(read_names, &mut reader, &mut writer);
-                        }
-                    }
-                } else {
-                    let mut gz_reader =
-                        FastqReader::new(MultiGzDecoder::new(BufReader::new(File::open(input)?)));
-                    match output {
-                        None => {
-                            reads_from_fastq(read_names, &mut gz_reader, &mut std::io::stdout())
-                        }
-                        Some(output_file) => {
-                            let mut writer = File::create(output_file)?;
-                            reads_from_fastq(read_names, &mut gz_reader, &mut writer);
-                        }
-                    }
-                }
-            }
-
-            InputType::IndexedBam => {
-                if names_region_sum != 1 {
-                    quit_with_error(
-                        "For indexed bam, JUST one of [\"names\", \"names_file\", \"region\", \"bed\"] must be specified",
-                    )
-                }
-                let reads_in_bam = if names.is_some() {
-                    ReadsInBam::from_names_string(&names.unwrap())
-                } else if names_file.is_some() {
-                    ReadsInBam::from_names_file(&names_file.unwrap())
-                } else if region.is_some() {
-                    ReadsInBam::from_region_string(&region.unwrap())
-                } else {
-                    ReadsInBam::from_bed(&bed.unwrap())
-                };
-                let mut bam_reader1 = IndexedReader::from_path(input).unwrap();
-                bam_reader1.set_threads(4).unwrap();
-                let mut bam_reader2 = IndexedReader::from_path(input).unwrap();
-                bam_reader2.set_threads(2).unwrap();
-                match output {
-                    None => reads_from_bam(
-                        reads_in_bam,
-                        &mut bam_reader1,
-                        &mut bam_reader2,
-                        &mut std::io::stdout(),
-                    ),
-                    Some(output_file) => {
-                        let mut writer = File::create(output_file)?;
-                        reads_from_bam(
-                            reads_in_bam,
-                            &mut bam_reader1,
-                            &mut bam_reader2,
-                            &mut writer,
-                        );
-                    }
-                }
-            }
-            _ => quit_with_error("Only fastq[.gz] or indexed bam file supported, check your input"),
-        }
-        Ok(())
-    }
+    // pub fn run_subseq(subseq_cmd: &ArgMatches) -> Result<(), anyhow::Error> {
+    //     let input = subseq_cmd.get_one::<String>("input").unwrap();
+    //     let output = subseq_cmd.get_one::<String>("output");
+    //     let names = subseq_cmd.get_one::<String>("names");
+    //     let names_file = subseq_cmd.get_one::<String>("names_file");
+    //     let region = subseq_cmd.get_one::<String>("region");
+    //     let bed = subseq_cmd.get_one::<String>("bed");
+    //     let input_t = check_input_type(input);
+    //     let names_sum = names.is_some() as u8 + names_file.is_some() as u8;
+    //     let names_region_sum = names_sum + region.is_some() as u8 + bed.is_some() as u8;
+    //     match input_t {
+    //         InputType::OneFastqGzippedFile | InputType::OneFastqFile => {
+    //             if names_sum != 1 {
+    //                 quit_with_error(
+    //                     "For fastq[.gz] input, JUST one of [\"names\", \"names_file\"] must be specified",
+    //                 )
+    //             }
+    //             let read_names = if names.is_some() {
+    //                 ReadNames::FromCli(names.unwrap())
+    //             } else {
+    //                 ReadNames::FromFile(names_file.unwrap())
+    //             };
+    //             if input_t == InputType::OneFastqFile {
+    //                 let mut reader = FastqReader::new(std::fs::File::open(input)?);
+    //                 match output {
+    //                     None => reads_from_fastq(read_names, &mut reader, &mut std::io::stdout()),
+    //                     Some(output_file) => {
+    //                         let mut writer = File::create(output_file)?;
+    //                         reads_from_fastq(read_names, &mut reader, &mut writer);
+    //                     }
+    //                 }
+    //             } else {
+    //                 let mut gz_reader =
+    //                     FastqReader::new(MultiGzDecoder::new(BufReader::new(File::open(input)?)));
+    //                 match output {
+    //                     None => {
+    //                         reads_from_fastq(read_names, &mut gz_reader, &mut std::io::stdout())
+    //                     }
+    //                     Some(output_file) => {
+    //                         let mut writer = File::create(output_file)?;
+    //                         reads_from_fastq(read_names, &mut gz_reader, &mut writer);
+    //                     }
+    //                 }
+    //             }
+    //         }
+    // 
+    //         InputType::IndexedBam => {
+    //             if names_region_sum != 1 {
+    //                 quit_with_error(
+    //                     "For indexed bam, JUST one of [\"names\", \"names_file\", \"region\", \"bed\"] must be specified",
+    //                 )
+    //             }
+    //             let reads_in_bam = if names.is_some() {
+    //                 ReadsInBam::from_names_string(&names.unwrap())
+    //             } else if names_file.is_some() {
+    //                 ReadsInBam::from_names_file(&names_file.unwrap())
+    //             } else if region.is_some() {
+    //                 ReadsInBam::from_region_string(&region.unwrap())
+    //             } else {
+    //                 ReadsInBam::from_bed(&bed.unwrap())
+    //             };
+    //             let mut bam_reader1 = IndexedReader::from_path(input).unwrap();
+    //             bam_reader1.set_threads(4).unwrap();
+    //             let mut bam_reader2 = IndexedReader::from_path(input).unwrap();
+    //             bam_reader2.set_threads(2).unwrap();
+    //             match output {
+    //                 None => reads_from_bam(
+    //                     reads_in_bam,
+    //                     &mut bam_reader1,
+    //                     &mut bam_reader2,
+    //                     &mut std::io::stdout(),
+    //                 ),
+    //                 Some(output_file) => {
+    //                     let mut writer = File::create(output_file)?;
+    //                     reads_from_bam(
+    //                         reads_in_bam,
+    //                         &mut bam_reader1,
+    //                         &mut bam_reader2,
+    //                         &mut writer,
+    //                     );
+    //                 }
+    //             }
+    //         }
+    //         _ => quit_with_error("Only fastq[.gz] or indexed bam file supported, check your input"),
+    //     }
+    //     Ok(())
+    // }
 }

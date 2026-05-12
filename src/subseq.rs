@@ -1,13 +1,15 @@
-use crate::fastq::{FastqReader, NanoRead};
+use crate::input_type::{InputType, check_input_type};
 use crate::utils::{quit_with_error, rev_com};
 use bio::bio_types::strand::ReqStrand;
+use clap::ArgMatches;
+use needletail::parser::{LineEnding, write_fastq};
+use needletail::{FastxReader, Sequence, parse_fastx_file};
 use regex::Regex;
 use rust_htslib::bam::record::{Aux, Cigar};
 use rust_htslib::bam::{FetchDefinition, IndexedReader, Read, Record as BamRecord};
-use seq_io::fastq::Record;
 use std::collections::HashSet;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, BufWriter, Write};
 
 const FETCH_POS_PADDING: i64 = 50;
 pub enum ReadNames<'a> {
@@ -240,7 +242,7 @@ fn get_fastq_record_from_sa_tags(
                     // but position in SA tag is 1-based
                     if read_name == name && pos + 1 == start && strand == record.strand() {
                         if record_has_no_hard(&record) {
-                            let fastq_record = from_bam_record_to_fastq_record(&record, name);
+                            let fastq_record = brecord2frecord(&record, name);
                             return Some(fastq_record);
                         }
                     }
@@ -264,7 +266,7 @@ fn get_fastq_record_from_sa_tags(
 ///
 /// A `String` that represents the FASTQ formatted data.
 ///
-fn from_bam_record_to_fastq_record(record: &BamRecord, read_name: &str) -> String {
+fn brecord2frecord(record: &BamRecord, read_name: &str) -> String {
     let mut read_fastq = String::new();
     let seq = record.seq().as_bytes();
     let seq = std::str::from_utf8(&seq).unwrap();
@@ -308,7 +310,7 @@ fn find_fastq_record(
     if record.is_unmapped() || record.flags() & 0x900 == 0 || record_has_no_hard(&record) {
         // when record is unmapped or primary or alignment that is not secondary and no hard clipping in cigar
         // full seq and quality will be found
-        let fastq_record = from_bam_record_to_fastq_record(&record, name);
+        let fastq_record = brecord2frecord(&record, name);
         Some(fastq_record)
     } else {
         // for supplementary alignment,
@@ -339,7 +341,7 @@ pub fn reads_from_bam<W: Write>(
     reads_in_bam: ReadsInBam,
     bam_reader: &mut IndexedReader,
     bam_reader2: &mut IndexedReader,
-    w: &mut W,
+    writer: &mut W,
 ) {
     match reads_in_bam {
         ReadsInBam::Regions(regions) => {
@@ -367,7 +369,7 @@ pub fn reads_from_bam<W: Write>(
                             let fastq_record_opt = find_fastq_record(&record, bam_reader2, name);
                             match fastq_record_opt {
                                 Some(fastq_record) => {
-                                    writeln!(w, "{}", fastq_record).unwrap();
+                                    writeln!(writer, "{}", fastq_record).unwrap();
                                     found_read_names.insert(name.to_string());
                                 }
                                 None => {
@@ -402,7 +404,7 @@ pub fn reads_from_bam<W: Write>(
                             // even the fastq record not found in this bam
                             let fastq_record_opt = find_fastq_record(&record, bam_reader2, name);
                             match fastq_record_opt {
-                                Some(fastq_record) => writeln!(w, "{fastq_record}").unwrap(),
+                                Some(fastq_record) => writeln!(writer, "{fastq_record}").unwrap(),
                                 None => {
                                     eprintln!(
                                         "Fastq Record with name: {name}, full length seq couldn't be found"
@@ -441,35 +443,120 @@ pub fn reads_from_bam<W: Write>(
 /// - The function stops processing once all specified read names have been found or the end of the reader is reached.
 /// - After processing, if there are any read names left in the `read_names` list that were not found, it prints an error message for each missing name.
 ///
-pub fn reads_from_fastq<R: io::Read, W: Write>(
+pub fn reads_from_fastq<W: Write>(
     read_names: ReadNames,
-    reader: &mut FastqReader<R>,
+    reader: &mut Box<dyn FastxReader>,
     writer: &mut W,
 ) {
     let mut read_names = read_names.get_read_names();
-    while let Some(fastq_record_res) = reader.next() {
+    let mut read_idx = 1;
+    while let Some(Ok(record)) = reader.next() {
         if read_names.is_empty() {
             return;
         }
-        match fastq_record_res {
-            Ok(fastq_record) => {
-                let id = fastq_record
-                    .head()
-                    .split(|x: &u8| x.is_ascii_whitespace())
-                    .next()
-                    .expect("Get read id failed");
-                let name = std::str::from_utf8(id)
-                    .unwrap_or_else(|err| quit_with_error(&format!("{err}")));
-                if read_names.remove(name) {
-                    NanoRead::write(&fastq_record, writer).unwrap()
-                }
-            }
-            Err(err) => quit_with_error(&format!("{err}")),
+        let mut headers = record.id().splitn(2, |x| x.is_ascii_whitespace());
+        let name = headers
+            .next()
+            .expect(&format!("Parse read name failed at {read_idx}th record"));
+        let name =
+            str::from_utf8(name).expect(&format!("Parse read name failed at {read_idx}th record"));
+        if read_names.remove(name) {
+            write_fastq(
+                record.id(),
+                record.sequence(),
+                record.qual(),
+                writer,
+                LineEnding::Unix,
+            )
+            .expect(&format!(
+                "Failed write {read_idx}th fastq record into output"
+            ))
         }
+        read_idx += 1;
     }
     if !read_names.is_empty() {
         for not_found_name in read_names {
             eprintln!("couldn't found {not_found_name}")
         }
+    }
+}
+
+pub fn run_subseq(subseq_cmd: &ArgMatches) {
+    let input = subseq_cmd.get_one::<String>("input").unwrap();
+    let output = subseq_cmd.get_one::<String>("output");
+    let names = subseq_cmd.get_one::<String>("names");
+    let names_file = subseq_cmd.get_one::<String>("names_file");
+    let region = subseq_cmd.get_one::<String>("region");
+    let bed = subseq_cmd.get_one::<String>("bed");
+    let input_t = check_input_type(input);
+    let names_sum = names.is_some() as u8 + names_file.is_some() as u8;
+    let names_region_sum = names_sum + region.is_some() as u8 + bed.is_some() as u8;
+    // let mut writer = BufWriter::new(File::create(output.unwrap()).expect(
+    //     &format!("Failed to create {}", output.unwrap())
+    // ));
+    match input_t {
+        InputType::OneFastqGzippedFile | InputType::OneFastqFile => {
+            if names_sum != 1 {
+                quit_with_error(
+                    "For fastq[.gz] input, JUST one of [\"names\", \"names_file\"] must be specified",
+                )
+            }
+
+            let read_names = if names.is_some() {
+                ReadNames::FromCli(names.unwrap())
+            } else {
+                ReadNames::FromFile(names_file.unwrap())
+            };
+            let mut fastq_reader =
+                parse_fastx_file(input).expect(&format!("Failed to read {input}"));
+            match output {
+                None => reads_from_fastq(read_names, &mut fastq_reader, &mut io::stdout()),
+                Some(output) => {
+                    let mut writer = BufWriter::new(
+                        File::create(output).expect(&format!("Failed to create {output}")),
+                    );
+                    reads_from_fastq(read_names, &mut fastq_reader, &mut writer)
+                }
+            }
+        }
+        InputType::IndexedBam => {
+            if names_region_sum != 1 {
+                quit_with_error(
+                    "For indexed bam, JUST one of [\"names\", \"names_file\", \"region\", \"bed\"] must be specified",
+                )
+            }
+            let reads_in_bam = if names.is_some() {
+                ReadsInBam::from_names_string(&names.unwrap())
+            } else if names_file.is_some() {
+                ReadsInBam::from_names_file(&names_file.unwrap())
+            } else if region.is_some() {
+                ReadsInBam::from_region_string(&region.unwrap())
+            } else {
+                ReadsInBam::from_bed(&bed.unwrap())
+            };
+            let mut bam_reader1 = IndexedReader::from_path(input).unwrap();
+            bam_reader1.set_threads(4).unwrap();
+            let mut bam_reader2 = IndexedReader::from_path(input).unwrap();
+            bam_reader2.set_threads(2).unwrap();
+            match output {
+                None => reads_from_bam(
+                    reads_in_bam,
+                    &mut bam_reader1,
+                    &mut bam_reader2,
+                    &mut io::stdout(),
+                ),
+                Some(output) => {
+                    let mut writer =
+                        File::create(output).expect(&format!("Failed to create {output}"));
+                    reads_from_bam(
+                        reads_in_bam,
+                        &mut bam_reader1,
+                        &mut bam_reader2,
+                        &mut writer,
+                    );
+                }
+            }
+        }
+        _ => quit_with_error("Only fastq[.gz] or indexed bam file supported, check your input"),
     }
 }
