@@ -17,6 +17,7 @@ mod subseq;
 mod fastq2;
 mod stats;
 mod filter;
+mod amplicons;
 
 use std::time::Instant;
 use crate::subseq::run_subseq;
@@ -30,7 +31,7 @@ fn main()  {
         run_stats(stats_cmd);
     } else if let Some(filter_cmd) = matches.subcommand_matches("filter") {
         run_filter(filter_cmd)
-    } else if let Some(trim_cmd) = matches.subcommand_matches("trim") {
+    // } else if let Some(trim_cmd) = matches.subcommand_matches("trim") {
         // run_trim(trim_cmd)
     } else if let Some(amplicon_cmd) = matches.subcommand_matches("amplicon") {
         // run_amplicon(amplicon_cmd)
