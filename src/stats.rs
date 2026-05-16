@@ -273,12 +273,3 @@ pub fn t() {
     println!("{dur:?}");
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn t1() {
-        t()
-    }
-}

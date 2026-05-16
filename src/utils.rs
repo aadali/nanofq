@@ -1,6 +1,8 @@
 use ansi_term::Color;
+use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::sync::OnceLock;
 
 static DEGE_BASES: OnceLock<HashMap<u8, HashSet<u8>>> = OnceLock::new();
@@ -290,107 +292,136 @@ pub fn collect_fastq_dir(path: &str) -> Vec<PathBuf> {
     all_fqs
 }
 
-pub const NBL: &str = "AAGGTTAA";
-pub const NBR: &str = "CAGCACCT";
-pub const BARCODES: [&str; 97] = [
-    "TACTTCGTTCAGTTACGTATTGCT", // Ligation Adapter
-    "CACAAAGACACCGACAACTTTCTT",
-    "ACAGACGACTACAAACGGAATCGA",
-    "CCTGGTAACTGGGACACAAGACTC",
-    "TAGGGAAACACGATAGAATCCGAA", // barcode04
-    "AAGGTTACACAAACCCTGGACAAG",
-    "GACTACTTTCTGCCTTTGCGAGAA",
-    "AAGGATTCATTCCCACGGTAACAC",
-    "ACGTAACTTGGTTTGTTCCCTGAA",
-    "AACCAAGACTCGCTGTGCCTAGTT",
-    "GAGAGGACAAAGGTTTCAACGCTT",
-    "TCCATTCCCTCCGATAGATGAAAC",
-    "TCCGATTCTGCTTCTTTCTACCTG",
-    "AGAACGACTTCCATACTCGTGTGA",
-    "AACGAGTCTCTTGGGACCCATAGA",
-    "AGGTCTACCTCGCTAACACCACTG",
-    "CGTCAACTGACAGTGGTTCGTACT",
-    "ACCCTCCAGGAAAGTACCTCTGAT",
-    "CCAAACCCAACAACCTAGATAGGC",
-    "GTTCCTCGTGCAGTGTCAAGAGAT",
-    "TTGCGTCCTGTTACGAGAACTCAT",
-    "GAGCCTCTCATTGTCCGTTCTCTA",
-    "ACCACTGCCATGTATCAAAGTACG",
-    "CTTACTACCCAGTGAACCTCCTCG",
-    "GCATAGTTCTGCATGATGGGTTAG",
-    "GTAAGTTGGGTATGCAACGCAATG",
-    "CATACAGCGACTACGCATTCTCAT",
-    "CGACGGTTAGATTCACCTCTTACA",
-    "TGAAACCTAAGAAGGCACCGTATC",
-    "CTAGACACCTTGGGTTGACAGACC",
-    "TCAGTGAGGATCTACTTCGACCCA",
-    "TGCGTACAGCAATCAGTTACATTG",
-    "CCAGTAGAAGTCCGACAACGTCAT",
-    "CAGACTTGGTACGGTTGGGTAACT",
-    "GGACGAAGAACTCAAGTCAAAGGC",
-    "CTACTTACGAAGCTGAGGGACTGC",
-    "ATGTCCCAGTTAGAGGAGGAAACA",
-    "GCTTGCGATTGATGCTTAGTATCA",
-    "ACCACAGGAGGACGATACAGAGAA",
-    "CCACAGTGTCAACTAGAGCCTCTC",
-    "TAGTTTGGATGACCAAGGATAGCC",
-    "GGAGTTCGTCCAGAGAAGTACACG",
-    "CTACGTGTAAGGCATACCTGCCAG",
-    "CTTTCGTTGTTGACTCGACGGTAG",
-    "AGTAGAAAGGGTTCCTTCCCACTC",
-    "GATCCAACAGAGATGCCTTCAGTG",
-    "GCTGTGTTCCACTTCATTCTCCTG",
-    "GTGCAACTTTCCCACAGGTAGTTC",
-    "CATCTGGAACGTGGTACACCTGTA",
-    "ACTGGTGCAGCTTTGAACATCTAG",
-    "ATGGACTTTGGTAACTTCCTGCGT",
-    "GTTGAATGAGCCTACTGGGTCCTC",
-    "TGAGAGACAAGATTGTTCGTGGAC",
-    "AGATTCAGACCGTCTCATGCAAAG",
-    "CAAGAGCTTTGACTAAGGAGCATG",
-    "TGGAAGATGAGACCCTGATCTACG",
-    "TCACTACTCAACAGGTGGCATGAA",
-    "GCTAGGTCAATCTCCTTCGGAAGT",
-    "CAGGTTACTCCTCCGTGAGTCTGA",
-    "TCAATCAAGAAGGGAAAGCAAGGT",
-    "CATGTTCAACCAAGGCTTCTATGG",
-    "AGAGGGTACTATGTGCCTCAGCAC",
-    "CACCCACACTTACTTCAGGACGTA",
-    "TTCTGAAGTTCCTGGGTCTTGAAC",
-    "GACAGACACCGTTCATCGACTTTC",
-    "TTCTCAGTCTTCCTCCAGACAAGG",
-    "CCGATCCTTGTGGCTTCTAACTTC",
-    "GTTTGTCATACTCGTGTGCTCACC",
-    "GAATCTAAGCAAACACGAAGGTGG",
-    "TACAGTCCGAGCCTCATGTGATCT",
-    "ACCGAGATCCTACGAATGGAGTGT",
-    "CCTGGGAGCATCAGGTAGTAACAG",
-    "TAGCTGACTGTCTTCCATACCGAC",
-    "AAGAAACAGGATGACAGAACCCTC",
-    "TACAAGCATCCCAACACTTCCACT",
-    "GACCATTGTGATGAACCCTGTTGT",
-    "ATGCTTGTTACATCAACCCTGGAC",
-    "CGACCTGTTTCTCAGGGATACAAC",
-    "AACAACCGAACCTTTGAATCAGAA",
-    "TCTCGGAGATAGTTCTCACTGCTG",
-    "CGGATGAACATAGGATAGCGATTC",
-    "CCTCATCTTGTGAAGTTGTTTCGG",
-    "ACGGTATGTCGAGTTCCAGGACTA",
-    "TGGCTTGATCTAGGTAAGGTCGAA",
-    "GTAGTGGACCTAGAACCTGTGCCA",
-    "AACGGAGGAGTTAGTTGGATGATC",
-    "AGGTGATCCCAACAAGCGTAAGTA",
-    "TACATGCTCCTGTTGTTAGGGAGG",
-    "TCTTCTACTACCGATCCGAAGCAG",
-    "ACAGCATCAATGTTTGGCTAGTTG",
-    "GATGTAGAGGGTACGGTTTGAGGC",
-    "GGCTCCATAGGAACTCACGCTACT",
-    "TTGTGAGTGGAAAGATACAGGACC",
-    "AGTTTCCATCACTTCAGACTTGGG",
-    "GATTGTCCTCAAACTGCCACCTAC",
-    "CCTGTCTGGAAGAAGAATGGACTT",
-    "CTGAACGGTCATAGAGTCCACCAT",
-];
+pub type MatchPosition = (usize, usize, u8);
+
+pub fn find_most_right_front(
+    all_matches: Vec<MatchPosition>,
+    max_dist: u8,
+) -> Option<MatchPosition> {
+    if all_matches.is_empty() {
+        None
+    } else {
+        let most_right = all_matches.iter().max_by_key(|x| x.1).unwrap().1;
+        all_matches
+            .into_iter()
+            .filter(|x| most_right - x.1 < max_dist as usize)
+            .min_by_key(|x| x.0)
+    }
+}
+
+pub fn find_most_left_rear(all_matches: Vec<MatchPosition>, max_dist: u8) -> Option<MatchPosition> {
+    if all_matches.is_empty() {
+        None
+    } else {
+        let most_left = all_matches.iter().min_by_key(|x| x.0).unwrap().0;
+        all_matches
+            .into_iter()
+            .filter(|x| x.0 - most_left < max_dist as usize)
+            .min_by_key(|x| x.0)
+    }
+}
+
+pub fn complement(n: u8) -> u8 {
+    match n {
+        b'A' | b'a' => b'T',
+        b'C' | b'c' => b'G',
+        b'G' | b'g' => b'C',
+        b'T' | b'U' | b't' | b'u' => b'A',
+        other => quit_with_error(&format!("Illegal base char found {}", other as char)),
+    }
+}
+
+/// used to check minimap2 and samtools
+pub fn check_program<'a>(program: &'static str, program_path: Option<&'a str>) -> &'a str {
+    let program_path = program_path.unwrap_or(program);
+    let mm_path = Path::new(program_path);
+    let cmd = std::process::Command::new(mm_path)
+        .arg("--help")
+        .stdout(std::process::Stdio::null())
+        .status()
+        .unwrap();
+    if cmd.success() {
+        return program_path;
+    }
+    quit_with_error(&format!("{program} path error"))
+}
+
+pub fn run_minimap2_and_index(
+    work_dir: &str,
+    fastq_file: &str,
+    draft: &str,
+    prefix: &str,
+    minimap2: Option<&str>,
+    samtools: Option<&str>,
+) {
+    let minimap2 = check_program("minimap2", minimap2);
+    let samtools = check_program("samtools", samtools);
+    let work_path = std::path::Path::new(work_dir);
+    if !work_path.exists() {
+        std::fs::create_dir_all(work_path).expect(&format!("Failed to create dir: {work_dir}"));
+    }
+    let mm2_child = std::process::Command::new(minimap2)
+        .current_dir(work_dir)
+        .args(["-a", "-x", "map-ont", "-t", "4", draft, fastq_file])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("minimap2 failed to start");
+
+    let view_child = std::process::Command::new(samtools)
+        .current_dir(work_dir)
+        .stdin(mm2_child.stdout.expect("Failed to get minimap2 output"))
+        .args([
+            "view",
+            "-",
+            "-b",
+            "-S",
+            "-o",
+            &format!("{prefix}.raw.bam"),
+            "--threads",
+            "2",
+        ])
+        .status();
+    if !view_child
+        .expect(&format!(
+            "Failed to complete samtools view for {prefix}.raw.bam"
+        ))
+        .success()
+    {
+        quit_with_error("Samtools view failed")
+    }
+
+    let sort_child = std::process::Command::new(samtools)
+        .current_dir(work_dir)
+        .args([
+            "sort",
+            "--threads",
+            "2",
+            "-o",
+            &format!("{prefix}.sorted.bam"),
+            &format!("{prefix}.raw.bam"),
+        ])
+        .status();
+    if !sort_child
+        .expect(&format!(
+            "Failed to complete samtools sort for {prefix}.raw.bam"
+        ))
+        .success()
+    {
+        quit_with_error("Samtools sort failed")
+    }
+
+    let index_child = std::process::Command::new(samtools)
+        .current_dir(work_dir)
+        .args(["index", &format!("{prefix}.sorted.bam")])
+        .status();
+    if !index_child
+        .expect(&format!("Failed to index {prefix}.sorted.bam"))
+        .success()
+    {
+        quit_with_error("Samtools index failed")
+    }
+}
 
 #[test]
 #[ignore]
@@ -403,4 +434,23 @@ fn test_dege_base() {
     assert!(IS_MATCHED(&b'B', &b'T'));
     assert!(IS_MATCHED(&b'B', &b'G'));
     assert!(IS_MATCHED(&b'W', &b'T'));
+}
+
+#[test]
+fn t() {
+    // check_minimap2(Some("/opt/homebrew/bin/minimap2"));
+    // check_program("minimap2", Some("/Users/aadali/mm2"));
+    // check_program("samtools", None);
+}
+
+#[test]
+fn minimap2() {
+    run_minimap2_and_index(
+        "/Users/aadali/projects/RustProjects/nanoamp/test_data",
+        "/Users/aadali/projects/RustProjects/nanoamp/test_data/py-barcode04-1600-head1000.fastq",
+        "/Users/aadali/projects/RustProjects/nanoamp/test_data/py-barcode04-1600-true-consensus.fasta",
+        "test001",
+        Some("minimap2"),
+        Some("samtools"),
+    )
 }

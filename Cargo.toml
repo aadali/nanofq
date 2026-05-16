@@ -20,4 +20,5 @@ seq_io = "0.3.4"
 uuid = {version = "1.17.0", features = ["v4"]}
 bio = "3.0.0"
 rust-htslib = "1.0.0"
+ahash = "0.8.12"
 statrs = "0.18.0"

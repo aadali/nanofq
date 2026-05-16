@@ -1,5 +1,6 @@
 use crate::filter::FilterOption;
-use crate::utils::{calculate_read_q, gc};
+use crate::utils::{calculate_read_q, complement, find_most_left_rear, find_most_right_front, gc};
+use bio::pattern_matching::myers::Myers;
 use needletail::{Sequence, parse_fastx_file};
 use std::fmt::{Display, Formatter};
 use std::io::Write;
@@ -12,10 +13,9 @@ use std::{io, str, thread};
 pub struct FastqRecord {
     name: String,
     description: Option<String>,
-    seq: Vec<u8>,
+    pub seq: Vec<u8>,
     quality: Vec<u8>,
 }
-
 impl FastqRecord {
     pub fn new<T, U>(name: T, description: Option<T>, seq: U, quality: U) -> Self
     where
@@ -69,6 +69,12 @@ impl FastqRecord {
         gc(&self.seq)
     }
 
+    pub fn reversed(&mut self) {
+        self.seq.iter_mut().for_each(|base| *base = complement(*base));
+        self.seq.reverse();
+        self.quality.reverse();
+    }
+
     pub fn write(&self, writer: &mut dyn Write) -> Result<(), io::Error> {
         write!(
             writer,
@@ -83,6 +89,102 @@ impl FastqRecord {
             unsafe { str::from_utf8_unchecked(&self.quality) }
         )?;
         Ok(())
+    }
+
+    pub fn split_off_front_barcode_end(
+        &mut self,
+        front_bar_par: &mut Myers,
+        left_range: usize,
+        max_distance: u8,
+    ) -> bool {
+        let search_seq = if left_range > self.seq.len() {
+            &self.seq[..left_range]
+        } else {
+            self.seq.as_slice()
+        };
+        let matches = front_bar_par
+            .find_all(search_seq, max_distance)
+            .collect::<Vec<_>>();
+        if let Some((_, idx, _)) = find_most_right_front(matches, max_distance) {
+            self.quality = self.quality.split_off(idx);
+            self.seq = self.seq.split_off(idx);
+            debug_assert_eq!(self.seq.len(), self.quality.len());
+        }
+        self.len() != 0
+    }
+
+    pub fn truncate_at_rear_barcode_start(
+        &mut self,
+        rear_bar_par: &mut Myers,
+        right_range: usize,
+        max_distance: u8,
+    ) -> bool {
+        let search_seq = if right_range > self.seq.len() {
+            &self.seq[self.seq.len() - right_range..]
+        } else {
+            &self.seq
+        };
+        let matches = rear_bar_par
+            .find_all(search_seq, max_distance)
+            .collect::<Vec<_>>();
+        if let Some((idx, _, _)) = find_most_left_rear(matches, max_distance) {
+            self.quality.truncate(self.seq.len() - right_range + idx);
+            self.seq.truncate(self.seq.len() - right_range + idx);
+            debug_assert_eq!(self.seq.len(), self.quality.len());
+        }
+        self.len() != 0
+    }
+
+    pub fn split_off_fwd_primer(
+        &mut self,
+        fwd_primer_pat: &mut Myers,
+        left_range: usize,
+        max_distance: u8,
+    ) -> bool {
+        let search_seq = if left_range > self.seq.len() {
+            &self.seq[..left_range]
+        } else {
+            self.seq.as_slice()
+        };
+        let match_position = fwd_primer_pat
+            .find_all(search_seq, max_distance)
+            .min_by_key(|x| x.0);
+        if let Some(position) = match_position {
+            let fwd_primer_start_idx = position.0;
+            self.seq = self.seq.split_off(fwd_primer_start_idx);
+            self.quality = self.quality.split_off(fwd_primer_start_idx);
+            debug_assert_eq!(self.seq.len(), self.quality.len());
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn truncate_at_rev_primer(
+        &mut self,
+        rev_primer_pat: &mut Myers,
+        right_range: usize,
+        max_distance: u8,
+    ) -> bool{
+        let search_seq = if right_range > self.seq.len() {
+            &self.seq[self.seq.len() - right_range..]
+        } else {
+            &self.seq
+        };
+        let match_position = rev_primer_pat
+            .find_all(search_seq, max_distance)
+            .min_by_key(|x| x.0);
+        if let Some(position) = match_position {
+            let rev_primer_end_idx = position.1;
+            self.quality
+                .truncate(self.seq.len() - right_range + rev_primer_end_idx);
+            self.seq
+                .truncate(self.seq.len() - right_range + rev_primer_end_idx);
+            debug_assert_eq!(self.seq.len(), self.quality.len());
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -121,10 +223,10 @@ impl Display for FastqRecord {
     }
 }
 
-fn read_fastq(fastq_file: &str, need_description: bool) -> Vec<FastqRecord> {
+pub fn read_fastq(fastq_file: &str, need_description: bool) -> Vec<FastqRecord> {
     let mut fastq_records = vec![];
     let mut records = parse_fastx_file(fastq_file).expect(&format!("Failed to read {fastq_file}"));
-    let mut read_idx = 1;
+    let mut read_idx = 1u32;
     while let Some(Ok(record)) = records.next() {
         let mut headers = record.id().splitn(2, |x| x.is_ascii_whitespace());
         let name = headers

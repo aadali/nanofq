@@ -328,36 +328,3 @@ impl LocalAligner {
     }
 }
 
-#[test]
-#[ignore]
-fn test_max() {
-    let v = [1, 23, 32];
-    let a = 20;
-    let b = 234;
-    let c = 90;
-    let x = *[a, b, c].iter().max().unwrap();
-    println!("{x}");
-    let x = *v.iter().max().unwrap();
-    println!("{x}");
-}
-
-#[test]
-#[ignore]
-pub fn test_alignment() {
-    let scores = Scores {
-        match_: 3,
-        mismatch: -3,
-        gap_open: -5,
-        gap_extend: -1,
-    };
-    let mut aligner = LocalAligner::new((80, 200), scores);
-    let reference = b"AAGGTTAACACAAAGACACCGACAACTTTCTTCAGCACCT";
-    // let read = b"TTTGTTAGTCTACTTCGTTCAGTTACGTATTGCTAAAGGTTAACACAAAGACACCGACAACTTTCTTCAGCACCTGCTTACGGTTCACTACTCACGACGAT";
-    let read = b"GTTAACCTACTTCGTTCAGTTACGTATTGCTAAGGTTAACACAAAGACACCGACAACTTCTTCAGCACCTGCTTACGGTTCACTACTCACGAC";
-    // let read = b"ATGGA";
-    // let reference = b"ATGCGA";
-    let alignment = aligner.align(reference, read);
-    println!("{:?}", alignment);
-    let x = alignment.pretty(ReadEnd::End5);
-    println!("{x}");
-}

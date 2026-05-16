@@ -18,6 +18,7 @@ mod fastq2;
 mod stats;
 mod filter;
 mod amplicons;
+mod primer_barcode;
 
 use std::time::Instant;
 use crate::subseq::run_subseq;
