@@ -292,7 +292,7 @@ pub fn collect_fastq_dir(path: &str) -> Vec<PathBuf> {
     all_fqs
 }
 
-pub type MatchPosition = (usize, usize, u8);
+pub type MatchPosition = (usize, usize, u8); // (start, exclude end, distance)
 
 pub fn find_most_right_front(
     all_matches: Vec<MatchPosition>,
@@ -304,8 +304,8 @@ pub fn find_most_right_front(
         let most_right = all_matches.iter().max_by_key(|x| x.1).unwrap().1;
         all_matches
             .into_iter()
-            .filter(|x| most_right - x.1 < max_dist as usize)
-            .min_by_key(|x| x.0)
+            .filter(|x| (most_right - x.1) <= (max_dist as usize))
+            .min_by_key(|x| x.2) // use min distance found
     }
 }
 
@@ -316,8 +316,8 @@ pub fn find_most_left_rear(all_matches: Vec<MatchPosition>, max_dist: u8) -> Opt
         let most_left = all_matches.iter().min_by_key(|x| x.0).unwrap().0;
         all_matches
             .into_iter()
-            .filter(|x| x.0 - most_left < max_dist as usize)
-            .min_by_key(|x| x.0)
+            .filter(|x| (x.0 - most_left) <= (max_dist as usize))
+            .min_by_key(|x| x.2) // use min distance found
     }
 }
 

@@ -11,7 +11,7 @@ use std::{io, str, thread};
 
 #[derive(Debug)]
 pub struct FastqRecord {
-    name: String,
+    pub name: String,
     description: Option<String>,
     pub seq: Vec<u8>,
     quality: Vec<u8>,
@@ -70,6 +70,7 @@ impl FastqRecord {
     }
 
     pub fn reversed(&mut self) {
+        self.name.push_str("_rc");
         self.seq.iter_mut().for_each(|base| *base = complement(*base));
         self.seq.reverse();
         self.quality.reverse();
@@ -97,7 +98,7 @@ impl FastqRecord {
         left_range: usize,
         max_distance: u8,
     ) -> bool {
-        let search_seq = if left_range > self.seq.len() {
+        let search_seq = if left_range < self.seq.len() {
             &self.seq[..left_range]
         } else {
             self.seq.as_slice()
@@ -105,7 +106,7 @@ impl FastqRecord {
         let matches = front_bar_par
             .find_all(search_seq, max_distance)
             .collect::<Vec<_>>();
-        if let Some((_, idx, _)) = find_most_right_front(matches, max_distance) {
+        if let Some((_, idx, _)) = find_most_right_front(matches.clone(), max_distance) {
             self.quality = self.quality.split_off(idx);
             self.seq = self.seq.split_off(idx);
             debug_assert_eq!(self.seq.len(), self.quality.len());
@@ -119,17 +120,17 @@ impl FastqRecord {
         right_range: usize,
         max_distance: u8,
     ) -> bool {
-        let search_seq = if right_range > self.seq.len() {
-            &self.seq[self.seq.len() - right_range..]
+        let (search_seq ,real_right_range)= if right_range < self.seq.len() {
+            (&self.seq[self.seq.len() - right_range..], right_range)
         } else {
-            &self.seq
+            (&self.seq[..], self.seq.len())
         };
         let matches = rear_bar_par
             .find_all(search_seq, max_distance)
             .collect::<Vec<_>>();
         if let Some((idx, _, _)) = find_most_left_rear(matches, max_distance) {
-            self.quality.truncate(self.seq.len() - right_range + idx);
-            self.seq.truncate(self.seq.len() - right_range + idx);
+            self.quality.truncate(self.seq.len() - real_right_range+ idx );
+            self.seq.truncate(self.seq.len() - real_right_range + idx );
             debug_assert_eq!(self.seq.len(), self.quality.len());
         }
         self.len() != 0
@@ -141,14 +142,15 @@ impl FastqRecord {
         left_range: usize,
         max_distance: u8,
     ) -> bool {
-        let search_seq = if left_range > self.seq.len() {
+        let search_seq = if left_range < self.seq.len() {
             &self.seq[..left_range]
         } else {
             self.seq.as_slice()
         };
         let match_position = fwd_primer_pat
             .find_all(search_seq, max_distance)
-            .min_by_key(|x| x.0);
+            .min_by_key(|x| x.2);
+        // println!("{}, {}, {}", self.name, )
         if let Some(position) = match_position {
             let fwd_primer_start_idx = position.0;
             self.seq = self.seq.split_off(fwd_primer_start_idx);
@@ -160,26 +162,26 @@ impl FastqRecord {
         }
     }
 
-    pub fn truncate_at_rev_primer(
+    pub fn truncate_at_rev_primer_start(
         &mut self,
         rev_primer_pat: &mut Myers,
         right_range: usize,
         max_distance: u8,
     ) -> bool{
-        let search_seq = if right_range > self.seq.len() {
-            &self.seq[self.seq.len() - right_range..]
+        let (search_seq, real_right_range )= if right_range < self.seq.len() {
+            (&self.seq[self.seq.len() - right_range..], right_range)
         } else {
-            &self.seq
+            (&self.seq[..], self.seq.len())
         };
         let match_position = rev_primer_pat
             .find_all(search_seq, max_distance)
-            .min_by_key(|x| x.0);
+            .min_by_key(|x| x.2);
         if let Some(position) = match_position {
             let rev_primer_end_idx = position.1;
             self.quality
-                .truncate(self.seq.len() - right_range + rev_primer_end_idx);
+                .truncate(self.seq.len() - real_right_range + rev_primer_end_idx);
             self.seq
-                .truncate(self.seq.len() - right_range + rev_primer_end_idx);
+                .truncate(self.seq.len() - real_right_range + rev_primer_end_idx) ;
             debug_assert_eq!(self.seq.len(), self.quality.len());
             true
         } else {
