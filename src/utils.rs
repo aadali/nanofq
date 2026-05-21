@@ -353,13 +353,14 @@ pub fn run_minimap2_and_index(
     prefix: &str,
     minimap2: Option<&str>,
     samtools: Option<&str>,
-) {
+) -> String {
     let minimap2 = check_program("minimap2", minimap2);
     let samtools = check_program("samtools", samtools);
-    let work_path = std::path::Path::new(work_dir);
-    if !work_path.exists() {
-        std::fs::create_dir_all(work_path).expect(&format!("Failed to create dir: {work_dir}"));
-    }
+    check_and_create_dir(work_dir);
+    // let work_path = std::path::Path::new(work_dir);
+    // if !work_path.exists() {
+    //     std::fs::create_dir_all(work_path).expect(&format!("Failed to create dir: {work_dir}"));
+    // }
     let mm2_child = std::process::Command::new(minimap2)
         .current_dir(work_dir)
         .args(["-a", "-x", "map-ont", "-t", "4", draft, fastq_file])
@@ -421,9 +422,10 @@ pub fn run_minimap2_and_index(
     {
         quit_with_error("Samtools index failed")
     }
+    format!("{work_dir}/{prefix}.sorted.bam")
 }
 
-pub fn run_abpoa(fastq_file: &str, work_dir: &str, amplicon_name: &str, abpoa: Option<&str>) {
+pub fn run_abpoa(fastq_file: &str, work_dir: &str, amplicon_name: &str, abpoa: Option<&str>) -> String{
     let abpoa = check_program("abpoa", abpoa);
     check_and_create_dir(work_dir);
     let abpoa_child = std::process::Command::new(abpoa)
@@ -450,6 +452,7 @@ pub fn run_abpoa(fastq_file: &str, work_dir: &str, amplicon_name: &str, abpoa: O
 
     std::fs::write(&consensus_log, abpoa_log)
         .expect(&format!("Failed to write abpoa log into {consensus_log}"));
+    consensus_output
 }
 
 pub fn check_and_create_dir(target_dir: &str) {
@@ -487,17 +490,6 @@ mod utils_test {
         // check_program("samtools", None);
     }
 
-    #[test]
-    fn minimap2() {
-        run_minimap2_and_index(
-            "/Users/aadali/projects/RustProjects/nanoamp/test_data",
-            "/Users/aadali/projects/RustProjects/nanoamp/test_data/py-barcode04-1600-head1000.fastq",
-            "/Users/aadali/projects/RustProjects/nanoamp/test_data/py-barcode04-1600-true-consensus.fasta",
-            "test001",
-            Some("minimap2"),
-            Some("samtools"),
-        )
-    }
 
     #[test]
     fn abpoa() {

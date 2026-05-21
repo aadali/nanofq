@@ -1,6 +1,7 @@
 use crate::fastq2::FastqRecord;
 use crate::primer_barcode::Primer;
-use std::collections::HashMap;
+use crate::utils::quit_with_error;
+use ahash::{HashMap, RandomState};
 use std::sync::OnceLock;
 
 const BIT2BASE: [u8; 4] = [b'A', b'C', b'G', b'T'];
@@ -22,6 +23,7 @@ const BASE2BIT: [u64; 128] = {
 };
 
 pub type BitKmer = u64;
+
 static K_SIZE: OnceLock<usize> = OnceLock::new();
 
 pub trait KTrait {
@@ -78,4 +80,50 @@ pub struct ReadsWithPairedPrimers<'a> {
     primer: &'a Primer,
 }
 
+impl<'a> ReadsWithPairedPrimers<'a> {
+    pub fn new_with_known_primer(
+        all_reads: &mut HashMap<usize, FastqRecord>,
+        good_reads_idxes: &Vec<usize>,
+        primer: &'a Primer,
+    ) -> Self {
+        let mut good_reads =
+            HashMap::with_capacity_and_hasher(good_reads_idxes.len(), RandomState::new());
+        for idx in good_reads_idxes {
+            let read = all_reads.remove(idx);
+            if read.is_none() {
+                quit_with_error(
+                    &format!("Failed to get read with index {idx} from all reads, is this read a good read?"),
+                )
+            }
+            good_reads.insert(*idx, read.unwrap()).unwrap();
+        }
+        ReadsWithPairedPrimers { good_reads, primer }
+    }
 
+    pub fn new_with_unknown_primer(all_reads: &mut HashMap<usize, FastqRecord>) {}
+
+    fn filter(&mut self, read_q: f64, length_range: f64) {
+        let mean_length = (self.good_reads.iter().fold(0usize, |acc, x| acc + x.0) as f64)
+            / (self.good_reads.len() as f64);
+        self.good_reads.retain(|_, read| {
+            read.qual(false) > (read_q as f32)
+                && (read.len() as f64) < (mean_length * (1.0 + length_range))
+                && (read.len() as f64) > (mean_length * (1.0 - length_range))
+        });
+    }
+
+    fn write_to_file(&self, mode: &str) {
+        println!("hello world");
+        println!("hello java");
+        println!("hello python");
+        println!("hello cpp");
+        println!("hello R");
+        println!("hello groovy");
+        println!("hello rust");
+        println!("hello nextflow");
+        println!("hello world");
+        println!("hello javascript");
+        println!("hello typescript");
+        println!("hello ruby");
+    }
+}
