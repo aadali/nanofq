@@ -71,7 +71,9 @@ impl FastqRecord {
 
     pub fn reversed(&mut self) {
         self.name.push_str("_rc");
-        self.seq.iter_mut().for_each(|base| *base = complement(*base));
+        self.seq
+            .iter_mut()
+            .for_each(|base| *base = complement(*base));
         self.seq.reverse();
         self.quality.reverse();
     }
@@ -120,7 +122,7 @@ impl FastqRecord {
         right_range: usize,
         max_distance: u8,
     ) -> bool {
-        let (search_seq ,real_right_range)= if right_range < self.seq.len() {
+        let (search_seq, real_right_range) = if right_range < self.seq.len() {
             (&self.seq[self.seq.len() - right_range..], right_range)
         } else {
             (&self.seq[..], self.seq.len())
@@ -129,11 +131,46 @@ impl FastqRecord {
             .find_all(search_seq, max_distance)
             .collect::<Vec<_>>();
         if let Some((idx, _, _)) = find_most_left_rear(matches, max_distance) {
-            self.quality.truncate(self.seq.len() - real_right_range+ idx );
-            self.seq.truncate(self.seq.len() - real_right_range + idx );
+            self.quality
+                .truncate(self.seq.len() - real_right_range + idx);
+            self.seq.truncate(self.seq.len() - real_right_range + idx);
             debug_assert_eq!(self.seq.len(), self.quality.len());
         }
         self.len() != 0
+    }
+
+    pub fn find_fwd_primer(
+        &self,
+        fwd_primer_pat: &mut Myers,
+        left_range: usize,
+        max_distance: u8,
+    ) -> bool {
+        let search_seq = if left_range < self.seq.len() {
+            &self.seq[..left_range]
+        } else {
+            self.seq.as_slice()
+        };
+        fwd_primer_pat
+            .find_all(search_seq, max_distance)
+            .next()
+            .is_some()
+    }
+
+    pub fn find_rev_primer(
+        &self,
+        rev_primer_pat: &mut Myers,
+        right_range: usize,
+        max_distance: u8,
+    ) -> bool {
+        let (search_seq, real_right_range) = if right_range < self.seq.len() {
+            (&self.seq[self.seq.len() - right_range..], right_range)
+        } else {
+            (&self.seq[..], self.seq.len())
+        };
+        rev_primer_pat
+            .find_all(search_seq, max_distance)
+            .next()
+            .is_some()
     }
 
     pub fn split_off_fwd_primer(
@@ -167,8 +204,8 @@ impl FastqRecord {
         rev_primer_pat: &mut Myers,
         right_range: usize,
         max_distance: u8,
-    ) -> bool{
-        let (search_seq, real_right_range )= if right_range < self.seq.len() {
+    ) -> bool {
+        let (search_seq, real_right_range) = if right_range < self.seq.len() {
             (&self.seq[self.seq.len() - right_range..], right_range)
         } else {
             (&self.seq[..], self.seq.len())
@@ -181,7 +218,7 @@ impl FastqRecord {
             self.quality
                 .truncate(self.seq.len() - real_right_range + rev_primer_end_idx);
             self.seq
-                .truncate(self.seq.len() - real_right_range + rev_primer_end_idx) ;
+                .truncate(self.seq.len() - real_right_range + rev_primer_end_idx);
             debug_assert_eq!(self.seq.len(), self.quality.len());
             true
         } else {

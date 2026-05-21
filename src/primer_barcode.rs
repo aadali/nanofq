@@ -3,6 +3,7 @@ use ahash::{HashMap, RandomState};
 use bio::alphabets::dna::revcomp;
 use bio::pattern_matching::myers::Myers;
 use std::fmt::{Display, Formatter};
+use std::hash::Hash;
 
 #[derive(PartialEq)]
 pub enum PO {
@@ -13,7 +14,7 @@ pub enum PO {
 
 #[derive(Hash, Clone)]
 pub struct Primer {
-    name: String,
+    pub name: String,
     fwd: Vec<u8>,
     rev: Vec<u8>,
     fwd_rc: Vec<u8>,
@@ -21,7 +22,7 @@ pub struct Primer {
 }
 
 impl Primer {
-    fn new(name: &str, fwd: &[u8], rev: &[u8]) -> Self {
+    pub fn new(name: &str, fwd: &[u8], rev: &[u8]) -> Self {
         Primer {
             name: name.to_string(),
             fwd: fwd.to_vec(),
@@ -31,7 +32,7 @@ impl Primer {
         }
     }
 
-    fn parse_primer_from_cli(primers_arg: &str) -> HashMap<String, Primer> {
+    pub fn parse_primer_from_cli(primers_arg: &str) -> HashMap<String, Primer> {
         let mut primers = HashMap::with_hasher(RandomState::new());
         for each_field in primers_arg.split(";") {
             let mut primer_fields = each_field.split(",");
@@ -54,7 +55,7 @@ impl Primer {
         primers
     }
 
-    fn parse_primer_from_file(primer_file: &str) -> HashMap<String, Primer> {
+    pub fn parse_primer_from_file(primer_file: &str) -> HashMap<String, Primer> {
         let mut primers = HashMap::with_hasher(RandomState::new());
         let primers_content = std::fs::read_to_string(primer_file)
             .expect(&format!("Failed to read primer file: {}", primer_file));
@@ -83,7 +84,9 @@ impl Primer {
         primers
     }
 
-    pub fn primer_seq2_primer_name(primers: &HashMap<String, Primer>) -> HashMap<&[u8], (PO, &str)> {
+    pub fn primer_seq2_primer_name(
+        primers: &HashMap<String, Primer>,
+    ) -> HashMap<&[u8], (PO, &str)> {
         let mut primers_seq =
             HashMap::with_capacity_and_hasher(primers.len() * 2, RandomState::new());
         let primer_min_len = primers
@@ -116,6 +119,23 @@ impl Primer {
     }
 }
 
+pub fn get_myers_from_primers(primers: &HashMap<String, Primer>) -> HashMap<String, [Myers; 4]> {
+    primers
+        .iter()
+        .map(|(primer_name, primer)| {
+            (
+                primer_name.clone(),
+                [
+                    primer.fwd_myers(),
+                    primer.rev_rc_myers(),
+                    primer.rev_myers(),
+                    primer.fwd_rc_myers(),
+                ],
+            )
+        })
+        .collect::<HashMap<_, _>>()
+}
+
 impl Display for Primer {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -138,7 +158,7 @@ impl Barcode {
     pub const NBL: &str = "AAGGTTAA";
     pub const NBR: &str = "CAGCACCT";
 
-    fn new(barcode: &[u8]) -> Self {
+    pub fn new(barcode: &[u8]) -> Self {
         Barcode {
             barcode: barcode.to_owned(),
             barcode_rc: revcomp(barcode),

@@ -331,19 +331,19 @@ pub fn complement(n: u8) -> u8 {
     }
 }
 
-/// used to check minimap2 and samtools
+/// used to check minimap2 and samtools or other external tools
 pub fn check_program<'a>(program: &'static str, program_path: Option<&'a str>) -> &'a str {
     let program_path = program_path.unwrap_or(program);
     let mm_path = Path::new(program_path);
     let cmd = std::process::Command::new(mm_path)
-        .arg("--help")
+        .arg("--version")
         .stdout(std::process::Stdio::null())
         .status()
-        .unwrap();
+        .expect(&format!("Check {program} failed"));
     if cmd.success() {
         return program_path;
     }
-    quit_with_error(&format!("{program} path error"))
+    quit_with_error(&format!("check {program} path error"))
 }
 
 pub fn run_minimap2_and_index(
@@ -423,34 +423,91 @@ pub fn run_minimap2_and_index(
     }
 }
 
-#[test]
-#[ignore]
-fn test_dege_base() {
-    assert!(IS_MATCHED(&b'V', &b'A'));
-    assert!(IS_MATCHED(&b'A', &b'A'));
-    assert!(!IS_MATCHED(&b'C', &b'A'));
-    // assert!(IS_MATCHED(&b'G', &b'V'));
-    assert!(IS_MATCHED(&b'B', &b'C'));
-    assert!(IS_MATCHED(&b'B', &b'T'));
-    assert!(IS_MATCHED(&b'B', &b'G'));
-    assert!(IS_MATCHED(&b'W', &b'T'));
-}
-
-#[test]
-fn t() {
-    // check_minimap2(Some("/opt/homebrew/bin/minimap2"));
-    // check_program("minimap2", Some("/Users/aadali/mm2"));
-    // check_program("samtools", None);
-}
-
-#[test]
-fn minimap2() {
-    run_minimap2_and_index(
-        "/Users/aadali/projects/RustProjects/nanoamp/test_data",
-        "/Users/aadali/projects/RustProjects/nanoamp/test_data/py-barcode04-1600-head1000.fastq",
-        "/Users/aadali/projects/RustProjects/nanoamp/test_data/py-barcode04-1600-true-consensus.fasta",
-        "test001",
-        Some("minimap2"),
-        Some("samtools"),
+pub fn run_abpoa(fastq_file: &str, work_dir: &str, amplicon_name: &str, abpoa: Option<&str>) {
+    let abpoa = check_program("abpoa", abpoa);
+    check_and_create_dir(work_dir);
+    let abpoa_child = std::process::Command::new(abpoa)
+        .current_dir(work_dir)
+        .arg(fastq_file)
+        .output()
+        .expect(&format!("Failed to run abpoa {fastq_file}"));
+    if !abpoa_child.status.success() {
+        quit_with_error("Run abpoa failed")
+    }
+    let consensus = String::from_utf8(abpoa_child.stdout).unwrap();
+    let abpoa_log = String::from_utf8(abpoa_child.stderr).unwrap();
+    let sequence = consensus.lines().last().unwrap();
+    let consensus_output = format!("{work_dir}/{amplicon_name}.draft_consensus.fasta");
+    let consensus_log = format!("{work_dir}/{amplicon_name}.log");
+    
+    std::fs::write(
+        &consensus_output,
+        format!(">{amplicon_name}_{}\n{}", sequence.len(), sequence),
     )
+    .expect(&format!(
+        "Failed to write draft consensus into {consensus_output}"
+    ));
+
+    std::fs::write(&consensus_log, abpoa_log)
+        .expect(&format!("Failed to write abpoa log into {consensus_log}"));
+}
+
+pub fn check_and_create_dir(target_dir: &str) {
+    let target_dir_path = Path::new(target_dir);
+    if !target_dir_path.exists() {
+        std::fs::create_dir_all(target_dir_path)
+            .expect(&format!("Failed to create dir: {target_dir}"))
+    } else {
+        if !target_dir_path.is_dir() {
+            quit_with_error(&format!("{target_dir} already exists and it's not a directory"))
+        }
+    }
+}
+
+#[cfg(test)]
+mod utils_test {
+    use super::*;
+    #[test]
+    #[ignore]
+    fn test_dege_base() {
+        assert!(IS_MATCHED(&b'V', &b'A'));
+        assert!(IS_MATCHED(&b'A', &b'A'));
+        assert!(!IS_MATCHED(&b'C', &b'A'));
+        // assert!(IS_MATCHED(&b'G', &b'V'));
+        assert!(IS_MATCHED(&b'B', &b'C'));
+        assert!(IS_MATCHED(&b'B', &b'T'));
+        assert!(IS_MATCHED(&b'B', &b'G'));
+        assert!(IS_MATCHED(&b'W', &b'T'));
+    }
+
+    #[test]
+    fn t() {
+        // check_minimap2(Some("/opt/homebrew/bin/minimap2"));
+        // check_program("minimap2", Some("/Users/aadali/mm2"));
+        // check_program("samtools", None);
+    }
+
+    #[test]
+    fn minimap2() {
+        run_minimap2_and_index(
+            "/Users/aadali/projects/RustProjects/nanoamp/test_data",
+            "/Users/aadali/projects/RustProjects/nanoamp/test_data/py-barcode04-1600-head1000.fastq",
+            "/Users/aadali/projects/RustProjects/nanoamp/test_data/py-barcode04-1600-true-consensus.fasta",
+            "test001",
+            Some("minimap2"),
+            Some("samtools"),
+        )
+    }
+
+    #[test]
+    fn abpoa() {
+        run_abpoa(
+            "/Users/aadali/projects/RustProjects/nanofq/test_data/py-barcode04-1600-filtered.fastq",
+            "/Users/aadali/projects/RustProjects/nanofq/test_data",
+            "py-barcode04-1600",
+            // Some("abpoa")
+            // None
+            Some("/Users/aadali/biotools/abPOA-v1.5.6_arm64-macos/abpoa"),
+        );
+    }
 }
