@@ -234,7 +234,7 @@ fn bins_contig(contig_len: u64, bins_number: usize) -> Vec<(u64, u64)> {
     let mut edges = vec![];
     let step = contig_len / bins_number as u64;
     let mut left = 0u64;
-    let mut right = 0u64;
+    let mut right;
     for i in 0..bins_number {
         if i == bins_number - 1 {
             right = contig_len;

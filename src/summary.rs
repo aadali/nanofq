@@ -1,7 +1,5 @@
-use super::fastq::EachStats;
 use crate::bam::BasicBamStatistics;
 use crate::fastq2::RecordEachStats;
-use crate::utils::{collect_fastq_dir, quit_with_error};
 use ansi_term;
 use rayon::prelude::*;
 use statrs::statistics::{Data, Distribution, Max, Median, Min, OrderStatistics, Statistics};

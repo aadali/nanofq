@@ -1,7 +1,9 @@
+#![allow(unused)]
 use crate::fastq2::FastqRecord;
 use crate::primer_barcode::Primer;
 use crate::utils::quit_with_error;
 use ahash::{HashMap, RandomState};
+
 use std::sync::OnceLock;
 
 const BIT2BASE: [u8; 4] = [b'A', b'C', b'G', b'T'];

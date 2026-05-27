@@ -539,7 +539,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a3d7db9596fecd151c5f638c0ee5d5bd487b6e0ea232e5dc96d5250f6f94b1d"
 dependencies = [
  "crc32fast",
- "libz-rs-sys",
  "miniz_oxide",
 ]
 
@@ -873,15 +872,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
 
 [[package]]
-name = "libz-rs-sys"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "172a788537a2221661b480fee8dc5f96c580eb34fa88764d3205dc356c7e4221"
-dependencies = [
- "zlib-rs",
-]
-
-[[package]]
 name = "libz-sys"
 version = "1.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -988,19 +978,17 @@ dependencies = [
 
 [[package]]
 name = "nanofq"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "ahash",
  "ansi_term",
  "anyhow",
  "bio",
  "clap",
- "flate2",
  "needletail",
  "rayon",
  "regex",
  "rust-htslib",
- "seq_io",
  "statrs",
  "uuid",
 ]
@@ -1444,30 +1432,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "scoped_threadpool"
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d51f5df5af43ab3f1360b429fa5e0152ac5ce8c0bd6485cae490332e96846a8"
-
-[[package]]
 name = "semver"
 version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4f410fedcf71af0345d7607d246e7ad15faaadd49d240ee3b24e5dc21a820ac"
-
-[[package]]
-name = "seq_io"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1303559e530ee83c1d7a8593a033792c2a29217544a5c48563e116e158d76ade"
-dependencies = [
- "buffer-redux",
- "crossbeam-utils",
- "memchr",
- "scoped_threadpool",
- "serde",
- "serde_derive",
-]
 
 [[package]]
 name = "serde"
@@ -2109,9 +2077,3 @@ dependencies = [
  "quote 1.0.40",
  "syn 2.0.101",
 ]
-
-[[package]]
-name = "zlib-rs"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "626bd9fa9734751fc50d6060752170984d7053f5a39061f524cda68023d4db8a"

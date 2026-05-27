@@ -139,7 +139,7 @@ impl FastqRecord {
         self.len() != 0
     }
 
-    pub fn find_fwd_primer(
+    pub fn _find_fwd_primer(
         &self,
         fwd_primer_pat: &mut Myers,
         left_range: usize,
@@ -162,10 +162,10 @@ impl FastqRecord {
         right_range: usize,
         max_distance: u8,
     ) -> bool {
-        let (search_seq, real_right_range) = if right_range < self.seq.len() {
-            (&self.seq[self.seq.len() - right_range..], right_range)
+        let search_seq = if right_range < self.seq.len() {
+            &self.seq[self.seq.len() - right_range..]
         } else {
-            (&self.seq[..], self.seq.len())
+            &self.seq[..]
         };
         rev_primer_pat
             .find_all(search_seq, max_distance)

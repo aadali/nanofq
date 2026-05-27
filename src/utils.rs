@@ -1,13 +1,13 @@
 use ansi_term::Color;
-use std::cmp::Reverse;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::str::FromStr;
 use std::sync::OnceLock;
 
-static DEGE_BASES: OnceLock<HashMap<u8, HashSet<u8>>> = OnceLock::new();
 static BASES: OnceLock<HashMap<u8, u8>> = OnceLock::new();
-static Q2P_TABLE: OnceLock<[f64; 128]> = OnceLock::new();
+// static Q2P_TABLE: OnceLock<[f64; 128]> = OnceLock::new();
 
 pub const DORADO_TRIM_LEADING_BASE_NUMBER: usize = 60;
 
@@ -17,22 +17,29 @@ pub fn quit_with_error(msg: &str) -> ! {
     std::process::exit(1)
 }
 
-pub fn get_dege_bases() -> &'static HashMap<u8, HashSet<u8>> {
-    DEGE_BASES.get_or_init(|| {
-        HashMap::from([
-            (b'R', HashSet::from([b'A', b'G'])),
-            (b'Y', HashSet::from([b'C', b'T'])),
-            (b'M', HashSet::from([b'C', b'A'])),
-            (b'K', HashSet::from([b'G', b'T'])),
-            (b'S', HashSet::from([b'C', b'G'])),
-            (b'W', HashSet::from([b'A', b'T'])),
-            (b'H', HashSet::from([b'A', b'T', b'C'])),
-            (b'B', HashSet::from([b'G', b'T', b'C'])),
-            (b'V', HashSet::from([b'G', b'A', b'C'])),
-            (b'D', HashSet::from([b'G', b'A', b'T'])),
-            (b'N', HashSet::from([b'G', b'A', b'T', b'C'])),
-        ])
-    })
+pub fn positive_number_parse<T: FromStr + PartialOrd + Display>(
+    x: &str,
+    para: &str,
+    float: bool,
+    min: T,
+    max: T,
+) -> Result<T, anyhow::Error> {
+    let min_length = match x.parse::<T>() {
+        Ok(value) => {
+            if value <= min || value >= max {
+                quit_with_error(&format!(
+                    "Error: {} must be between {} and {}",
+                    para, min, max
+                ))
+            }
+            value
+        }
+        Err(_) => {
+            let num_type = if float { "float" } else { "int" };
+            quit_with_error(&format!("Error: {} must be positive {}", para, num_type))
+        }
+    };
+    Ok(min_length)
 }
 
 pub fn get_bases() -> &'static HashMap<u8, u8> {
@@ -62,16 +69,6 @@ pub fn get_bases() -> &'static HashMap<u8, u8> {
     })
 }
 
-pub fn get_q2p_table() -> &'static [f64; 128] {
-    Q2P_TABLE.get_or_init(|| {
-        let mut arr = [f64::NAN; 128];
-        for q in 33..127usize {
-            arr[q] = 10.0f64.powf((q - 33) as f64 / -10.0)
-        }
-        arr
-    })
-}
-
 pub fn rev_com(seq: &str) -> String {
     seq.as_bytes()
         .iter()
@@ -79,17 +76,6 @@ pub fn rev_com(seq: &str) -> String {
         .rev()
         .collect::<String>()
 }
-
-// ref_base from primer or reference can be degenerate base
-pub static IS_MATCHED: fn(&u8, &u8) -> bool = |ref_base, read_base| {
-    ref_base == read_base
-        || get_dege_bases()
-            .get(ref_base)
-            .map_or(false, |x| x.contains(read_base))
-};
-
-pub const SEP_LINE: &str =
-    "----------------------------------------------------------------------\n";
 
 pub const ERR_PROB_TABLE: [f64; 127] = [
     f64::NAN,           // 0  00  000 NUL空字符 (Null)
@@ -268,7 +254,7 @@ pub fn gc<T: AsRef<[u8]>>(sequence: T) -> f32 {
     gc as f32
 }
 
-pub fn collect_fastq_dir(path: &str) -> Vec<PathBuf> {
+pub fn collect_fqs_in_dir(path: &str) -> Vec<PathBuf> {
     let all_fqs = Path::new(path)
         .read_dir()
         .expect(&format!("Failed to read directory: {path}"))
@@ -357,10 +343,6 @@ pub fn run_minimap2_and_index(
     let minimap2 = check_program("minimap2", minimap2);
     let samtools = check_program("samtools", samtools);
     check_and_create_dir(work_dir);
-    // let work_path = std::path::Path::new(work_dir);
-    // if !work_path.exists() {
-    //     std::fs::create_dir_all(work_path).expect(&format!("Failed to create dir: {work_dir}"));
-    // }
     let mm2_child = std::process::Command::new(minimap2)
         .current_dir(work_dir)
         .args(["-a", "-x", "map-ont", "-t", "4", draft, fastq_file])
@@ -382,14 +364,11 @@ pub fn run_minimap2_and_index(
             "--threads",
             "2",
         ])
-        .status();
-    if !view_child
-        .expect(&format!(
-            "Failed to complete samtools view for {prefix}.raw.bam"
-        ))
-        .success()
-    {
-        quit_with_error("Samtools view failed")
+        .output()
+        .expect("samtools view failed to start");
+
+    if !view_child.status.success() {
+        quit_with_error(str::from_utf8(view_child.stderr.as_slice()).unwrap())
     }
 
     let sort_child = std::process::Command::new(samtools)
@@ -402,30 +381,29 @@ pub fn run_minimap2_and_index(
             &format!("{prefix}.sorted.bam"),
             &format!("{prefix}.raw.bam"),
         ])
-        .status();
-    if !sort_child
-        .expect(&format!(
-            "Failed to complete samtools sort for {prefix}.raw.bam"
-        ))
-        .success()
-    {
-        quit_with_error("Samtools sort failed")
+        .output()
+        .expect("samtools sort failed to start");
+    if !sort_child.status.success() {
+        quit_with_error(str::from_utf8(sort_child.stderr.as_slice()).unwrap())
     }
 
     let index_child = std::process::Command::new(samtools)
         .current_dir(work_dir)
         .args(["index", &format!("{prefix}.sorted.bam")])
-        .status();
-    if !index_child
-        .expect(&format!("Failed to index {prefix}.sorted.bam"))
-        .success()
-    {
-        quit_with_error("Samtools index failed")
+        .output()
+        .expect("samtools index failed to start");
+    if !index_child.status.success() {
+        quit_with_error(str::from_utf8(index_child.stderr.as_slice()).unwrap())
     }
     format!("{work_dir}/{prefix}.sorted.bam")
 }
 
-pub fn run_abpoa(fastq_file: &str, work_dir: &str, amplicon_name: &str, abpoa: Option<&str>) -> String{
+pub fn run_abpoa(
+    fastq_file: &str,
+    work_dir: &str,
+    amplicon_name: &str,
+    abpoa: Option<&str>,
+) -> String {
     let abpoa = check_program("abpoa", abpoa);
     check_and_create_dir(work_dir);
     let abpoa_child = std::process::Command::new(abpoa)
@@ -434,14 +412,14 @@ pub fn run_abpoa(fastq_file: &str, work_dir: &str, amplicon_name: &str, abpoa: O
         .output()
         .expect(&format!("Failed to run abpoa {fastq_file}"));
     if !abpoa_child.status.success() {
-        quit_with_error("Run abpoa failed")
+        quit_with_error(str::from_utf8(abpoa_child.stderr.as_slice()).unwrap());
     }
     let consensus = String::from_utf8(abpoa_child.stdout).unwrap();
     let abpoa_log = String::from_utf8(abpoa_child.stderr).unwrap();
     let sequence = consensus.lines().last().unwrap();
     let consensus_output = format!("{work_dir}/{amplicon_name}.draft_consensus.fasta");
     let consensus_log = format!("{work_dir}/{amplicon_name}.log");
-    
+
     std::fs::write(
         &consensus_output,
         format!(">{amplicon_name}_{}\n{}", sequence.len(), sequence),
@@ -462,34 +440,120 @@ pub fn check_and_create_dir(target_dir: &str) {
             .expect(&format!("Failed to create dir: {target_dir}"))
     } else {
         if !target_dir_path.is_dir() {
-            quit_with_error(&format!("{target_dir} already exists and it's not a directory"))
+            quit_with_error(&format!(
+                "{target_dir} already exists and it's not a directory"
+            ))
         }
     }
 }
 
+/*
+SQK-LSK114
+LSK114 library reads structure
+          |--->  LA_ADAPTER_5   <----| | insert Seq | |--->   LA_ADAPTER_3   <---|
+5-TTTTTTTTCCTGTACTTCGTTCAGTTACGTATTGCT-..............-AGCAATACGTAACTGAACGAAGTACAGG-3
+
+3' end always is truncated
+const LSK: TrimConfig = TrimConfig {
+    kit_name: "LSK",
+    end5: Some(("CCTGTACTTCGTTCAGTTACGTATTGCT", LSK_END5)),
+    end3: Some(("AGCAATACGTAACTGAACGAAGTACAGG", LSK_END3)),
+    rev_com_end5: None,
+    rev_com_end3: None,
+};
+
+
+
+
+SQK-RAD114; SQK-ULK114
+the rapid adapter(RA) from ont document is 5’-TTTTTTTTCCTGTACTTCGTTCAGTTACGTATTGCT-3', but RA_ADAPTER will be used when trimming reads with Rapid Adapter(R    A)
+Always consider only the adapter at 5' end for Rapid library
+
+structure of reads with RA, but no barcode
+|RA_ADAPTER we want to trim from reads                             | insert Seq
+5-GCTTGGGTGTTTAACCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA-...................-3
+
+const RAD: TrimConfig = TrimConfig {
+    kit_name: "RAD",
+    end5: Some((
+        "GCTTGGGTGTTTAACCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+        RAD_END5,
+    )),
+    end3: None,
+    rev_com_end5: None,
+    rev_com_end3: None,
+};
+const ULK: TrimConfig = TrimConfig {
+    kit_name: "ULK",
+    end5: Some((
+        "GCTTGGGTGTTTAACCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+        RAD_END5,
+    )),
+    end3: None,
+    rev_com_end5: None,
+    rev_com_end3: None,
+};
+
+SQK-NBD114-24; SQK-NBD114-96
+NBD114-24/96 library reads structure
+Example for Native Barcode01
+          |NA_ADAPTER_5                |L_F_5   |Barcode01 rev com       |R_F_5   |insert Seq         |L_F_3   |Barcode01               |R_F_3         |NA_ADAPTER_3
+5-TTTTTTTTCCTGTACTTCGTTCAGTTACGTATTGCT AAGGTTAA CACAAAGACACCGACAACTTTCTT CAGCACCT ................... AGGTGCTG AAGAAAGTTGTCGGTGTCTTTGTG TTAACCTTAGCAAT ACGTAACTGAACGAAGTACAGG-3
+we use barcode_left_flanking + barcode + barcode_right_flanking as query to trim nbd reads
+
+
+
+
+
+SQK-RBK114.24; SQK-RBK114.96
+structure of reads with RA, with rapid barcode
+Example for Rapid Barcode01
+  |L_F             |Rapid Barcode01         |R_F                                               | insert Seq
+5-GCTTGGGTGTTTAACC AAGAAAGTTGTCGGTGTCTTTGTG GTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA .................-3
+const RBK_1: TrimConfig = TrimConfig {
+    kit_name: "RBK_1",
+    end5: Some((
+        "GTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+        // "AAGAAAGTTGTCGGTGTCTTTGTGGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA",
+        RBK_END5,
+    )),
+    end3: None,
+    rev_com_end5: None,
+    rev_com_end3: None,
+};
+
+
+
+cDNA-PCR Sequencing Kit: SQK-PCS114
+cDNA-PCR Barcoding Kit V14: SQK-PCB114.24
+Strand Switching Primer II (SSPII)
+cDNA RT Adapter (CRTA)
+
+SQK-PCS114 structure
+     |SSPII                                                | insert Seq with polyA  | CRTA
+5-...TTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG .........AAAAAAAAAAAAAAA CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAG...-3
+3-...CCCAAABBBBAABBBBAABBBBAABBBBAAAGCAATATCAGCACCAACAGAAA .........TTTTTTTTTTTTTTT GAACGCCCGCCGCCTGAGAGGAGACTTCTATCTCGCTGTCCGTTC...-5
+
+
+
+SQK-PCB114.24 structure
+     | BP01                   | SSPII                                               | insert Seq with polyA | CRTA                                             | BP01 reverse com
+5-...AAGAAAGTTGTCGGTGTCTTTGTG TTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG .........AAAAAAAAAAAAAAA CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGT     CACAAAGACACCGACAACTTTCTT...-3
+3-...TTCTTTCAACAGCCACAGAAACAC AAAGACAACCACGACTATAACGAAABBBBAABBBBAABBBBAABBBBAAACCC .........TTTTTTTTTTTTTTT GAACGCCCGCCGCCTGAGAGGAGACTTCTATCTCGCTGTCCGTTCA     GTGTTTCTGTGGCTGTTGAAAGAA...-5
+
+The cDNA RT Adapter (CRTA) is a double stranded adapter with a poly(T) overhang
+which anneals to the very end of the poly(A) tail of the RNA strand.
+This ensures that the full length of the RNA is reverse transcribed and
+that the poly(A) length can be estimated accurately.
+Annealing Buffer (AB) has been included to improve CRTA ligation.
+The full structure of CRTA is like below:
+CRTA:                      5'-CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGT-3'
+CRTA_REV_COM:   3'-TTTTTTTTTTTGAACGCCCGCCGCCTGAGAGGAGACTTCTATCTCGCTGTCCGTTCA-5'
+*/
+
 #[cfg(test)]
 mod utils_test {
     use super::*;
-    #[test]
-    #[ignore]
-    fn test_dege_base() {
-        assert!(IS_MATCHED(&b'V', &b'A'));
-        assert!(IS_MATCHED(&b'A', &b'A'));
-        assert!(!IS_MATCHED(&b'C', &b'A'));
-        // assert!(IS_MATCHED(&b'G', &b'V'));
-        assert!(IS_MATCHED(&b'B', &b'C'));
-        assert!(IS_MATCHED(&b'B', &b'T'));
-        assert!(IS_MATCHED(&b'B', &b'G'));
-        assert!(IS_MATCHED(&b'W', &b'T'));
-    }
-
-    #[test]
-    fn t() {
-        // check_minimap2(Some("/opt/homebrew/bin/minimap2"));
-        // check_program("minimap2", Some("/Users/aadali/mm2"));
-        // check_program("samtools", None);
-    }
-
 
     #[test]
     fn abpoa() {

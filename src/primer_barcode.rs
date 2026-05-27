@@ -31,15 +31,15 @@ impl Primer {
             rev_rc: revcomp(rev),
         }
     }
-    
+
     pub fn fwd(&self) -> &str {
         str::from_utf8(&self.fwd).unwrap()
     }
-    
+
     pub fn rev(&self) -> &str {
-        str::from_utf8(&self.rev).unwrap()    
+        str::from_utf8(&self.rev).unwrap()
     }
-    
+
     pub fn name2primer(&self) -> HashMap<String, Primer> {
         let mut primers = HashMap::with_capacity_and_hasher(1, RandomState::new());
         primers.insert(self.name.clone(), self.clone());
@@ -169,7 +169,7 @@ pub struct Barcode {
 }
 
 impl Barcode {
-    pub const NBL: &str = "AAGGTTAA";
+    // pub const NBL: &str = "AAGGTTAA";
     pub const NBR: &str = "CAGCACCT";
 
     pub fn new(barcode: &[u8]) -> Self {

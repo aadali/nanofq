@@ -1,7 +1,7 @@
 use crate::input_type::{InputType, check_input_type};
 use crate::utils::{quit_with_error, rev_com};
 use bio::bio_types::strand::ReqStrand;
-use clap::ArgMatches;
+use clap::{Arg, ArgMatches, Command};
 use needletail::parser::{LineEnding, write_fastq};
 use needletail::{FastxReader, Sequence, parse_fastx_file};
 use regex::Regex;
@@ -33,7 +33,8 @@ impl<'a> ReadsInBam<'a> {
 
     pub fn from_region_string(regions: &'a str) -> Self {
         let mut fetch_regions = vec![];
-        let pat = Regex::new("[\\w-]+:[1-9]+[0-9]*-[1-9]+[0-9]*").unwrap();
+        let pattern = r"^([A-Za-z0-9_-]+,(?:0|[1-9][0-9]*),[1-9][0-9]*)(?:;([A-Za-z0-9_-]+,(?:0|[1-9][0-9]*),[1-9][0-9]*))*$";
+        let pat = Regex::new(pattern).unwrap();
         for region in regions.split(',') {
             if pat.is_match(region) {
                 let x = region.split(':').collect::<Vec<&str>>();
@@ -559,4 +560,46 @@ pub fn run_subseq(subseq_cmd: &ArgMatches) {
         }
         _ => quit_with_error("Only fastq[.gz] or indexed bam file supported, check your input"),
     }
+}
+
+pub fn subseq_cmd() -> Command {
+    Command::new("subseq")
+        .about("get sub fastq records from a fastq[.gz]  or indexed bam file")
+        .arg(
+            Arg::new("input")
+                .short('i')
+                .long("input")
+                .required(true)
+                .help("a fastq[.gz] or indexed bam file used to extract sub fastq records")
+        )
+        .arg(
+            Arg::new("output")
+                .short('o')
+                .long("output")
+                .help("the path of output uncompressed fastq file")
+        )
+        .arg(
+            Arg::new("names")
+                .short('n')
+                .long("names")
+                .help("read names separated by comma")
+        )
+        .arg(
+            Arg::new("names_file")
+                .short('N')
+                .long("names_file")
+                .help("read names list file, one name per line")
+        )
+        .arg(
+            Arg::new("region")
+                .short('r')
+                .long("region")
+                .help("interested region in indexed bam with format ContigStr:StartPosition-EndPosition, 0-based half-open intervals, multi regin can be separated by comma")
+        )
+        .arg(
+            Arg::new("bed")
+                .short('L')
+                .long("bed")
+                .help("bed file of interested region, the first 3 columns needed")
+        )
 }

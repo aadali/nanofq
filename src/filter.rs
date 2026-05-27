@@ -1,12 +1,12 @@
-use crate::fastq2::{FastqRecord,  chunk_records_from_fastq};
+use crate::fastq2::{FastqRecord, chunk_records_from_fastq};
 use crate::input_type::{InputType, check_input_type};
-use crate::utils::{calculate_read_q, collect_fastq_dir, gc, quit_with_error};
-use clap::ArgMatches;
+use crate::utils::{calculate_read_q, collect_fqs_in_dir, gc, positive_number_parse, quit_with_error};
+use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use needletail::parser::{LineEnding, write_fastq};
 use needletail::{Sequence, parse_fastx_file};
 use rayon::prelude::*;
 use std::io::{BufWriter, Write};
-use std::sync::mpsc::{Receiver};
+use std::sync::mpsc::Receiver;
 
 #[derive(Debug, Clone, Default)]
 pub struct FilterOption {
@@ -26,8 +26,10 @@ impl FilterOption {
         match &self.retain_failed {
             None => Box::new(std::io::sink()),
             Some(failed_fastq_file) => {
-                let file = std::fs::File::create(&failed_fastq_file)
-                    .expect(&format!("Failed to create failed fastq file: {}", &failed_fastq_file));
+                let file = std::fs::File::create(&failed_fastq_file).expect(&format!(
+                    "Failed to create failed fastq file: {}",
+                    &failed_fastq_file
+                ));
                 Box::new(BufWriter::new(file))
             }
         }
@@ -118,9 +120,8 @@ fn fastq_filter(fastq_file: &str, fo: &FilterOption, passed_file: &str) {
             "Failed write {}th record into failed fastq file",
             read_idx,
         ));
+        read_idx += 1
     }
-
-    read_idx += 1
 }
 
 fn fastq_filter_out_records(
@@ -234,7 +235,7 @@ fn filter_one_fastq(
 }
 
 fn filter_fastq_dir(fastq_dir: &str, passed_file: &str, thread: usize, fo: &FilterOption) {
-    let fastqs = collect_fastq_dir(fastq_dir);
+    let fastqs = collect_fqs_in_dir(fastq_dir);
     let mut failed_writer = fo.set_failed_fastq_file();
     let mut passed_writer = BufWriter::new(
         std::fs::File::create(passed_file).expect(&format!("Failed to create {passed_file}")),
@@ -321,4 +322,99 @@ pub fn run_filter(filter_cmd: &ArgMatches) {
             _ => quit_with_error("error"),
         }
     }
+}
+
+pub fn filter_cmd() -> Command {
+    Command::new("filter")
+        .about("filter nanopore reads by length, quality or optional gc content")
+        .arg(
+            Arg::new("input")
+                .short('i')
+                .long("input")
+                .required(true)
+                .help("the input fastq, a fastq[.gz] or a directory containing some fastq[.gz]"),
+        )
+        .arg(
+            Arg::new("output")
+                .short('o')
+                .value_parser(|output: &str| {
+                    if !(output.ends_with(".fq") || output.ends_with(".fastq")) {
+                        quit_with_error( "Error: output should ends with .fastq or .fq. Gzipped not supported", )
+                    }
+                    Result::<String, anyhow::Error>::Ok(output.to_string())
+                })
+                .help("output the filtered fastq into this file, it will be truncated if it exists. Compressed file is not supported")
+        )
+        .arg(
+            Arg::new("min_len")
+                .short('l')
+                .long("min_len")
+                .default_value("1")
+                .value_parser(|x: &str| positive_number_parse::<u32>(x, "--min_len", false, 1, u32::MAX))
+                .help("min read length")
+        )
+        .arg(
+            Arg::new("max_len")
+                .short('L')
+                .default_value("4294967295")
+                .value_parser(|x: &str| positive_number_parse::<u32>(x, "--max_len", false, 1u32, u32::MAX))
+                .help("max read length")
+        )
+        .arg(
+            Arg::new("min_qual")
+                .short('q')
+                .long("min_qual")
+                .default_value("0.0")
+                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--min_qual", true, 0.0, 50.0f64))
+                .help("min read quality")
+        )
+        .arg(
+            Arg::new("max_qual")
+                .short('Q')
+                .default_value("50.0")
+                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--max_qual", true, 0.0, 50.0f64))
+                .help("max read quality, but in most cases, you do not need to specify this parameter")
+        )
+        .arg(
+            Arg::new("use_dorado_q")
+                .short('u')
+                .long("use_dorado_q")
+                .action(ArgAction::SetTrue)
+                .help("use dorado q-score calculation. this means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value")
+        )
+        .arg(
+            Arg::new("gc")
+                .long("gc")
+                .action(ArgAction::SetTrue)
+                .help("whether gc content is used to filter read")
+        )
+        .arg(
+            Arg::new("min_gc")
+                .short('g')
+                .long("min_gc")
+                .default_value("0.0")
+                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--min_gc", true, 0.0f64, 1.0f64))
+                .help("min gc content if --gc is set")
+        )
+        .arg(
+            Arg::new("max_gc")
+                .short('G')
+                .long("max_gc")
+                .default_value("1.0")
+                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--max_gc", true, 0.0f64, 1.0f64))
+                .help("max gc content if --gc is set")
+        )
+        .arg(
+            Arg::new("thread")
+                .short('t')
+                .long("thread")
+                .default_value("1")
+                .value_parser(value_parser!(u16).range(1..=32))
+                .help("number of threads")
+        )
+        .arg(
+            Arg::new("retain_failed")
+                .long("retain_failed")
+                .help("whether store the failed records, if set, it should be path of failed fastq")
+        )
 }

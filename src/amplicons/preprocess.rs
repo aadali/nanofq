@@ -107,7 +107,7 @@ impl ReadsClassifier {
         }
     }
 
-    pub fn guess_one_primer(
+    pub fn detect_one_primer(
         &self,
         guess_reads_number: usize,
         min_rev_match_reads_number: usize,
@@ -125,6 +125,7 @@ impl ReadsClassifier {
                 let mut rev_rc_primer = Myers::<u64>::new(revcomp(rev_primer_seq));
                 let mut match_reads_number = 0;
                 for (idx, read_idx) in reads_idx.iter().enumerate() {
+                    /* TODO optimize search rev primer depending on the read length. Start search from reads with mean lengths */
                     let read = self.all_reads.get(read_idx).unwrap();
                     if read.find_rev_primer(&mut rev_rc_primer, self.right_range, self.max_distance)
                     {
@@ -212,7 +213,7 @@ impl ReadsClassifier {
                     .unwrap()
                     .extend(similar_reads_index);
             }
-            lead_freq.retain(|lead_seq, reads_idx| reads_idx.len() > min_lead_supported);
+            lead_freq.retain(|_, reads_idx| reads_idx.len() > min_lead_supported);
             let mut lead_freq: Vec<_> = lead_freq.into_iter().collect();
             lead_freq.sort_by_key(|(_, reads_idx)| Reverse(reads_idx.len()));
             lead_freq
@@ -283,7 +284,7 @@ impl ReadsClassifier {
                     }
                 }
                 None => {
-                    'search_each_primer: for (primer_name, primer) in known_primers {
+                    'search_each_primer: for (primer_name, _) in known_primers {
                         let [
                             fwd_primer_pat,
                             rev_rc_primer_pat,

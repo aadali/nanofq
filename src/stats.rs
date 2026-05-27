@@ -1,14 +1,16 @@
 use crate::bam::{BasicBamStatistics, index_bam, stats_indexed_bam, stats_xam};
 use crate::fastq2::{FastqRecord, RecordEachStats, chunk_records_from_fastq};
 use crate::input_type::{InputType, check_input_type};
-use crate::summary::{ write_summary, make_plot};
-use crate::utils::{calculate_read_q, collect_fastq_dir, gc, quit_with_error};
-use clap::ArgMatches;
+use crate::summary::{make_plot, write_summary};
+use crate::utils::{
+    calculate_read_q, collect_fqs_in_dir, gc, positive_number_parse, quit_with_error,
+};
+use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
+use needletail::{Sequence, parse_fastx_file};
 use rayon::prelude::*;
+use std::cmp::Reverse;
 use std::io::Write;
 use std::sync::mpsc::Receiver;
-use std::time::Instant;
-use needletail::{parse_fastx_file, Sequence};
 
 fn stats_receiver(
     receiver: Receiver<Vec<FastqRecord>>,
@@ -76,7 +78,7 @@ fn stats_fastq_dir(
     use_dorado_q: bool,
     use_gc: bool,
 ) -> Vec<RecordEachStats> {
-    let fastqs = collect_fastq_dir(fastq_dir);
+    let fastqs = collect_fqs_in_dir(fastq_dir);
     if thread == 1 {
         fastqs
             .into_iter()
@@ -159,7 +161,6 @@ pub fn run_stats(stats_cmd: &ArgMatches) {
             basic_bam_stats = basic_bam_stats_;
             all_stats
         }
-        _ => quit_with_error("error"),
     };
     // get_summary2(all_stats, )
     let tmp_stats_outfile = format!("/tmp/NanofqStatsTmpResult_{}.tsv", uuid::Uuid::new_v4());
@@ -216,60 +217,176 @@ pub fn run_stats(stats_cmd: &ArgMatches) {
         &basic_bam_stats,
         summary,
     );
-        let formats = format
-            .iter()
-            .map(|x| (**x).clone())
-            .collect::<Vec<String>>();
-        if plot.is_some() {
-            if output.is_none() {
-                make_plot(
-                    &basic_stats,
-                    *quantile,
-                    plot.unwrap(),
-                    &formats,
-                    python,
-                    &tmp_stats_outfile,
-                ).unwrap();
-            } else {
-                make_plot(
-                    &basic_stats,
-                    *quantile,
-                    plot.unwrap(),
-                    &formats,
-                    python,
-                    output.unwrap(),
-                ).unwrap();
-            }
+    let formats = format
+        .iter()
+        .map(|x| (**x).clone())
+        .collect::<Vec<String>>();
+    if plot.is_some() {
+        if output.is_none() {
+            make_plot(
+                &basic_stats,
+                *quantile,
+                plot.unwrap(),
+                &formats,
+                python,
+                &tmp_stats_outfile,
+            )
+            .unwrap();
+        } else {
+            make_plot(
+                &basic_stats,
+                *quantile,
+                plot.unwrap(),
+                &formats,
+                python,
+                output.unwrap(),
+            )
+            .unwrap();
         }
-
+    }
 }
 
-pub fn t() {
-    let start = Instant::now();
-    let x = stats_one_fastq(
-        "/Users/aadali/projects/RustProjects/nanoamp/test_data/ont-barcode05.fastq",
-        4,
-        false,
-        true,
-        50000,
-    );
-
-    let basic = BasicBamStatistics::default();
-    // for a in &x {
-    //     println!("{a}")
-    // }
-    let dur = start.elapsed();
-    println!("{dur:?}");
-    let start2 = Instant::now();
-    write_summary(
-        x,
-        None,
-        &[25.0, 20.0, 18.0, 15.0, 12.0, 10.0],
-        5,
-        &basic,
-        "/Users/aadali/Documents/summary.tsv"
-    );
-    let dur = start2.elapsed();
-    println!("{dur:?}");
+pub fn stats_cmd() -> Command {
+    Command::new("stats")
+        .about("stats nanopore reads, output stats result, summary and optional figures")
+        .arg(
+            Arg::new("input")
+                .short('i')
+                .long("input")
+                .required(true)
+                .help("the input file, could be \
+                1. a single fastq[.gz]\
+                2. a directory containing some fastq[.gz]\
+                3. a bam or sam file")
+        )
+        .arg(
+            Arg::new("output")
+                .short('o')
+                .long("output")
+                .help("output the stats result into this tsv file if specified. it will be truncated if it exists")
+        )
+        .arg(
+            Arg::new("summary")
+                .short('s')
+                .long("summary")
+                .default_value("./NanofqStatsSummary.txt")
+                .help("output stats summary into this file, it will be truncated if it exists")
+        )
+        .arg(
+            Arg::new("topn")
+                .short('n')
+                .long("topn")
+                .default_value("5")
+                .value_parser(value_parser!(u32).range(0..100))
+                .help("write the top  N longest reads and highest quality reads info into summary file")
+        )
+        .arg(
+            Arg::new("quality")
+                .short('q')
+                .long("quality")
+                .default_value("25,20,18,15,12,10")
+                .value_parser(|x:&str | {
+                    let mut qualities = x.split(",")
+                        .into_iter()
+                        .map(|each| {
+                            match each.parse::<f64>() {
+                                Ok(qual) => qual,
+                                Err(_) => {
+                                    quit_with_error("Failed to parse f64 from --quality")
+                                }
+                            }
+                        })
+                        .collect::<Vec<f64>>();
+                    qualities.sort_by(|a, b| b.partial_cmp(a).unwrap());
+                    Result::<Vec<f64>, anyhow::Error>::Ok(qualities)
+                })
+                .help("Count the reads number that whose quality is bigger than this value, multi value can be separated by comma")
+        )
+        .arg(
+            Arg::new("use_dorado_q")
+                .short('u')
+                .long("use_dorado_q")
+                .action(ArgAction::SetTrue)
+                .help("use dorado q-score calculation. this means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value")
+        )
+        .arg(
+            Arg::new("length")
+                .short('l')
+                .long("length")
+                .value_parser(|x: &str| {
+                    let mut lengths = x.split(",")
+                        .into_iter()
+                        .map(|each| {
+                            match each.parse::<u32>() {
+                                Ok(len) => len,
+                                Err(err) => {
+                                    eprintln!("{:?}", err);
+                                    quit_with_error("Failed to parse usie from --length")
+                                }
+                            }
+                        })
+                        .collect::<Vec<u32>>();
+                    lengths.sort_by_key(|x| Reverse(*x));
+                    Result::<Vec<u32>, anyhow::Error>::Ok(lengths)
+                })
+                .help("Count the reads number that whose length is bigger than this value if you set this parameter, multi values can be separated by comma")
+        )
+        .arg(
+            Arg::new("gc")
+                .long("gc")
+                .action(ArgAction::SetTrue)
+                .help("whether to stats the gc content")
+        )
+        .arg(
+            Arg::new("index")
+                .short('I')
+                .long("index")
+                .action(ArgAction::SetTrue)
+                .help("For sorted bet unindexed bam file, build index firstly")
+        )
+        .arg(
+            Arg::new("thread")
+                .short('t')
+                .long("thread")
+                .default_value("1")
+                .value_parser(value_parser!(u16).range(1..=32))
+                .help("number of threads")
+        )
+        .arg(
+            Arg::new("chunk")
+                .short('c')
+                .long("chunk")
+                .default_value("50000")
+                .value_parser(|x: &str| positive_number_parse(x, "--chunk", false, 20000, u32::MAX))
+                .help("reads chunk size when multi threads used")
+        )
+        .arg(
+            Arg::new("python")
+                .long("python")
+                .default_value("python3")
+                .help("python3 path, matplotlib will be imported")
+        )
+        .arg(
+            Arg::new("plot")
+                .short('p')
+                .long("plot")
+                .help("whether to make plot, if set, it should be the prefix of figure path without filename extension")
+        )
+        .arg(
+            Arg::new("format")
+                .short('f')
+                .long("format")
+                .action(ArgAction::Append)
+                .value_parser(["png", "pdf", "jpg", "svg"])
+                .default_value("pdf")
+                .help("which format figure do you want if --plot is set, this parameter can be set multi times")
+        )
+        .arg(
+            Arg::new("quantile")
+                .long("quantile")
+                .default_value("0.01")
+                .value_parser(|x:&str| positive_number_parse(x, "--quantile", true, 0.0f64, 0.5f64))
+                .help("the shortest ratio and longest ratio of reads will not be rendered on figure, should be in range(0.0, 0.5)")
+        )
 }
 
