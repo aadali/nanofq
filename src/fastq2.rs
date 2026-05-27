@@ -1,5 +1,5 @@
 use crate::filter::FilterOption;
-use crate::utils::{calculate_read_q, complement, find_most_left_rear, find_most_right_front, gc};
+use crate::utils::{calculate_quality, complement, find_most_left_rear, find_most_right_front, gc};
 use bio::pattern_matching::myers::Myers;
 use needletail::{Sequence, parse_fastx_file};
 use std::fmt::{Display, Formatter};
@@ -34,7 +34,7 @@ impl FastqRecord {
         RecordEachStats {
             name: self.name,
             length: self.seq.len() as u32,
-            qual: calculate_read_q(self.quality, use_dorado_q),
+            qual: calculate_quality(self.quality, use_dorado_q, false),
             gc: if use_gc { Some(gc(self.seq)) } else { None },
         }
     }
@@ -62,7 +62,7 @@ impl FastqRecord {
     }
 
     pub fn qual(&self, use_dorado_q: bool) -> f32 {
-        calculate_read_q(&self.quality, use_dorado_q)
+        calculate_quality(&self.quality, use_dorado_q, false)
     }
 
     pub fn gc(&self) -> f32 {

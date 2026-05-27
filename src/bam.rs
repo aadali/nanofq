@@ -1,5 +1,5 @@
 use crate::fastq2::RecordEachStats;
-use crate::utils::{calculate_read_q,  quit_with_error, };
+use crate::utils::{calculate_quality, quit_with_error, };
 use rayon::prelude::*;
 use rust_htslib::bam::index;
 use rust_htslib::bam::record::{Aux, Cigar};
@@ -41,7 +41,7 @@ pub fn get_encoded_bases_gc_count_table() -> &'static HashMap<u8, usize> {
 pub trait BamRecordStats {
     fn gc_count(&self) -> f32;
     fn calculate_read_quality(&self, use_dorado_q: bool) -> f32;
-    fn stats(&self, gc: bool, dont_use_dorado_quality: bool) -> RecordEachStats;
+    fn stats(&self, gc: bool, use_dorado_q: bool) -> RecordEachStats;
 }
 impl BamRecordStats for rust_htslib::bam::Record {
     fn gc_count(&self) -> f32 {
@@ -56,67 +56,12 @@ impl BamRecordStats for rust_htslib::bam::Record {
     }
 
     fn calculate_read_quality(&self, use_dorado_q: bool) -> f32 {
-        calculate_read_q(self.qual(), use_dorado_q)
-        /*
-        let quals = self.qual();
-        if quals.len() == 0 {
-            eprintln!(
-                "Empty quality found for: {}",
-                str::from_utf8(self.qname()).unwrap()
-            );
-            return None;
-        }
-        let real_seq_len = quals.len();
-        if !use_dorado_q {
-            let avg_err_prob = quals
-                .iter()
-                .map(|x| ERR_PROB_TABLE[*x as usize + 33])
-                .sum::<f64>()
-                / real_seq_len as f64;
-            let read_quality = avg_err_prob.log10() * -10.0;
-            Some(read_quality)
-        } else {
-            let quality_tag_res = self.aux(b"qs");
-            if quality_tag_res.is_ok() {
-                let quality_tag = quality_tag_res.unwrap();
-                let read_quality = match quality_tag {
-                    Aux::Float(quality) => quality as f64,
-                    Aux::Double(quality) => quality,
-                    _ => {
-                        quit_with_error(&format!(
-                            "Parse qs tag for {:?} in tid: {}, at position: {}",
-                            str::from_utf8(self.qname()).unwrap(),
-                            self.tid(),
-                            self.reference_start(),
-                        ));
-                    }
-                };
-                Some(read_quality)
-            } else {
-                let (seq_len, skip) = if real_seq_len > DORADO_TRIM_LEADING_BASE_NUMBER {
-                    (
-                        real_seq_len - DORADO_TRIM_LEADING_BASE_NUMBER,
-                        DORADO_TRIM_LEADING_BASE_NUMBER,
-                    )
-                } else {
-                    (real_seq_len, 0)
-                };
-                let avg_err_prob = quals
-                    .iter()
-                    .skip(skip)
-                    .map(|x| get_q2p_table()[*x as usize + 33])
-                    .sum::<f64>()
-                    / seq_len as f64;
-                Some(avg_err_prob.log10() * -10.0)
-            }
-        }
-
-         */
+        calculate_quality(self.qual(), use_dorado_q, true)
     }
 
-    fn stats(&self, gc: bool, dont_use_dorado_quality: bool) -> RecordEachStats {
+    fn stats(&self, gc: bool, use_dorado_q: bool) -> RecordEachStats {
         let len = self.qual().len();
-        let read_quality = self.calculate_read_quality(dont_use_dorado_quality);
+        let read_quality = self.calculate_read_quality(use_dorado_q);
         let gc = if gc { Some(self.gc_count()) } else { None };
         RecordEachStats::new(
             str::from_utf8(self.qname()).unwrap().to_string(),
@@ -334,7 +279,7 @@ pub fn check_bam_type(bam_file: &str) -> BamType {
 fn stats_from_bam_reader<R>(
     bam_reader: &mut R,
     gc: bool,
-    dont_use_dorado_quality: bool,
+    use_dorado_q: bool,
     region_start: i64,
 ) -> (BasicBamStatistics, Vec<RecordEachStats>)
 where
@@ -354,13 +299,13 @@ where
 
         if record.is_unmapped() {
             basic_bam_stats.reads_unmapped += 1;
-            all_stats.push(record.stats(gc, dont_use_dorado_quality));
+            all_stats.push(record.stats(gc, use_dorado_q));
         } else {
             if record.pos() < region_start {
                 continue;
             }
             if record.flags() & 0x900 == 0 {
-                all_stats.push(record.stats(gc, dont_use_dorado_quality));
+                all_stats.push(record.stats(gc, use_dorado_q));
                 basic_bam_stats.bases_mapped += record.seq_len();
                 basic_bam_stats.primary_alignment += 1;
                 basic_bam_stats.reads_mapped += 1;
@@ -398,7 +343,7 @@ fn stats_indexed_bam_fetch(
     bam_reader: &mut IndexedReader,
     region: FetchDefinition,
     gc: bool,
-    dont_use_dorado_quality: bool,
+    use_dorado_q: bool,
 ) -> (BasicBamStatistics, Vec<RecordEachStats>) {
     let region_start = match &region {
         FetchDefinition::Region(_, region_start, _) => *region_start,
@@ -410,7 +355,7 @@ fn stats_indexed_bam_fetch(
     if fetch_result.is_err() {
         quit_with_error(&may_be_err_msg)
     }
-    stats_from_bam_reader(bam_reader, gc, dont_use_dorado_quality, region_start)
+    stats_from_bam_reader(bam_reader, gc, use_dorado_q, region_start)
 }
 
 pub fn index_bam(bam_file: &str, thread: usize) -> Result<(), anyhow::Error> {
@@ -425,11 +370,11 @@ pub fn stats_xam(
     bam_reader: &mut bam::Reader,
     thread: usize,
     gc: bool,
-    dont_use_dorado_quality: bool,
+    use_dorado_q: bool,
 ) -> (BasicBamStatistics, Vec<RecordEachStats>) {
     debug_assert!(thread > 0);
     bam_reader.set_threads(thread).unwrap();
-    stats_from_bam_reader(bam_reader, gc, dont_use_dorado_quality, i64::MIN)
+    stats_from_bam_reader(bam_reader, gc, use_dorado_q, i64::MIN)
 }
 
 thread_local! {
@@ -443,7 +388,7 @@ pub fn stats_indexed_bam(
     bam_file: &str,
     thread: usize,
     gc: bool,
-    dont_use_dorado_quality: bool,
+    use_dorado_q: bool,
 ) -> (BasicBamStatistics, Vec<RecordEachStats>) {
     debug_assert_eq!(check_bam_type(bam_file), BamType::IndexedBam);
     let indexed_bam_reader =
@@ -470,7 +415,7 @@ pub fn stats_indexed_bam(
         .into_par_iter()
         .map(|region| {
             INDEXED_BAM_READER.with_borrow_mut(|indexed_reader| {
-                stats_indexed_bam_fetch(indexed_reader, region, gc, dont_use_dorado_quality)
+                stats_indexed_bam_fetch(indexed_reader, region, gc, use_dorado_q)
             })
         })
         .collect();

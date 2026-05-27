@@ -3,7 +3,7 @@ use crate::fastq2::{FastqRecord, RecordEachStats, chunk_records_from_fastq};
 use crate::input_type::{InputType, check_input_type};
 use crate::summary::{make_plot, write_summary};
 use crate::utils::{
-    calculate_read_q, collect_fqs_in_dir, gc, positive_number_parse, quit_with_error,
+    calculate_quality, collect_fqs_in_dir, gc, positive_number_parse, quit_with_error,
 };
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use needletail::{Sequence, parse_fastx_file};
@@ -44,7 +44,7 @@ pub fn fastq_stats(fastq_file: &str, use_dorado_q: bool, use_gc: bool) -> Vec<Re
         let quals = record
             .qual()
             .expect(&format!("Parse quality failed at {read_idx}th record"));
-        let read_q = calculate_read_q(quals, use_dorado_q);
+        let read_q = calculate_quality(quals, use_dorado_q, false);
         v.push(RecordEachStats::new(
             name,
             record.num_bases(),
@@ -98,9 +98,9 @@ pub fn run_stats(stats_cmd: &ArgMatches) {
     let input = stats_cmd.get_one::<String>("input");
     let output = stats_cmd.get_one::<String>("output");
     let summary = stats_cmd.get_one::<String>("summary").unwrap();
-    let topn = stats_cmd.get_one::<u16>("topn").unwrap();
+    let topn = stats_cmd.get_one::<u32>("topn").unwrap();
     let quality = stats_cmd.get_one::<Vec<f64>>("quality").unwrap();
-    let use_dorado_q = stats_cmd.get_flag("use_dorado_quality");
+    let use_dorado_q = stats_cmd.get_flag("use_dorado_q");
     let lengths = stats_cmd.get_one::<Vec<u32>>("length");
     let use_gc = stats_cmd.get_flag("gc");
     // let bam = stats_cmd.get_flag("bam");
@@ -254,10 +254,10 @@ pub fn stats_cmd() -> Command {
                 .short('i')
                 .long("input")
                 .required(true)
-                .help("the input file, could be \
-                1. a single fastq[.gz]\
-                2. a directory containing some fastq[.gz]\
-                3. a bam or sam file")
+                .help("the input file, could be
+    1. a single fastq[.gz]
+    2. a directory containing some fastq[.gz]
+    3. a bam or sam file")
         )
         .arg(
             Arg::new("output")
@@ -281,6 +281,13 @@ pub fn stats_cmd() -> Command {
                 .help("write the top  N longest reads and highest quality reads info into summary file")
         )
         .arg(
+            Arg::new("use_dorado_q")
+                .short('u')
+                .long("use_dorado_q")
+                .action(ArgAction::SetTrue)
+                .help("use dorado q-score calculation. this means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value [default: false]")
+        )
+        .arg(
             Arg::new("quality")
                 .short('q')
                 .long("quality")
@@ -300,14 +307,7 @@ pub fn stats_cmd() -> Command {
                     qualities.sort_by(|a, b| b.partial_cmp(a).unwrap());
                     Result::<Vec<f64>, anyhow::Error>::Ok(qualities)
                 })
-                .help("Count the reads number that whose quality is bigger than this value, multi value can be separated by comma")
-        )
-        .arg(
-            Arg::new("use_dorado_q")
-                .short('u')
-                .long("use_dorado_q")
-                .action(ArgAction::SetTrue)
-                .help("use dorado q-score calculation. this means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value")
+                .help("count the reads number that whose quality is bigger than this value, multi value can be separated by comma")
         )
         .arg(
             Arg::new("length")
@@ -329,20 +329,20 @@ pub fn stats_cmd() -> Command {
                     lengths.sort_by_key(|x| Reverse(*x));
                     Result::<Vec<u32>, anyhow::Error>::Ok(lengths)
                 })
-                .help("Count the reads number that whose length is bigger than this value if you set this parameter, multi values can be separated by comma")
+                .help("count the reads number that whose length is bigger than this value if you set this parameter, multi values can be separated by comma")
         )
         .arg(
             Arg::new("gc")
                 .long("gc")
                 .action(ArgAction::SetTrue)
-                .help("whether to stats the gc content")
+                .help("whether to stats the gc content [default: false]")
         )
         .arg(
             Arg::new("index")
                 .short('I')
                 .long("index")
                 .action(ArgAction::SetTrue)
-                .help("For sorted bet unindexed bam file, build index firstly")
+                .help("build index firstly for sorted bet unindexed bam file [default: false]")
         )
         .arg(
             Arg::new("thread")

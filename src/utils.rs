@@ -211,25 +211,53 @@ pub const ERR_PROB_TABLE: [f64; 127] = [
     0.0000000005011872, // 126  7E  176 ~
 ];
 
-pub fn calculate_read_q<T: AsRef<[u8]>>(quality: T, use_dorado_quality: bool) -> f32 {
+pub fn calculate_quality<T: AsRef<[u8]>>(
+    quality: T,
+    use_dorado_quality: bool,
+    is_bam: bool,
+) -> f32 {
     let quality = quality.as_ref();
     debug_assert!(quality.as_ref().len() > 0);
     if use_dorado_quality {
         if quality.len() > DORADO_TRIM_LEADING_BASE_NUMBER {
-            calculate_q(&quality[60..])
+            if is_bam {
+                calculate_bam_record_q(&quality[60..])
+            } else {
+                calculate_fastq_record_q(&quality[60..])
+            }
         } else {
-            calculate_q(quality)
+            if is_bam {
+                calculate_bam_record_q(quality)
+            } else {
+                calculate_fastq_record_q(quality)
+            }
         }
     } else {
-        calculate_q(quality)
+        if is_bam {
+            calculate_bam_record_q(quality)
+        } else {
+            calculate_fastq_record_q(quality)
+        }
     }
 }
 
-fn calculate_q<T: AsRef<[u8]>>(quality: T) -> f32 {
+fn calculate_fastq_record_q<T: AsRef<[u8]>>(quality: T) -> f32 {
     let quality = quality.as_ref();
     let x = (quality
         .iter()
         .map(|x| ERR_PROB_TABLE[*x as usize])
+        .sum::<f64>()
+        / (quality.len() as f64))
+        .log10()
+        * -10.0;
+    x as f32
+}
+
+fn calculate_bam_record_q<T: AsRef<[u8]>>(quality: T) -> f32 {
+    let quality = quality.as_ref();
+    let x = (quality
+        .iter()
+        .map(|x| ERR_PROB_TABLE[*x as usize + 33])
         .sum::<f64>()
         / (quality.len() as f64))
         .log10()
@@ -324,12 +352,23 @@ pub fn check_program<'a>(program: &'static str, program_path: Option<&'a str>) -
     let cmd = std::process::Command::new(mm_path)
         .arg("--version")
         .stdout(std::process::Stdio::null())
-        .status()
-        .expect(&format!("Check {program} failed"));
-    if cmd.success() {
-        return program_path;
+        .output();
+    match cmd {
+        Ok(output) => {
+            if !output.status.success() {
+                quit_with_error(&format!(
+                    "{}",
+                    str::from_utf8(output.stderr.as_slice()).unwrap()
+                ))
+            } else {
+                program_path
+            }
+        }
+        Err(err) =>  {
+            eprintln!("{:?}", err);
+            quit_with_error(&format!("Check {program_path} failed; {}", err.to_string()))
+        }
     }
-    quit_with_error(&format!("check {program} path error"))
 }
 
 pub fn run_minimap2_and_index(

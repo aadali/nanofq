@@ -1,6 +1,6 @@
 use crate::fastq2::{FastqRecord, chunk_records_from_fastq};
 use crate::input_type::{InputType, check_input_type};
-use crate::utils::{calculate_read_q, collect_fqs_in_dir, gc, positive_number_parse, quit_with_error};
+use crate::utils::{calculate_quality, collect_fqs_in_dir, gc, positive_number_parse, quit_with_error};
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use needletail::parser::{LineEnding, write_fastq};
 use needletail::{Sequence, parse_fastx_file};
@@ -70,7 +70,7 @@ fn fastq_filter(fastq_file: &str, fo: &FilterOption, passed_file: &str) {
         let quals = record
             .qual()
             .expect(&format!("Parse quality failed at {read_idx}th record"));
-        let read_qual = calculate_read_q(quals, fo.use_dorado_q);
+        let read_qual = calculate_quality(quals, fo.use_dorado_q, false);
         if read_qual > fo.max_qual || read_qual < fo.min_qual {
             if retain_failed {
                 write_fastq(
@@ -156,7 +156,7 @@ fn fastq_filter_out_records(
         let quals = record
             .qual()
             .expect(&format!("Parse quality failed at {read_idx}th record"));
-        let read_qual = calculate_read_q(quals, fo.use_dorado_q);
+        let read_qual = calculate_quality(quals, fo.use_dorado_q, false);
         if read_qual > fo.max_qual || read_qual < fo.min_qual {
             is_passed = false;
             if !retain_failed {
