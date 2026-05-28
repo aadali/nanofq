@@ -79,15 +79,17 @@ impl FastqRecord {
     }
 
     pub fn write(&self, writer: &mut dyn Write) -> Result<(), io::Error> {
+        let (sep, description) = if self.description.is_some() {
+            (" ", self.description.as_ref().unwrap().as_ref())
+        } else {
+            ("", "")
+        };
         write!(
             writer,
-            "@{}{}\n{}\n+\n{}\n",
+            "@{}{}{}\n{}\n+\n{}\n",
             self.name,
-            if self.description.is_some() {
-                self.description.as_ref().unwrap().as_ref()
-            } else {
-                ""
-            },
+            sep,
+            description,
             unsafe { str::from_utf8_unchecked(&self.seq) },
             unsafe { str::from_utf8_unchecked(&self.quality) }
         )?;

@@ -1,6 +1,6 @@
 use crate::fastq2::{FastqRecord, chunk_records_from_fastq};
 use crate::input_type::{InputType, check_input_type};
-use crate::utils::{calculate_quality, collect_fqs_in_dir, gc, positive_number_parse, quit_with_error};
+use crate::utils::{calculate_quality, collect_fqs_in_dir, gc, positive_f64_parse,   quit_with_error};
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use needletail::parser::{LineEnding, write_fastq};
 use needletail::{Sequence, parse_fastx_file};
@@ -72,6 +72,7 @@ fn fastq_filter(fastq_file: &str, fo: &FilterOption, passed_file: &str) {
             .expect(&format!("Parse quality failed at {read_idx}th record"));
         let read_qual = calculate_quality(quals, fo.use_dorado_q, false);
         if read_qual > fo.max_qual || read_qual < fo.min_qual {
+            println!("{}", str::from_utf8(record.id()).unwrap());
             if retain_failed {
                 write_fastq(
                     record.id(),
@@ -270,8 +271,8 @@ fn filter_fastq_dir(fastq_dir: &str, passed_file: &str, thread: usize, fo: &Filt
 pub fn run_filter(filter_cmd: &ArgMatches) {
     let input = filter_cmd.get_one::<String>("input");
     let output = filter_cmd.get_one::<String>("output");
-    let min_len = filter_cmd.get_one::<usize>("min_len").unwrap();
-    let max_len = filter_cmd.get_one::<usize>("max_len").unwrap();
+    let min_len = filter_cmd.get_one::<u32>("min_len").unwrap();
+    let max_len = filter_cmd.get_one::<u32>("max_len").unwrap();
     let use_dorado_q = filter_cmd.get_flag("use_dorado_q");
     let min_qual = filter_cmd.get_one::<f64>("min_qual").unwrap();
     let max_qual = filter_cmd.get_one::<f64>("max_qual").unwrap();
@@ -283,8 +284,8 @@ pub fn run_filter(filter_cmd: &ArgMatches) {
     // let max_bases = filter_cmd.get_one::<u64>("max_bases");
     let failed_fq_path = filter_cmd.get_one::<String>("retain_failed");
     let fo = FilterOption {
-        min_len: *min_len as u32,
-        max_len: *max_len as u32,
+        min_len: *min_len,
+        max_len: *max_len,
         min_qual: *min_qual as f32,
         max_qual: *max_qual as f32,
         use_dorado_q,
@@ -350,14 +351,16 @@ pub fn filter_cmd() -> Command {
                 .short('l')
                 .long("min_len")
                 .default_value("1")
-                .value_parser(|x: &str| positive_number_parse::<u32>(x, "--min_len", false, 1, u32::MAX))
+                .value_parser(value_parser!(u32).range(1..4294967295))
+                // .value_parser(|x: &str| positive_int_parse(x, "--min_len",1, u32::MAX as usize))
                 .help("min read length")
         )
         .arg(
             Arg::new("max_len")
                 .short('L')
-                .default_value("4294967295")
-                .value_parser(|x: &str| positive_number_parse::<u32>(x, "--max_len", false, 1u32, u32::MAX))
+                .default_value("4294967294")
+                .value_parser(value_parser!(u32).range(1..4294967295))
+                // .value_parser(|x: &str| positive_int_parse(x, "--max_len",  1, u32::MAX as usize))
                 .help("max read length")
         )
         .arg(
@@ -365,14 +368,16 @@ pub fn filter_cmd() -> Command {
                 .short('q')
                 .long("min_qual")
                 .default_value("0.0")
-                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--min_qual", true, 0.0, 50.0f64))
+                .value_parser(value_parser!(f64))
+                .value_parser(|x: &str| positive_f64_parse(x, "--min_qual", 0.0, 50.0f64))
                 .help("min read quality")
         )
         .arg(
             Arg::new("max_qual")
                 .short('Q')
                 .default_value("50.0")
-                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--max_qual", true, 0.0, 50.0f64))
+                .value_parser(value_parser!(f64))
+                .value_parser(|x: &str| positive_f64_parse(x, "--min_qual", 0.0, 50.0f64))
                 .help("max read quality, but in most cases, you do not need to specify this parameter")
         )
         .arg(
@@ -393,7 +398,8 @@ pub fn filter_cmd() -> Command {
                 .short('g')
                 .long("min_gc")
                 .default_value("0.0")
-                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--min_gc", true, 0.0f64, 1.0f64))
+                .value_parser(value_parser!(f64))
+                .value_parser(|x: &str| positive_f64_parse(x, "--min_qual", 0.0, 1.0f64))
                 .help("min gc content if --gc is set")
         )
         .arg(
@@ -401,7 +407,8 @@ pub fn filter_cmd() -> Command {
                 .short('G')
                 .long("max_gc")
                 .default_value("1.0")
-                .value_parser(|x: &str| positive_number_parse::<f64>(x, "--max_gc", true, 0.0f64, 1.0f64))
+                .value_parser(value_parser!(f64))
+                .value_parser(|x: &str| positive_f64_parse(x, "--min_qual", 0.0, 1.0f64))
                 .help("max gc content if --gc is set")
         )
         .arg(
@@ -411,6 +418,15 @@ pub fn filter_cmd() -> Command {
                 .default_value("1")
                 .value_parser(value_parser!(u16).range(1..=32))
                 .help("number of threads")
+        )
+        .arg(
+            Arg::new("chunk")
+                .short('c')
+                .long("chunk")
+                .default_value("50000")
+                .value_parser(value_parser!(u32).range(10000..1000001))
+                // .value_parser(|x: &str| positive_int_parse(x, "--chunk",  20000, 1000000))
+                .help("reads chunk size when multi threads used")
         )
         .arg(
             Arg::new("retain_failed")

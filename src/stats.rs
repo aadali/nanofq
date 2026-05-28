@@ -2,9 +2,7 @@ use crate::bam::{BasicBamStatistics, index_bam, stats_indexed_bam, stats_xam};
 use crate::fastq2::{FastqRecord, RecordEachStats, chunk_records_from_fastq};
 use crate::input_type::{InputType, check_input_type};
 use crate::summary::{make_plot, write_summary};
-use crate::utils::{
-    calculate_quality, collect_fqs_in_dir, gc, positive_number_parse, quit_with_error,
-};
+use crate::utils::{calculate_quality, collect_fqs_in_dir, gc, positive_f64_parse,   quit_with_error};
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use needletail::{Sequence, parse_fastx_file};
 use rayon::prelude::*;
@@ -213,6 +211,7 @@ pub fn run_stats(stats_cmd: &ArgMatches) {
         all_stats,
         lengths.map(|x| x.as_slice()),
         quality,
+        use_gc,
         *topn as usize,
         &basic_bam_stats,
         summary,
@@ -357,7 +356,8 @@ pub fn stats_cmd() -> Command {
                 .short('c')
                 .long("chunk")
                 .default_value("50000")
-                .value_parser(|x: &str| positive_number_parse(x, "--chunk", false, 20000, u32::MAX))
+                .value_parser(value_parser!(u32).range(10000..1000001))
+                // .value_parser(|x: &str| positive_int_parse(x, "--chunk",  20000, 1000000))
                 .help("reads chunk size when multi threads used")
         )
         .arg(
@@ -385,7 +385,7 @@ pub fn stats_cmd() -> Command {
             Arg::new("quantile")
                 .long("quantile")
                 .default_value("0.01")
-                .value_parser(|x:&str| positive_number_parse(x, "--quantile", true, 0.0f64, 0.5f64))
+                .value_parser(|x:&str| positive_f64_parse(x, "--quantile",  0.0f64, 0.5f64))
                 .help("the shortest ratio and longest ratio of reads will not be rendered on figure, should be in range(0.0, 0.5)")
         )
 }

@@ -179,7 +179,7 @@ fn draft_consensus_with_one_known_primer(
     // try to get clean reads indexes that startswith fwd primer and ends with rev primer rc
     let primer_name2reads_idx = classifier.classify_reads_with_known_primers(&primers);
 
-    assert_eq!(primer_name2reads_idx.len(), 1);
+    // assert_eq!(primer_name2reads_idx.len(), 1);
     let (primer_name, reads_idx) = primer_name2reads_idx
         .into_iter()
         .collect::<Vec<_>>()
@@ -192,7 +192,7 @@ fn draft_consensus_with_one_known_primer(
 
     /*
     TODO for reads_with_primer.filter, if read is filtered, insert this read into classifier again.
-     This read will be mapped to draft_consensus and not be used for next loop
+     This read will be mapped to draft_consensus and not be used in next loop
      */
     // Step4: Filter reads depending on read quality and length
     reads_with_primer.filter(min_read_quality, length_range);
@@ -338,7 +338,7 @@ pub fn run_amplicons(amp_cmd: &ArgMatches) {
 
 pub fn amplicons_cmd() -> Command {
     Command::new("amplicon")
-        .about("Get draft consensuses from mixed Ligation Nanopore Long reads with same barcode with known or unknown primers for amplicons")
+        .about("get draft consensuses from mixed Ligation Nanopore Long amplicons reads with known or unknown primers")
         .arg(
             Arg::new("input")
                 .short('i')

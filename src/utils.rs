@@ -1,9 +1,7 @@
 use ansi_term::Color;
 use std::collections::HashMap;
-use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::str::FromStr;
 use std::sync::OnceLock;
 
 static BASES: OnceLock<HashMap<u8, u8>> = OnceLock::new();
@@ -17,29 +15,65 @@ pub fn quit_with_error(msg: &str) -> ! {
     std::process::exit(1)
 }
 
-pub fn positive_number_parse<T: FromStr + PartialOrd + Display>(
+// pub fn positive_number_parse<T: FromStr + PartialOrd + Display>(
+//     x: &str,
+//     para: &str,
+//     float: bool,
+//     min: T,
+//     max: T,
+// ) -> Result<T, anyhow::Error> {
+//     let min_length = match x.parse::<T>() {
+//         Ok(value) => {
+//             if value <= min || value >= max {
+//                 quit_with_error(&format!(
+//                     "Error: {} must be between {} and {}",
+//                     para, min, max
+//                 ))
+//             }
+//             value
+//         }
+//         Err(_) => {
+//             let num_type = if float { "float" } else { "int" };
+//             quit_with_error(&format!("Error: {} must be positive {}", para, num_type))
+//         }
+//     };
+//     Ok(min_length)
+// }
+
+pub fn _positive_int_parse(
     x: &str,
     para: &str,
-    float: bool,
-    min: T,
-    max: T,
-) -> Result<T, anyhow::Error> {
-    let min_length = match x.parse::<T>() {
+    min: usize,
+    max: usize
+) -> Result<usize, anyhow::Error> {
+    let parsed_usize = match x.parse::<usize>() {
         Ok(value) => {
-            if value <= min || value >= max {
-                quit_with_error(&format!(
-                    "Error: {} must be between {} and {}",
-                    para, min, max
-                ))
+            if value < min || value > max {
+                quit_with_error(&format!("Error: {para} must be between {min} and {max}"))
+            }   else {
+                value
             }
-            value
         }
-        Err(_) => {
-            let num_type = if float { "float" } else { "int" };
-            quit_with_error(&format!("Error: {} must be positive {}", para, num_type))
-        }
+        Err(_) => quit_with_error(&format!("Error: {para} must be positive float")),
     };
-    Ok(min_length)
+    Ok(parsed_usize)
+}
+
+pub fn positive_f64_parse(x: &str, para: &str, min: f64, max: f64) -> Result<f64, anyhow::Error> {
+    let coef = 10000.0;
+    let parsed_f64 = match x.parse::<f64>() {
+        Ok(value) => {
+            if ((value * coef) as usize) < ((min * coef) as usize)
+                || ((value * coef) as usize) > ((max * coef) as usize)
+            {
+                quit_with_error(&format!("Error: {para} must be between {min} and {max}"))
+            } else {
+                value
+            }
+        }
+        Err(_) => quit_with_error(&format!("Error: {para} must be positive float")),
+    };
+    Ok(parsed_f64)
 }
 
 pub fn get_bases() -> &'static HashMap<u8, u8> {
@@ -364,7 +398,7 @@ pub fn check_program<'a>(program: &'static str, program_path: Option<&'a str>) -
                 program_path
             }
         }
-        Err(err) =>  {
+        Err(err) => {
             eprintln!("{:?}", err);
             quit_with_error(&format!("Check {program_path} failed; {}", err.to_string()))
         }

@@ -6,7 +6,6 @@ use statrs::statistics::{Data, Distribution, Max, Median, Min, OrderStatistics, 
 use std::cmp::Reverse;
 use uuid;
 
-
 #[derive(Default, Debug)]
 pub struct BasicStatistics {
     reads_number: usize,
@@ -60,8 +59,8 @@ impl BasicStatistics {
         contents.push_str(&format!("ReadMedianLen:\t{:.2}\n", self.median_len));
         contents.push_str(&format!("ReadLenQuan75:\t{:.2}\n", self.quantile75_len));
 
-        contents.push_str(&format!("ReadMinQual:\t{}\n", self.min_qual));
-        contents.push_str(&format!("ReadMaxQual:\t{}\n", self.max_qual));
+        contents.push_str(&format!("ReadMinQual:\t{:.2}\n", self.min_qual));
+        contents.push_str(&format!("ReadMaxQual:\t{:.2}\n", self.max_qual));
         contents.push_str(&format!("ReadMeanQual:\t{:.2}\n", self.mean_qual));
         contents.push_str(&format!("ReadStdQual:\t{:.2}\n", self.std_qual));
         contents.push_str(&format!("ReadQualQuan25:\t{:.2}\n", self.quantile25_qual));
@@ -108,22 +107,30 @@ pub fn get_summary(
     all_stats: Vec<RecordEachStats>,
     read_lengths: Option<&[u32]>,
     read_qualities: &[f64],
+    use_gc: bool,
     n: usize,
     basic_bam_statistics: &BasicBamStatistics,
 ) -> (String, BasicStatistics) {
     let basic: BasicStatistics;
+
+    // get topn length reads info
     let mut topn_length_contents = String::from(&format!(
-        "#Top {n} longest reads\nnth\tReadName\tReadLen\tReadQuality\n"
+        "#Top {n} longest reads\nnth\tReadName\tReadLen\tReadQuality{}\n",
+        if use_gc { "\tGCContent" } else { "" }
     ));
     let mut all_stats = all_stats;
-    all_stats.sort_by_key(|x| Reverse(x.length));
+    all_stats.par_sort_by_key(|x| (Reverse(x.length), Reverse((x.qual * 1000.0) as u32)));
     for i in 0usize..(*[n as usize, all_stats.len()].iter().min().unwrap()) {
         let this_stats = &all_stats[i];
         topn_length_contents.push_str(&format!(
-            "{}\t{}\t{}\t{:.2}\n",
-            i, this_stats.name, this_stats.length, this_stats.qual
+            "{}\t{}\t{}\t{:.2}{}\n",
+            i, this_stats.name, this_stats.length, this_stats.qual,
+            if use_gc {format!("\t{:.2}", this_stats.gc.unwrap())} else {"".to_string()}
         ))
     }
+
+
+    // get lengths basic stats info
     let mut lengths = Data::new(
         all_stats
             .iter()
@@ -141,6 +148,7 @@ pub fn get_summary(
     let len_quantile_median = lengths.median();
     let len_quantile_75 = lengths.quantile(0.75);
 
+    // get sub reads info depending on read length
     let mut sub_reads_info = String::new();
     if read_lengths.is_some() {
         sub_reads_info.push_str(
@@ -164,7 +172,7 @@ pub fn get_summary(
                     longer_reads_number,
                     longer_bases_number as f64 / reads_number as f64 * 100.0,
                     longer_bases_number as f64 / 1_000_000.0,
-                    longer_bases_number as f64 / total_length as f64 * 100.0
+                    longer_bases_number as f64 / total_length * 100.0
                 ));
                 longer_reads_info
             })
@@ -174,17 +182,23 @@ pub fn get_summary(
         }
     }
 
+
+    // topn quality reads info
     let mut topn_quality_contents = String::from(&format!(
-        "#Top {n} highest quality reads\nnth\tReadName\tReadLen\tReadQuality\n"
+        "#Top {n} highest quality reads\nnth\tReadName\tReadLen\tReadQuality{}\n",
+        if use_gc { "\tGCContent" } else { "" }
     ));
-    all_stats.sort_unstable_by(|x, y| y.qual.partial_cmp(&x.qual).unwrap());
+    all_stats.par_sort_unstable_by(|x, y| y.qual.partial_cmp(&x.qual).unwrap());
     for i in 0usize..(*[n as usize, all_stats.len()].iter().min().unwrap()) {
         let this_stats = &all_stats[i];
         topn_quality_contents.push_str(&format!(
-            "{}\t{}\t{}\t{:.2}\n",
-            i, this_stats.name, this_stats.length, this_stats.qual
+            "{}\t{}\t{}\t{:.2}{}\n",
+            i, this_stats.name, this_stats.length, this_stats.qual,
+            if use_gc {format!("\t{:.2}", this_stats.gc.unwrap())} else {"".to_string()}
         ))
     }
+
+    // get sub reads info depending on read quality
     sub_reads_info.push_str(
         "#ReadQuality > SpecifiedValue\tReadsNumber(ReadsPercent); BasesNumber(BasesPercent)\n",
     );
@@ -199,7 +213,6 @@ pub fn get_summary(
             let better_reads_number = better_reads.len();
             let better_bases_number = better_reads.iter().sum::<usize>();
             let mut longer_reads_info = String::from(&format!("ReadQuality > {each_qual}\t"));
-            // let longer_reads_info =
             longer_reads_info.push_str(&format!(
                 "{}({:.2}%); {:.6}Mb({:.2}%)\n",
                 better_reads_number,
@@ -219,6 +232,8 @@ pub fn get_summary(
             .map(|x| x.qual as f64)
             .collect::<Vec<f64>>(),
     );
+
+    // get quality basic stats info
     let min_qual = qualities.min();
     let max_qual = qualities.max();
     let mean_qual = qualities.mean().unwrap();
@@ -226,6 +241,7 @@ pub fn get_summary(
     let qual_quantile_25 = qualities.quantile(0.25);
     let qual_quantile_median = qualities.median();
     let qual_quantile_75 = qualities.quantile(0.75);
+    
     basic = BasicStatistics {
         reads_number,
         bases_number: total_length as usize,
@@ -262,12 +278,13 @@ pub fn write_summary(
     all_stats: Vec<RecordEachStats>,
     read_lengths: Option<&[u32]>,
     read_qvalues: &[f64],
+    use_gc: bool,
     n: usize,
     basic_bam_stats: &BasicBamStatistics,
     output: &str,
 ) -> BasicStatistics {
     let (summary_info, basic_stats) =
-        get_summary(all_stats, read_lengths, read_qvalues, n, basic_bam_stats);
+        get_summary(all_stats, read_lengths, read_qvalues, use_gc, n, basic_bam_stats);
     std::fs::write(output, &summary_info).expect(&format!(
         "write summary info into {output}. The info is:\n{summary_info}"
     ));
