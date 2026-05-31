@@ -15,31 +15,6 @@ pub fn quit_with_error(msg: &str) -> ! {
     std::process::exit(1)
 }
 
-// pub fn positive_number_parse<T: FromStr + PartialOrd + Display>(
-//     x: &str,
-//     para: &str,
-//     float: bool,
-//     min: T,
-//     max: T,
-// ) -> Result<T, anyhow::Error> {
-//     let min_length = match x.parse::<T>() {
-//         Ok(value) => {
-//             if value <= min || value >= max {
-//                 quit_with_error(&format!(
-//                     "Error: {} must be between {} and {}",
-//                     para, min, max
-//                 ))
-//             }
-//             value
-//         }
-//         Err(_) => {
-//             let num_type = if float { "float" } else { "int" };
-//             quit_with_error(&format!("Error: {} must be positive {}", para, num_type))
-//         }
-//     };
-//     Ok(min_length)
-// }
-
 pub fn _positive_int_parse(
     x: &str,
     para: &str,
@@ -433,7 +408,7 @@ pub fn run_minimap2_and_index(
             "-b",
             "-S",
             "-o",
-            &format!("{prefix}.raw.bam"),
+            &format!("{prefix}.remaining.raw.bam"),
             "--threads",
             "2",
         ])
@@ -451,8 +426,8 @@ pub fn run_minimap2_and_index(
             "--threads",
             "2",
             "-o",
-            &format!("{prefix}.sorted.bam"),
-            &format!("{prefix}.raw.bam"),
+            &format!("{prefix}.remaining.sorted.bam"),
+            &format!("{prefix}.remaining.raw.bam"),
         ])
         .output()
         .expect("samtools sort failed to start");
@@ -462,13 +437,13 @@ pub fn run_minimap2_and_index(
 
     let index_child = std::process::Command::new(samtools)
         .current_dir(work_dir)
-        .args(["index", &format!("{prefix}.sorted.bam")])
+        .args(["index", &format!("{prefix}.remaining.sorted.bam")])
         .output()
         .expect("samtools index failed to start");
     if !index_child.status.success() {
         quit_with_error(str::from_utf8(index_child.stderr.as_slice()).unwrap())
     }
-    format!("{work_dir}/{prefix}.sorted.bam")
+    format!("{work_dir}/{prefix}.remaining.sorted.bam")
 }
 
 pub fn run_abpoa(
@@ -495,7 +470,7 @@ pub fn run_abpoa(
 
     std::fs::write(
         &consensus_output,
-        format!(">{amplicon_name}_{}\n{}", sequence.len(), sequence),
+        format!(">{amplicon_name}_{}\n{}\n", sequence.as_bytes().len(), sequence),
     )
     .expect(&format!(
         "Failed to write draft consensus into {consensus_output}"
@@ -624,19 +599,3 @@ CRTA:                      5'-CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGT-3'
 CRTA_REV_COM:   3'-TTTTTTTTTTTGAACGCCCGCCGCCTGAGAGGAGACTTCTATCTCGCTGTCCGTTCA-5'
 */
 
-#[cfg(test)]
-mod utils_test {
-    use super::*;
-
-    #[test]
-    fn abpoa() {
-        run_abpoa(
-            "/Users/aadali/projects/RustProjects/nanofq/test_data/py-barcode04-1600-filtered.fastq",
-            "/Users/aadali/projects/RustProjects/nanofq/test_data",
-            "py-barcode04-1600",
-            // Some("abpoa")
-            // None
-            Some("/Users/aadali/biotools/abPOA-v1.5.6_arm64-macos/abpoa"),
-        );
-    }
-}

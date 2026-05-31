@@ -4,6 +4,7 @@ use ahash::{HashMap, HashSet, RandomState};
 use bio::alignment::distance::levenshtein;
 use bio::alphabets::dna::revcomp;
 use bio::pattern_matching::myers::Myers;
+use log::info;
 use std::cmp::Reverse;
 use std::io::BufWriter;
 
@@ -60,13 +61,9 @@ impl<'a> ReadsCollector<'a> {
                 length0_number += 1;
             }
         }
-        eprintln!(
-            "{} reads found in {}\nCollect {} barcoded trimmed records\n{} dropped cause zero length after trimmed",
-            total_reads,
-            self.fastq_file,
-            all_reads.len(),
-            length0_number
-        );
+        info!("{} reads found in {}", total_reads, self.fastq_file);
+        info!("{} barcoded trimmed records", all_reads.len());
+        info!("{length0_number} dropped cause zero length after trimmed");
         all_reads
     }
 }
@@ -78,6 +75,7 @@ pub struct ReadsClassifier {
     left_range: usize,  // 100
     right_range: usize, // 100
     max_distance: u8,
+    pub analysis_name: String,
 }
 
 impl ReadsClassifier {
@@ -87,6 +85,7 @@ impl ReadsClassifier {
         left_range: usize,
         right_range: usize,
         max_distance: u8,
+        analysis_name: String,
     ) -> Self {
         ReadsClassifier {
             all_reads,
@@ -94,6 +93,7 @@ impl ReadsClassifier {
             left_range,
             right_range,
             max_distance,
+            analysis_name,
         }
     }
 
@@ -117,6 +117,18 @@ impl ReadsClassifier {
         min_lead_supported: usize,
     ) -> Option<Primer> {
         let lead_freq = self.lead_stats(merge_similar_lead, min_lead_supported);
+        info!(
+            "First lead seq is: {} with {} reads",
+            str::from_utf8(&lead_freq[0].0.as_slice()).unwrap(),
+            &lead_freq[0].1.len()
+        );
+        if lead_freq.len() > 1 {
+            info!(
+                "Second lead seq is: {} with {} reads",
+                str::from_utf8(&lead_freq[1].0.as_slice()).unwrap(),
+                &lead_freq[1].1.len()
+            );
+        }
         for (fwd_primer_seq, reads_idx) in lead_freq.iter() {
             for (rev_primer_seq, _) in lead_freq.iter() {
                 if fwd_primer_seq == rev_primer_seq {
@@ -135,7 +147,7 @@ impl ReadsClassifier {
                                 > rev_primer_found_ratio
                             {
                                 return Some(Primer::new(
-                                    &format!("primer{primer_idx}"),
+                                    &format!("{}_primer{primer_idx}", self.analysis_name),
                                     fwd_primer_seq,
                                     rev_primer_seq,
                                 ));
@@ -150,7 +162,7 @@ impl ReadsClassifier {
                         > rev_primer_found_ratio
                     {
                         return Some(Primer::new(
-                            &format!("primer{primer_idx}"),
+                            &format!("{}_primer{primer_idx}", self.analysis_name),
                             fwd_primer_seq,
                             rev_primer_seq,
                         ));
@@ -371,7 +383,8 @@ impl ReadsClassifier {
 }
 
 pub struct ReadsWithPrimer {
-    reads: HashMap<usize, FastqRecord>,
+    pub reads: HashMap<usize, FastqRecord>,
+    pub redundant_reads: HashMap<usize, FastqRecord>,
     // primer: Primer,
     reads_downsample: usize,
 }
@@ -384,23 +397,32 @@ impl ReadsWithPrimer {
     ) -> ReadsWithPrimer {
         ReadsWithPrimer {
             reads,
+            redundant_reads: HashMap::with_hasher(RandomState::new()),
             // primer,
             reads_downsample,
         }
     }
 
-    pub fn filter(&mut self, read_q: f64, length_range: f64) {
+    pub fn filter(&mut self, read_q: f64, length_range: f64) -> usize {
         let mean_length = self
             .reads
             .iter()
             .fold(0usize, |acc, x| acc + x.1.len() as usize) as f64
             / (self.reads.len() as f64);
 
-        self.reads.retain(|_, read| {
-            read.qual(false) > (read_q as f32)
+        let mut failed_reads_idxes = vec![];
+        for (read_idx, read) in self.reads.iter() {
+            if !(read.qual(false) > (read_q as f32)
                 && (read.len() as f64) < (mean_length * (1.0 + length_range))
-                && (read.len() as f64) > (mean_length * (1.0 - length_range))
+                && (read.len() as f64) > (mean_length * (1.0 - length_range)))
+            {
+                failed_reads_idxes.push(*read_idx);
+            }
+        }
+        failed_reads_idxes.iter().for_each(|x| {
+            self.reads.remove(x).unwrap();
         });
+
         if self.reads.len() > self.reads_downsample {
             // Calculate mean_length again, this mean_length is more precisely.
             // Because some longer reads joined by multi individual amplicon has been removed at previous length filtered
@@ -419,13 +441,13 @@ impl ReadsWithPrimer {
             shorter.sort_by_key(|&(_, read)| Reverse(read.len()));
 
             let mut idx = 0usize;
-            let mut candidate_reads_names = HashSet::with_hasher(RandomState::new());
+            let mut candidate_reads_idxes = HashSet::with_hasher(RandomState::new());
             loop {
                 match shorter.get(idx) {
                     None => {}
                     Some(&(read_idx, _)) => {
-                        candidate_reads_names.insert(*read_idx);
-                        if candidate_reads_names.len() == self.reads_downsample {
+                        candidate_reads_idxes.insert(*read_idx);
+                        if candidate_reads_idxes.len() == self.reads_downsample {
                             break;
                         }
                     }
@@ -433,22 +455,35 @@ impl ReadsWithPrimer {
                 match longer.get(idx) {
                     None => {}
                     Some(&(read_idx, _)) => {
-                        candidate_reads_names.insert(*read_idx);
-                        if candidate_reads_names.len() == self.reads_downsample {
+                        candidate_reads_idxes.insert(*read_idx);
+                        if candidate_reads_idxes.len() == self.reads_downsample {
                             break;
                         }
                     }
                 }
                 idx += 1;
             }
-            self.reads
-                .retain(|read_idx, _| candidate_reads_names.contains(read_idx))
+
+            let mut tmp_reads = candidate_reads_idxes
+                .iter()
+                .map(|x| (*x, self.reads.remove(x).unwrap()))
+                .collect::<HashMap<usize, FastqRecord>>();
+            std::mem::swap(&mut tmp_reads, &mut self.reads);
+            self.redundant_reads = tmp_reads;
         }
+        failed_reads_idxes.len()
     }
 
     pub fn save_fastq(&self, output_file: &str) {
         let mut outf = BufWriter::new(std::fs::File::create(output_file).unwrap());
         for (_, read) in &self.reads {
+            read.write(&mut outf).unwrap()
+        }
+    }
+
+    pub fn save_redundant_fastq(&self, output_file: &str) {
+        let mut outf = BufWriter::new(std::fs::File::create(output_file).unwrap());
+        for (_, read) in &self.redundant_reads {
             read.write(&mut outf).unwrap()
         }
     }

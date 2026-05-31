@@ -46,7 +46,7 @@ impl Primer {
         primers
     }
 
-    pub fn parse_primer_from_cli(primers_arg: &str) -> HashMap<String, Primer> {
+    pub fn parse_primers_from_str(primers_arg: &str, analysis_name: &str) -> HashMap<String, Primer> {
         let mut primers = HashMap::with_hasher(RandomState::new());
         for each_field in primers_arg.split(";") {
             let mut primer_fields = each_field.split(",");
@@ -58,18 +58,18 @@ impl Primer {
                     "Failed to parse primers from cli. Primer argument should be <PrimerName>,<Froward>,<Reverse>[;<PrimerName>,<Froward>,<Reverse>]...",
                 )
             }
-            let name = name.unwrap();
+            let name = format!("{analysis_name}_{}", name.unwrap());
             let fwd_primer = fwd_primer.unwrap().as_bytes();
-            let rev_primr = rev_primer.unwrap().as_bytes();
-            let primer = Primer::new(name, fwd_primer, rev_primr);
-            if primers.insert(name.to_string(), primer).is_some() {
+            let rev_primer = rev_primer.unwrap().as_bytes();
+            let primer = Primer::new(&name, fwd_primer, rev_primer);
+            if primers.insert(name.clone(), primer).is_some() {
                 quit_with_error(&format!("Duplicate primer name found: {name}"))
             }
         }
         primers
     }
 
-    pub fn parse_primer_from_file(primer_file: &str) -> HashMap<String, Primer> {
+    pub fn parse_primer_from_file(primer_file: &str, analysis_name: &str) -> HashMap<String, Primer> {
         let mut primers = HashMap::with_hasher(RandomState::new());
         let primers_content = std::fs::read_to_string(primer_file)
             .expect(&format!("Failed to read primer file: {}", primer_file));
@@ -87,11 +87,11 @@ impl Primer {
                     line_number + 1
                 ))
             }
-            let name = name.unwrap();
+            let name = format!("{analysis_name}_{}", analysis_name);
             let fwd_primer = fwd_primer.unwrap().as_bytes();
-            let rev_primr = rev_primer.unwrap().as_bytes();
-            let primer = Primer::new(name, fwd_primer, rev_primr);
-            if primers.insert(name.to_string(), primer).is_some() {
+            let rev_primer = rev_primer.unwrap().as_bytes();
+            let primer = Primer::new(&name, fwd_primer, rev_primer);
+            if primers.insert(name.clone(), primer).is_some() {
                 quit_with_error(&format!("Duplicate primer name found: {name}"))
             }
         }

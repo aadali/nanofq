@@ -1,3 +1,5 @@
 /target
 /.idea
 /test_data
+/src/all_test.rs
+.DS_Store

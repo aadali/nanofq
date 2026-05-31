@@ -14,10 +14,47 @@ use crate::amplicons::{amplicons_cmd, run_amplicons};
 use crate::filter::{filter_cmd, run_filter};
 use crate::stats::{run_stats, stats_cmd};
 use crate::subseq::{run_subseq, subseq_cmd};
+use chrono::Local;
 use clap::Command;
+use colored::Colorize;
+use env_logger::fmt::Formatter;
+use log::Level;
+use log::{LevelFilter, Record};
+use std::io::Write;
 use std::time::Instant;
 
 fn main() {
+    colog::default_builder()
+        .filter_level(LevelFilter::Info)
+        .format(|buf: &mut Formatter, record: &Record| {
+            let now = Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
+            writeln!(
+                buf,
+                "[{}] [{}] [{}] {}",
+                now,
+                match record.level() {
+                    Level::Error => {
+                        "ERR".red()
+                    }
+                    Level::Warn => {
+                        "WAR".yellow()
+                    }
+                    Level::Info => {
+                        "INF".green()
+                    }
+                    Level::Debug => {
+                        "DBG".green()
+                    }
+                    Level::Trace => {
+                        "TRC".magenta()
+                    }
+                },
+                record.target(),
+                record.args()
+            )
+        })
+        .init();
+
     let start = Instant::now();
     let cmd = Command::new("nanofq")
         .version("0.4.0")
