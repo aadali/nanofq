@@ -1,10 +1,11 @@
 use crate::fastq2::{FastqRecord, read_fastq};
 use crate::primer_barcode::{Barcode, PO, Primer, get_myers_from_primers};
 use ahash::{HashMap, HashSet, RandomState};
-use bio::alignment::distance::levenshtein;
+use bio::alignment::pairwise::Aligner;
 use bio::alphabets::dna::revcomp;
 use bio::pattern_matching::myers::Myers;
 use log::info;
+use rayon::prelude::*;
 use std::cmp::Reverse;
 use std::io::BufWriter;
 
@@ -41,30 +42,65 @@ impl<'a> ReadsCollector<'a> {
         let mut rear_bar_myers = self.barcode.rear_myers();
         let mut length0_number = 0;
         let mut total_reads = 0usize;
+        let mut barcode_trimmed_reads = 0;
         for (idx, mut read) in raw_all_reads.into_iter().enumerate() {
             total_reads += 1;
-            if read.split_off_front_barcode_end(
+            let (read_no_len, is_split_off) = read.split_off_front_barcode_end(
                 &mut front_bar_myers,
                 self.left_range,
                 self.max_distance,
-            ) {
-                if read.truncate_at_rear_barcode_start(
-                    &mut rear_bar_myers,
-                    self.right_range,
-                    self.max_distance,
-                ) {
-                    all_reads.insert(idx, read);
-                } else {
-                    length0_number += 1;
-                }
-            } else {
+            );
+            if read_no_len {
                 length0_number += 1;
+                barcode_trimmed_reads += 1;
+                continue;
             }
+
+            let (read_no_len, is_truncated) = read.truncate_at_rear_barcode_start(
+                &mut rear_bar_myers,
+                self.right_range,
+                self.max_distance,
+            );
+            if read_no_len {
+                length0_number += 1;
+                barcode_trimmed_reads += 1;
+                continue;
+            }
+
+            if is_split_off || is_truncated {
+                barcode_trimmed_reads += 1;
+            }
+            all_reads.insert(idx, read);
         }
-        info!("{} reads found in {}", total_reads, self.fastq_file);
-        info!("{} barcoded trimmed records", all_reads.len());
-        info!("{length0_number} dropped cause zero length after trimmed");
+
+        {
+            info!("{} reads found in {}", total_reads, self.fastq_file);
+            info!(
+                "{} reads reserved, {} of them undergone barcode trimmed",
+                all_reads.len(),
+                barcode_trimmed_reads
+            );
+            info!("{length0_number} dropped cause zero length after trimmed");
+        }
         all_reads
+    }
+}
+pub struct DetectedPrimer {
+    fwd_primer: Vec<u8>,
+    pub fwd_primer_reads: Vec<usize>,
+    rev_primer: Vec<u8>,
+    pub rev_primer_reads: Vec<usize>,
+    _guess_reads_number: usize,
+    _rev_primer_found: usize,
+}
+
+impl DetectedPrimer {
+    pub fn generate_primer(&self, primer_name: &str) -> Primer {
+        Primer::new(
+            primer_name,
+            self.fwd_primer.as_slice(),
+            self.rev_primer.as_slice(),
+        )
     }
 }
 
@@ -97,6 +133,34 @@ impl ReadsClassifier {
         }
     }
 
+    pub fn save_clean_fastq(&self, output_file: &str) {
+        let mut read_idx = 0usize;
+        let mut count = 0;
+        let mut file = BufWriter::new(
+            std::fs::File::create(output_file)
+                .expect(&format!("Failed to create and open file: {output_file}")),
+        );
+        loop {
+            match self.all_reads.get(&mut read_idx) {
+                None => {}
+                Some(read) => {
+                    count += 1;
+                    read.write(&mut file).unwrap();
+                }
+            }
+            read_idx += 1;
+            if count == self.all_reads.len() {
+                break;
+            }
+        }
+        {
+            info!(
+                "{} barcode trimmed records, saved into {}",
+                count, output_file
+            );
+        }
+    }
+
     pub fn save_fastq(&self, output_file: &str) {
         let mut file = BufWriter::new(
             std::fs::File::create(output_file)
@@ -107,73 +171,125 @@ impl ReadsClassifier {
         }
     }
 
+    fn check_rev_rc_primer(
+        &self,
+        records: &[&FastqRecord],
+        rev_rc_primer_myers: &mut Myers,
+    ) -> usize {
+        let mut rev_rc_primer_found = 0usize;
+        for record in records.iter() {
+            if record.find_rev_primer(rev_rc_primer_myers, self.right_range, self.max_distance) {
+                rev_rc_primer_found += 1;
+            }
+        }
+        rev_rc_primer_found
+    }
+
     pub fn detect_one_primer(
         &self,
         guess_reads_number: usize,
-        min_rev_match_reads_number: usize,
-        rev_primer_found_ratio: f64,
-        primer_idx: usize,
+        expect_amplicons: usize,
         merge_similar_lead: bool,
         min_lead_supported: usize,
-    ) -> Option<Primer> {
-        let lead_freq = self.lead_stats(merge_similar_lead, min_lead_supported);
-        info!(
-            "First lead seq is: {} with {} reads",
-            str::from_utf8(&lead_freq[0].0.as_slice()).unwrap(),
-            &lead_freq[0].1.len()
-        );
-        if lead_freq.len() > 1 {
-            info!(
-                "Second lead seq is: {} with {} reads",
-                str::from_utf8(&lead_freq[1].0.as_slice()).unwrap(),
-                &lead_freq[1].1.len()
-            );
-        }
-        for (fwd_primer_seq, reads_idx) in lead_freq.iter() {
-            for (rev_primer_seq, _) in lead_freq.iter() {
-                if fwd_primer_seq == rev_primer_seq {
-                    continue;
-                }
-                let mut rev_rc_primer = Myers::<u64>::new(revcomp(rev_primer_seq));
-                let mut match_reads_number = 0;
-                for (idx, read_idx) in reads_idx.iter().enumerate() {
-                    /* TODO optimize search rev primer depending on the read length. Start search from reads with mean lengths */
-                    let read = self.all_reads.get(read_idx).unwrap();
-                    if read.find_rev_primer(&mut rev_rc_primer, self.right_range, self.max_distance)
-                    {
-                        match_reads_number += 1;
-                        if idx == guess_reads_number - 1 {
-                            if (match_reads_number as f64) / (guess_reads_number as f64)
-                                > rev_primer_found_ratio
-                            {
-                                return Some(Primer::new(
-                                    &format!("{}_primer{primer_idx}", self.analysis_name),
-                                    fwd_primer_seq,
-                                    rev_primer_seq,
-                                ));
-                            }
-                        }
-                    }
-                }
-                if match_reads_number < min_rev_match_reads_number {
-                    return None;
-                } else {
-                    if (match_reads_number as f64) / (guess_reads_number as f64)
-                        > rev_primer_found_ratio
-                    {
-                        return Some(Primer::new(
-                            &format!("{}_primer{primer_idx}", self.analysis_name),
-                            fwd_primer_seq,
-                            rev_primer_seq,
-                        ));
-                    }
-                }
+    ) -> DetectedPrimer {
+        let mut lead_freq = self.lead_stats(merge_similar_lead, min_lead_supported);
+        lead_freq.truncate(if lead_freq.len() > expect_amplicons * 2 * 10 {
+            expect_amplicons * 2 * 10
+        } else {
+            lead_freq.len()
+        });
+
+        {
+            info!("top {} lead seqs are: ", lead_freq.iter().take(10).len());
+            for (idx, (x, y)) in lead_freq.iter().take(10).enumerate() {
+                info!(
+                    "{}:\t{} >> {}",
+                    idx + 1,
+                    str::from_utf8(x).unwrap(),
+                    y.len()
+                )
             }
         }
-        None
+
+        let most_fwd_primer = lead_freq[0].0.clone();
+        let most_fwd_primer_reads = lead_freq[0].1.len();
+        let mut lead_freq_hashmap = lead_freq
+            .into_iter()
+            .collect::<HashMap<Vec<u8>, Vec<usize>>>();
+        let mut rev_rc_primer_myers = lead_freq_hashmap
+            .iter()
+            .map(|(primer, _)| (primer.as_slice(), Myers::<u64>::new(revcomp(primer))))
+            .collect::<HashMap<&[u8], Myers>>();
+        let mut detected_rev_primers = vec![];
+        let records_used_to_search_rev_primer = lead_freq_hashmap
+            .get::<Vec<u8>>(most_fwd_primer.as_ref())
+            .unwrap()
+            .iter()
+            .take(guess_reads_number)
+            .map(|x| self.all_reads.get(x).unwrap())
+            .collect::<Vec<_>>();
+
+        for (rev_primer, rev_primer_reads) in lead_freq_hashmap.iter() {
+            if rev_primer == &most_fwd_primer {
+                continue;
+            }
+            let find_rev_primer_reads = self.check_rev_rc_primer(
+                &records_used_to_search_rev_primer,
+                rev_rc_primer_myers.get_mut(rev_primer.as_slice()).unwrap(),
+            );
+            let estimate_rev_primer_matched = (find_rev_primer_reads as f64
+                / (records_used_to_search_rev_primer.len() as f64))
+                * (rev_primer_reads.len() as f64);
+
+            detected_rev_primers.push((
+                rev_primer,
+                rev_primer_reads.len(),
+                find_rev_primer_reads,
+                estimate_rev_primer_matched,
+            ));
+        }
+        detected_rev_primers.sort_by_key(|x| Reverse((x.3 * 1000.0) as usize));
+
+        {
+            info!(
+                "top {} candidate rev primers for candidate primer: {} with {}",
+                detected_rev_primers.iter().take(10).len(),
+                str::from_utf8(most_fwd_primer.as_ref()).unwrap(),
+                most_fwd_primer_reads
+            );
+            info!(
+                "Index: LeadSeq >> LeadFreq >> SearchReadsNum >> FwdPriFoundRear >> EstFwdPriFoundRear"
+            );
+            for (idx, x) in detected_rev_primers.iter().take(10).enumerate() {
+                info!(
+                    "{}:\t{} >> {} >> {} >> {} >> {}",
+                    idx + 1,
+                    str::from_utf8(x.0).unwrap(),
+                    x.1,
+                    records_used_to_search_rev_primer.len(),
+                    x.2,
+                    x.3
+                );
+            }
+        }
+
+        let (rev_primer, _, rev_primer_found, _) = detected_rev_primers.first().unwrap();
+        let rev_primer = rev_primer.to_vec();
+        let rev_primer_found = *rev_primer_found;
+        let fwd_primer_reads = lead_freq_hashmap.remove(&most_fwd_primer).unwrap();
+        let rev_primer_reads = lead_freq_hashmap.remove(&rev_primer).unwrap();
+        let detected_paired_primer = DetectedPrimer {
+            fwd_primer: most_fwd_primer,
+            fwd_primer_reads,
+            rev_primer,
+            rev_primer_reads,
+            _guess_reads_number: records_used_to_search_rev_primer.len(),
+            _rev_primer_found: rev_primer_found,
+        };
+        detected_paired_primer
     }
 
-    fn lead_stats(
+    pub fn lead_stats(
         &self,
         merge_similar: bool,
         min_lead_supported: usize,
@@ -191,6 +307,7 @@ impl ReadsClassifier {
                 Some(reads_idx) => reads_idx.push(*idx),
             }
         }
+        lead_freq.retain(|_, y| y.len() > min_lead_supported);
         if !merge_similar {
             let mut lead_freq: Vec<_> = lead_freq.into_iter().collect();
             lead_freq.sort_by_key(|(_, reads_idx)| Reverse(reads_idx.len()));
@@ -201,19 +318,36 @@ impl ReadsClassifier {
                 .map(|(lead_seq, reads_idx)| (lead_seq.to_vec(), reads_idx.len()))
                 .collect::<Vec<_>>();
             lead_freq_vec.sort_by_key(|x| Reverse(x.1));
+
             let mut seen = HashSet::with_hasher(RandomState::new());
+            let mut aligner =
+                Aligner::with_capacity(self.lead_length, self.lead_length, -2, -1, |x, y| {
+                    if x == y { 1 } else { -1 }
+                });
             for (outer_lead_seq, _) in &lead_freq_vec {
                 if seen.contains(outer_lead_seq) {
                     continue;
                 }
+                let mut outer_lead_seq_myers = Myers::<u64>::new(outer_lead_seq);
                 let mut similar_reads_index: HashSet<usize> =
                     HashSet::with_hasher(RandomState::new());
                 for (inner_lead_seq, _) in &lead_freq_vec {
                     if outer_lead_seq == inner_lead_seq || seen.contains(inner_lead_seq) {
                         continue;
                     }
-                    let dis = levenshtein(outer_lead_seq, inner_lead_seq);
-                    if dis < (self.max_distance as u32) {
+                    let mut all_matches =
+                        outer_lead_seq_myers.find_all(inner_lead_seq, self.max_distance);
+
+                    if all_matches.next().is_some() {
+                        similar_reads_index
+                            .extend(lead_freq.get(inner_lead_seq.as_slice()).unwrap());
+                        seen.insert(inner_lead_seq);
+                        lead_freq.remove(inner_lead_seq.as_slice());
+                        continue;
+                    }
+
+                    let alignment = aligner.local(outer_lead_seq, inner_lead_seq);
+                    if alignment.score >= ((self.lead_length - self.max_distance as usize) as i32) {
                         similar_reads_index
                             .extend(lead_freq.get(inner_lead_seq.as_slice()).unwrap());
                         seen.insert(inner_lead_seq);
@@ -224,6 +358,7 @@ impl ReadsClassifier {
                     .get_mut(outer_lead_seq)
                     .unwrap()
                     .extend(similar_reads_index);
+                seen.insert(outer_lead_seq);
             }
             lead_freq.retain(|_, reads_idx| reads_idx.len() > min_lead_supported);
             let mut lead_freq: Vec<_> = lead_freq.into_iter().collect();
@@ -266,10 +401,6 @@ impl ReadsClassifier {
                                 }
                                 Some(good_reads_idx) => good_reads_idx.push(*idx),
                             }
-                            // primer_name2reads
-                            //     .entry(*primer_name)
-                            //     .and_modify(|x| x.push(*idx))
-                            //     .or_insert(vec![]);
                         }
                     } else {
                         let rev_rc_primer_pat =
@@ -288,10 +419,6 @@ impl ReadsClassifier {
                                     good_reads_idx.push(*idx);
                                 }
                             }
-                            // primer_name2reads
-                            //     .entry(*primer_name)
-                            //     .and_modify(|x| x.push(*idx))
-                            //     .or_insert(vec![]);
                         }
                     }
                 }
@@ -320,10 +447,6 @@ impl ReadsClassifier {
                                     }
                                     Some(good_reads_idx) => good_reads_idx.push(*idx),
                                 }
-                                // primer_name2reads
-                                //     .entry(primer_name.as_ref())
-                                //     .and_modify(|x| x.push(*idx))
-                                //     .or_insert(vec![]);
                                 break 'search_each_primer;
                             }
                         }
@@ -346,12 +469,6 @@ impl ReadsClassifier {
                                     }
                                     Some(good_reads_idx) => good_reads_idx.push(*idx),
                                 }
-                                //
-                                // read.reversed();
-                                // primer_name2reads
-                                //     .entry(primer_name.as_ref())
-                                //     .and_modify(|x| x.push(*idx))
-                                //     .or_insert(vec![]);
                                 break 'search_each_primer;
                             }
                         }
@@ -382,20 +499,20 @@ impl ReadsClassifier {
     }
 }
 
-pub struct ReadsWithPrimer {
+pub struct ReadsWithPairedPrimers {
     pub reads: HashMap<usize, FastqRecord>,
     pub redundant_reads: HashMap<usize, FastqRecord>,
     // primer: Primer,
     reads_downsample: usize,
 }
 
-impl ReadsWithPrimer {
+impl ReadsWithPairedPrimers {
     pub fn new(
         reads: HashMap<usize, FastqRecord>,
         // primer: Primer,
         reads_downsample: usize,
-    ) -> ReadsWithPrimer {
-        ReadsWithPrimer {
+    ) -> ReadsWithPairedPrimers {
+        ReadsWithPairedPrimers {
             reads,
             redundant_reads: HashMap::with_hasher(RandomState::new()),
             // primer,
@@ -403,7 +520,12 @@ impl ReadsWithPrimer {
         }
     }
 
-    pub fn filter(&mut self, read_q: f64, length_range: f64) -> usize {
+    pub fn filter(
+        &mut self,
+        read_q: f64,
+        length_range: f64,
+        failed_fastq_opt: Option<&str>,
+    ) -> usize {
         let mean_length = self
             .reads
             .iter()
@@ -419,13 +541,29 @@ impl ReadsWithPrimer {
                 failed_reads_idxes.push(*read_idx);
             }
         }
-        failed_reads_idxes.iter().for_each(|x| {
-            self.reads.remove(x).unwrap();
-        });
+
+        match failed_fastq_opt {
+            None => {
+                failed_reads_idxes.iter().for_each(|x| {
+                    self.reads.remove(x).unwrap();
+                });
+            }
+            Some(failed_fastq) => {
+                let mut failed_fastq_writer =
+                    BufWriter::new(std::fs::File::create(failed_fastq).unwrap());
+                failed_reads_idxes.iter().for_each(|x| {
+                    let _ = self
+                        .reads
+                        .remove(x)
+                        .unwrap()
+                        .write(&mut failed_fastq_writer);
+                });
+            }
+        }
 
         if self.reads.len() > self.reads_downsample {
             // Calculate mean_length again, this mean_length is more precisely.
-            // Because some longer reads joined by multi individual amplicon has been removed at previous length filtered
+            // Because some longer reads joined by multi individual amplicon had been removed at previous length filtered
             let mean_length =
                 self.reads
                     .iter()
@@ -437,8 +575,13 @@ impl ReadsWithPrimer {
                 .iter()
                 .partition(|&(_, read)| read.len() as f64 > mean_length);
 
-            longer.sort_by_key(|&(_, read)| read.len());
-            shorter.sort_by_key(|&(_, read)| Reverse(read.len()));
+            longer.par_sort_by_key(|&(_, read)| {
+                (read.len(), Reverse((read.qual(false) * 1000.00) as u32)) //
+            });
+
+            shorter.par_sort_by_key(|&(_, read)| {
+                (Reverse(read.len()), (read.qual(false) * 1000.00) as u32)
+            });
 
             let mut idx = 0usize;
             let mut candidate_reads_idxes = HashSet::with_hasher(RandomState::new());

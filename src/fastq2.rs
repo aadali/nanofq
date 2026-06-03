@@ -101,7 +101,8 @@ impl FastqRecord {
         front_bar_par: &mut Myers,
         left_range: usize,
         max_distance: u8,
-    ) -> bool {
+    ) -> (bool, bool) {
+        let mut is_trimmed = false ;
         let search_seq = if left_range < self.seq.len() {
             &self.seq[..left_range]
         } else {
@@ -114,8 +115,9 @@ impl FastqRecord {
             self.quality = self.quality.split_off(idx);
             self.seq = self.seq.split_off(idx);
             debug_assert_eq!(self.seq.len(), self.quality.len());
+            is_trimmed = true
         }
-        self.len() != 0
+        (self.len() ==0, is_trimmed)
     }
 
     pub fn truncate_at_rear_barcode_start(
@@ -123,7 +125,8 @@ impl FastqRecord {
         rear_bar_par: &mut Myers,
         right_range: usize,
         max_distance: u8,
-    ) -> bool {
+    ) -> (bool, bool) {
+        let mut is_truncated = false;
         let (search_seq, real_right_range) = if right_range < self.seq.len() {
             (&self.seq[self.seq.len() - right_range..], right_range)
         } else {
@@ -137,8 +140,9 @@ impl FastqRecord {
                 .truncate(self.seq.len() - real_right_range + idx);
             self.seq.truncate(self.seq.len() - real_right_range + idx);
             debug_assert_eq!(self.seq.len(), self.quality.len());
+            is_truncated = true;
         }
-        self.len() != 0
+        (self.len() == 0, is_truncated)
     }
 
     pub fn _find_fwd_primer(

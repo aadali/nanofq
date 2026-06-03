@@ -1,19 +1,45 @@
-use crate::amplicons::preprocess::{ReadsClassifier, ReadsWithPrimer};
+use crate::amplicons::preprocess::{ReadsClassifier, ReadsWithPairedPrimers};
 use crate::primer_barcode::{BARCODES, Barcode, Primer};
-use crate::utils::{check_and_create_dir, quit_with_error, run_abpoa, run_minimap2_and_index};
+use crate::utils::{
+    check_and_create_dir, init_log, quit_with_error, run_abpoa, run_minimap2_and_index,
+};
 use ahash::{HashMap, HashSet, RandomState};
 use clap::parser::ValueSource;
-use clap::{Arg, ArgMatches, Command, value_parser};
-use log::{error, info, warn};
+use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
+use log::info;
 use rayon::prelude::*;
 use rust_htslib::bam::{FetchDefinition, IndexedReader, Read, Record};
-use std::io::{BufWriter, Write};
+use std::io::BufWriter;
 use std::path::Path;
 
 mod _consensus;
 pub mod preprocess;
 
-pub fn amplicon_with_known_primers(
+struct FileNameSuffix {
+    clean: &'static str,
+    paired_primers_reads: &'static str,
+    good_reads: &'static str,
+    redundant_reads: &'static str,
+    bad_reads: &'static str,
+    detected_primers: &'static str,
+    remaining_reads: &'static str,
+}
+
+impl Default for FileNameSuffix {
+    fn default() -> Self {
+        FileNameSuffix {
+            clean: ".clean.fastq",
+            paired_primers_reads: ".with_paired_primers.fastq",
+            good_reads: ".with_paired_primers.good.fastq",
+            redundant_reads: ".with_paired_primers.redundant.fastq",
+            bad_reads: ".with_paired_primers.bad.fastq",
+            detected_primers: ".detected_primers.tsv",
+            remaining_reads: ".remaining.fastq",
+        }
+    }
+}
+
+fn amplicon_with_known_primers(
     input_fastq: &str,
     bar_idx: usize,
     left_range: usize,
@@ -26,6 +52,8 @@ pub fn amplicon_with_known_primers(
     length_range: f64,
     abpoa: Option<&str>,
     analysis_name: &str,
+    save_failed: bool,
+    file_name_suffix: &FileNameSuffix,
 ) {
     let barcode = Barcode::new(BARCODES[bar_idx].as_bytes());
     let reads_collector = preprocess::ReadsCollector::new(
@@ -36,7 +64,7 @@ pub fn amplicon_with_known_primers(
         max_distance,
     );
     let all_reads = reads_collector.collect_fastqs();
-    let mut classifier = preprocess::ReadsClassifier::new(
+    let mut classifier = ReadsClassifier::new(
         all_reads,
         21,
         left_range,
@@ -44,16 +72,36 @@ pub fn amplicon_with_known_primers(
         max_distance,
         analysis_name.to_string(),
     );
+    check_and_create_dir(output_dir);
+    let clean_fastq = format!("{output_dir}/{analysis_name}{}", file_name_suffix.clean);
+    classifier.save_clean_fastq(&clean_fastq);
     let primer_name2reads_idx = classifier.classify_reads_with_known_primers(&primers);
+    primer_name2reads_idx
+        .par_iter()
+        .for_each(|(primer_name, reads_idx)| {
+            let fq = format!(
+                "{output_dir}/{analysis_name}_{primer_name}{}",
+                file_name_suffix.paired_primers_reads
+            );
+            let mut file = BufWriter::new(std::fs::File::create(fq).unwrap());
+            for read_idx in reads_idx {
+                let record = classifier.all_reads.get(read_idx).unwrap();
+                record.write(&mut file).unwrap();
+            }
+            info!(
+                "{primer_name}: {} reads with paired primers at dual ends found",
+                reads_idx.len()
+            );
+        });
+
     let primer_reads = primer_name2reads_idx
         .into_iter()
         .map(|(primer_name, reads_idx)| {
             let reads = classifier.remove_reads_with_idxes(&reads_idx);
             (
                 primer_name.clone(),
-                ReadsWithPrimer::new(
+                ReadsWithPairedPrimers::new(
                     reads,
-                    // primers.get(&primer_name).unwrap().clone(),
                     reads_downsample,
                 ),
             )
@@ -64,15 +112,57 @@ pub fn amplicon_with_known_primers(
     primer_reads
         .into_par_iter()
         .for_each(|(primer_name, mut reads_with_primer)| {
-            let save_fastq_path =
-                format!("{output_dir}/{analysis_name}_{primer_name}.trimmed_filtered.fastq");
-            reads_with_primer.filter(min_read_quality, length_range);
-            reads_with_primer.save_fastq(&save_fastq_path);
-            run_abpoa(&save_fastq_path, output_dir, &primer_name, abpoa);
+            let total_reads_with_paired_primers = reads_with_primer.reads.len();
+            let this_primer_fastq = format!(
+                "{output_dir}/{analysis_name}_{primer_name}{}",
+                file_name_suffix.good_reads
+            );
+            let failed_fastq = format!(
+                "{output_dir}/{analysis_name}_{primer_name}{}",
+                file_name_suffix.bad_reads
+            );
+            let bad_reads_size = reads_with_primer.filter(
+                min_read_quality,
+                length_range,
+                if save_failed {
+                    Some(&failed_fastq)
+                } else {
+                    None
+                },
+            );
+
+            info!(
+                "{primer_name}: {bad_reads_size}/{total_reads_with_paired_primers} bad reads dropped{}",
+                if save_failed {
+                    format!(", saved into {}", failed_fastq)
+                } else {
+                    "".to_string()
+                }
+            );
+
+            if !reads_with_primer.redundant_reads.is_empty() {
+                let redundant_fastq = format!(
+                    "{output_dir}/{analysis_name}_{primer_name}{}",
+                    file_name_suffix.redundant_reads
+                );
+                reads_with_primer.save_redundant_fastq(&redundant_fastq);
+
+                info!(
+                    "{primer_name}: {}/{total_reads_with_paired_primers} redundant reads found, saved into {}",
+                    reads_with_primer.redundant_reads.len(),
+                    &redundant_fastq
+                )
+            }
+            reads_with_primer.save_fastq(&this_primer_fastq);
+            info!(
+                "{primer_name}: {}/{total_reads_with_paired_primers} good reads used as input of abpoa, saved into {this_primer_fastq}",
+                reads_with_primer.reads.len()
+            );
+            run_abpoa(&this_primer_fastq, output_dir, &primer_name, abpoa);
         })
 }
 
-pub fn amplicon_with_unknown_primers(
+fn amplicon_with_unknown_primers(
     input_fastq: &str,
     bar_idx: usize,
     left_range: usize,
@@ -81,8 +171,6 @@ pub fn amplicon_with_unknown_primers(
     amplicons_number: usize,
     lead_length: usize,
     guess_reads_number: usize,
-    rev_primer_found_ratio: f64,
-    min_rev_match_reads_number: usize,
     reads_downsample: usize,
     output_dir: &str,
     min_read_quality: f64,
@@ -92,6 +180,9 @@ pub fn amplicon_with_unknown_primers(
     samtools: Option<&str>,
     min_mapq: u8,
     analysis_name: &str,
+    save_failed: bool,
+    file_name_suffix: &FileNameSuffix,
+    thread: usize,
 ) {
     let mut detected_primers = vec![];
     let barcode = Barcode::new(BARCODES[bar_idx].as_bytes());
@@ -103,7 +194,7 @@ pub fn amplicon_with_unknown_primers(
         max_distance,
     );
     let all_reads = reads_collector.collect_fastqs();
-    let mut classifier = preprocess::ReadsClassifier::new(
+    let mut classifier = ReadsClassifier::new(
         all_reads,
         lead_length,
         left_range,
@@ -111,56 +202,33 @@ pub fn amplicon_with_unknown_primers(
         max_distance,
         analysis_name.to_string(),
     );
+    check_and_create_dir(output_dir);
+    classifier.save_clean_fastq(&format!(
+        "{output_dir}/{analysis_name}{}",
+        file_name_suffix.clean
+    ));
     for primer_idx in 1..amplicons_number + 1 {
-        info!("Analysis {primer_idx}th Amplicon......");
+        {
+            info!("Analysis {primer_idx}th Amplicon......");
+        }
         // Step1.1: guess one paired primer from barcode trimmed fastq
-        let primer_opt = classifier.detect_one_primer(
-            guess_reads_number,
-            min_rev_match_reads_number,
-            rev_primer_found_ratio,
-            primer_idx,
-            false,
-            10,
-        );
-        let primer = match primer_opt {
-            None => {
-                // Step1.2: if no primer detected, maybe because too few lead seq freq,
-                // detect primer again with similar lead seqs merged
-                let primer_opt2 = classifier.detect_one_primer(
-                    guess_reads_number,
-                    min_rev_match_reads_number,
-                    rev_primer_found_ratio,
-                    primer_idx,
-                    true,
-                    10,
-                );
-                warn!("No primer detect, try to merge similar lead seqs of reads");
-                match primer_opt2 {
-                    None => {
-                        error!("No primer detect after similar lead seqs merged");
-                        quit_with_error(&format!("Couldn't detect {primer_idx}th primer"))
-                    }
-                    Some(primer) => {
-                        info!(
-                            "Primers named by [{}] found with Forward: {} and Reverse: {}",
-                            primer.name,
-                            primer.fwd(),
-                            primer.rev()
-                        );
-                        primer
-                    }
-                }
-            }
-            Some(primer) => {
-                info!(
-                    "Primers named by [{}] found with Forward: {} and Reverse: {}",
-                    primer.name,
-                    primer.fwd(),
-                    primer.rev()
-                );
-                primer
-            }
-        };
+        let detected_paired_primer =
+            classifier.detect_one_primer(guess_reads_number, amplicons_number, true, 5);
+
+        let primer =
+            detected_paired_primer.generate_primer(&format!("{analysis_name}_primer{primer_idx}"));
+
+        {
+            info!(
+                "Primer named by {} detected: Fwd: {} >> {} and Rev: {} >> {}",
+                primer.name,
+                primer.fwd(),
+                detected_paired_primer.fwd_primer_reads.len(),
+                primer.rev(),
+                detected_paired_primer.rev_primer_reads.len(),
+            );
+        }
+
         detected_primers.push(primer.clone());
         classifier = draft_consensus_with_one_known_primer(
             primer,
@@ -173,22 +241,26 @@ pub fn amplicon_with_unknown_primers(
             minimap2,
             samtools,
             min_mapq,
+            save_failed,
+            file_name_suffix,
+            thread,
         );
     }
-    let mut output_primers = BufWriter::new(
-        std::fs::File::create(format!("{output_dir}/{analysis_name}_detected_primers.txt"))
-            .unwrap(),
-    );
-    for primer in &detected_primers {
-        writeln!(
-            &mut output_primers,
-            "{}\t{}\t{}",
-            primer.name,
-            primer.fwd(),
-            primer.rev()
-        )
-        .unwrap()
-    }
+
+    let mut primers_contents = detected_primers
+        .iter()
+        .map(|primer| format!("{}\t{}\t{}", primer.name, primer.fwd(), primer.rev()))
+        .collect::<Vec<_>>()
+        .join("\n");
+    primers_contents.push('\n');
+    std::fs::write(
+        format!(
+            "{output_dir}/{analysis_name}{}",
+            file_name_suffix.detected_primers
+        ),
+        primers_contents.as_bytes(),
+    )
+    .expect("Failed to save detected primers");
 }
 
 fn draft_consensus_with_one_known_primer(
@@ -202,21 +274,17 @@ fn draft_consensus_with_one_known_primer(
     minimap2: Option<&str>,
     samtools: Option<&str>,
     min_mapq: u8,
+    save_failed: bool,
+    file_name_suffix: &FileNameSuffix,
+    thread: usize,
 ) -> ReadsClassifier {
     let primers = primer.name2primer();
     let mut classifier = classifier;
+    let total_reads = classifier.all_reads.len();
 
     // Step2: Trim sequence outside this known primer of amplicon,
     // try to get clean reads indexes that startswith fwd primer and ends with rev primer rc
     let primer_name2reads_idx = classifier.classify_reads_with_known_primers(&primers);
-
-    for (primer_name, reads_idx) in primer_name2reads_idx.iter() {
-        info!(
-            "{} reads with paired primers [{}] found",
-            reads_idx.len(),
-            primer_name,
-        );
-    }
 
     // assert_eq!(primer_name2reads_idx.len(), 1);
     let (primer_name, reads_idx) = primer_name2reads_idx
@@ -225,38 +293,66 @@ fn draft_consensus_with_one_known_primer(
         .pop()
         .unwrap();
 
-    // Step3: Remove this clean reads from classifier and save them in ReadsWithPrimer
+    // Step3: Move this clean reads from classifier into ReadsWithPrimer
     let reads = classifier.remove_reads_with_idxes(&reads_idx);
+    let total_paired_reads = reads.len();
     info!(
-        "{} reads with paired primer [{}] used to construct ReadsWithPrimer",
-        reads.len(),
-        primer_name
+        "{} reads with paired primer [{}] and used to construct ReadsWithPrimer",
+        total_paired_reads, primer_name
     );
-    let mut reads_with_primer = ReadsWithPrimer::new(reads, reads_downsample);
+    let mut reads_with_primer = ReadsWithPairedPrimers::new(reads, reads_downsample);
 
     // Step4: Filter reads depending on read quality and length
-    let bad_records_size = reads_with_primer.filter(min_read_quality, length_range);
-    info!("{bad_records_size} reads dropped after filter depending on read quality and length");
+    let failed_fastq = format!(
+        "{output_dir}/{}_{primer_name}{}",
+        classifier.analysis_name, file_name_suffix.bad_reads
+    );
+    let bad_reads_size = reads_with_primer.filter(
+        min_read_quality,
+        length_range,
+        if save_failed {
+            Some(&failed_fastq)
+        } else {
+            None
+        },
+    );
+    info!(
+        "{bad_reads_size}/{total_paired_reads} bad reads dropped{}",
+        if save_failed {
+            format!(", saved them into {}", failed_fastq)
+        } else {
+            "".to_string()
+        }
+    );
 
-    // Step5: Save this clean fastq and remaining barcode trimmed fastq and redundant records
+    // Step5: Save good reads used to run abpoa of this primer and clean remaining reads and redundant records
     check_and_create_dir(output_dir);
-    let redundant_fastq = format!("{output_dir}/{primer_name}.redundant.trimmed_filtered.fastq");
+    let redundant_fastq = format!(
+        "{output_dir}/{primer_name}{}",
+        file_name_suffix.redundant_reads
+    );
     reads_with_primer.save_redundant_fastq(&redundant_fastq);
     info!(
-        "{} redundant reads hadn't be used to run abpoa found, saved into {redundant_fastq}",
+        "{}/{total_paired_reads} redundant reads found, saved into {redundant_fastq}",
         reads_with_primer.redundant_reads.len()
     );
 
-    let this_primer_fastq = format!("{output_dir}/{primer_name}.trimmed_filtered.fastq",);
+    let this_primer_fastq = format!("{output_dir}/{primer_name}{}", file_name_suffix.good_reads);
     reads_with_primer.save_fastq(&this_primer_fastq);
     info!(
-        "{} reads used to run abpoa and construct draft consensus, saved into {this_primer_fastq}",
+        "{}/{total_paired_reads} good reads used as input of abpoa, saved into {this_primer_fastq}",
         reads_with_primer.reads.len()
     );
 
-    let barcode_trimmed_remaining_fastq = format!( "{output_dir}/{primer_name}_remaining.fastq" );
-    classifier.save_fastq(&barcode_trimmed_remaining_fastq);
-    info!("{primer_name} remaining records saved into {barcode_trimmed_remaining_fastq}");
+    let clean_remaining_fastq = format!(
+        "{output_dir}/{primer_name}{}",
+        file_name_suffix.remaining_reads
+    );
+    classifier.save_fastq(&clean_remaining_fastq);
+    info!(
+        "{}={total_reads}-{total_paired_reads} remaining records, saved into {clean_remaining_fastq}",
+        total_reads - total_paired_reads
+    );
 
     // Step6: Run abpoa to construct draft consensus
     info!("Running abpoa for {primer_name}...");
@@ -268,33 +364,52 @@ fn draft_consensus_with_one_known_primer(
     */
     // Step7: Map all remaining barcod trimmed fastq records to this draft consensus.
     info!(
-        "Map remaining reads to draft_consensus to search this amplicon's reads that has no paired primers detected on read"
+        "Map remaining reads to draft_consensus to search reads that without paired primer detected at ends"
     );
     let sorted_bam = run_minimap2_and_index(
         output_dir,
-        &barcode_trimmed_remaining_fastq,
+        &clean_remaining_fastq,
         &draft_consensus,
         &primer_name,
         minimap2,
         samtools,
+        thread,
     );
 
     // Step8: Remove mapped reads from classifier's all_reads
     let mapped_read_names = get_reads_name_from_bam(&sorted_bam, min_mapq);
     classifier.remove_reads_with_names(&mapped_read_names);
     info!(
-        "{} reads found and remove them from ReadsClassifier and go to find next amplicon",
+        "{} reads found and remove them from ReadsClassifier. GO to next loop for next amplicon\n\n",
         mapped_read_names.len()
     );
+
     /*
     Theoretically, all reads from this amplicon have been removed from classifier here.
-    Some were removed by classifier.remove_reads_with_indexes. These reads used to construct draft_consensus
-    Some were removed by classifier.remove_reads_with_names. These reads just be removed.
+    1.  Some were removed by classifier.remove_reads_with_indexes.
+        These reads have paired primers detected at dual ends.
+        Some of these reads used to construct draft_consensus
+    2.  Some were removed by classifier.remove_reads_with_names.
+        Paired primers can't be detected at ends.
+        I collect them by align them to draft_consensus. These reads just be removed.
      */
 
     // Step9: For next loop
     classifier
 }
+
+/*
+TODO
+In some cases, multi amplicons share same forward primer and different reverse primers. How extract one of them in many many similar amplicons?.
+Consider mapq and alignment ratio
+
+amplicon1: 5'----------------------------------------------------------------------------------------------------3'
+amplicon2: 5'-------------------------------------------------------------------------3'
+amplicon3: 5'--------------------------------------3'
+if use amplicon2 as reference, when the real and good reads from amplicon2 mapped to this reference,
+the start position of alignment on reference should be near 0 position and the end alignment position be near reference.len() position.
+Also, alignment start and alignment end of this read should be near of read's 0 position and read.len() position
+ */
 
 fn get_reads_name_from_bam(bam_file: &str, min_mapq: u8) -> HashSet<String> {
     let mut read_names = HashSet::with_hasher(RandomState::new());
@@ -334,32 +449,60 @@ pub fn run_amplicons(amp_cmd: &ArgMatches) {
     let primers_opt = amp_cmd.get_one::<String>("primers");
     let downsample = amp_cmd.get_one::<usize>("downsample").unwrap();
     let min_qual = amp_cmd.get_one::<f64>("min_qual").unwrap();
+    let save_failed = amp_cmd.get_one::<bool>("retain_failed").unwrap();
     let len_range = amp_cmd.get_one::<f64>("len_range").unwrap();
     let amp_numbers = amp_cmd.get_one::<usize>("number").unwrap();
     let lead_length = amp_cmd.get_one::<usize>("lead").unwrap();
     let detect_rev_primer_reads_number =
         amp_cmd.get_one::<usize>("detect_rev_primer_reads").unwrap();
-    let rev_primer_found_ratio = amp_cmd.get_one::<f64>("rev_primer_found_ratio").unwrap();
-    let min_rev_match_reads_number = amp_cmd.get_one::<usize>("min_rev_match_reads").unwrap();
     let min_mapq = amp_cmd.get_one::<u8>("min_mapq").unwrap();
     let abpoa = amp_cmd.get_one::<String>("abpoa").map(|x| x.as_ref());
     let minimap2 = amp_cmd.get_one::<String>("minimap2").map(|x| x.as_ref());
     let samtools = amp_cmd.get_one::<String>("samtools").map(|x| x.as_ref());
     let analysis_name = amp_cmd.get_one::<String>("prefix").unwrap();
+    let thread = amp_cmd.get_one::<u16>("thread").unwrap();
 
     let primers_is_set = amp_cmd.value_source("primers") == Some(ValueSource::CommandLine);
     let amplicon_number_is_set = amp_cmd.value_source("number") == Some(ValueSource::CommandLine);
     if primers_is_set && amplicon_number_is_set {
         quit_with_error("--primers and number couldn't be specified together")
     }
-
-    // set output absolute path
+    init_log();
+    {
+        eprintln!("Args...........");
+        eprintln!("\t--input\t{input}");
+        eprintln!("\t--output\t{output}");
+        eprintln!("\t--primers\t{primers_opt:?}");
+        eprintln!("\t--number\t{amp_numbers}");
+        eprintln!("\t--barcode\t{barcode}");
+        eprintln!("\t--left\t{left}");
+        eprintln!("\t--right\t{right}");
+        eprintln!("\t--distance\t{distance}");
+        eprintln!("\t--downsample\t{downsample}");
+        eprintln!("\t--min_qual\t{min_qual}");
+        eprintln!("\t--len_range\t{len_range}");
+        eprintln!("\t--retain_failed\t{save_failed}");
+        eprintln!("\t--lead\t{lead_length}");
+        eprintln!("\t--prefix\t{analysis_name}");
+        eprintln!("\t--detect_rev_primer_reads\t{detect_rev_primer_reads_number}");
+        eprintln!("\t--min_mapq\t{min_mapq}");
+        eprintln!("\t--abpoa\t{abpoa:?}");
+        eprintln!("\t--thread\t{thread}");
+        eprintln!("\t--minimap2\t{minimap2:?}");
+        eprintln!("\t--samtools\t{samtools:?}");
+        eprintln!("Args...........");
+    }
     let output_path = std::env::current_dir()
         .expect("Failed to get current directory path")
         .join(Path::new(output).to_owned());
     let output = output_path
         .to_str()
         .expect("Failed to set output directory");
+
+    let _ = rayon::ThreadPoolBuilder::new()
+        .num_threads(*thread as usize)
+        .build_global();
+    let file_name_suffix = FileNameSuffix::default();
 
     match primers_opt {
         None => amplicon_with_unknown_primers(
@@ -371,8 +514,6 @@ pub fn run_amplicons(amp_cmd: &ArgMatches) {
             *amp_numbers,
             *lead_length,
             *detect_rev_primer_reads_number,
-            *rev_primer_found_ratio,
-            *min_rev_match_reads_number,
             *downsample,
             output,
             *min_qual,
@@ -382,6 +523,9 @@ pub fn run_amplicons(amp_cmd: &ArgMatches) {
             samtools,
             *min_mapq,
             analysis_name,
+            *save_failed,
+            &file_name_suffix,
+            *thread as usize,
         ),
         Some(primers) => {
             let primers = parse_primers_from_cli(primers, analysis_name);
@@ -398,6 +542,8 @@ pub fn run_amplicons(amp_cmd: &ArgMatches) {
                 *len_range,
                 abpoa,
                 analysis_name,
+                *save_failed,
+                &file_name_suffix,
             )
         }
     }
@@ -463,7 +609,7 @@ pub fn amplicons_cmd() -> Command {
     ).arg(
         Arg::new("downsample")
             .long("downsample")
-            .default_value("10000")
+            .default_value("5000")
             .value_parser(value_parser!(usize))
             .help("max reads number that with paired primer at dual reads will be used to construct consensus")
     ).arg(
@@ -479,29 +625,27 @@ pub fn amplicons_cmd() -> Command {
             .value_parser(value_parser!(f64))
             .help("length of reads that with paired primer should be in mean_length * (1-len_range) and mean_length * (1+len_range)")
     ).arg(
+        Arg::new("retain_failed")
+            .long("retain_failed")
+            .action(ArgAction::SetTrue)
+            .help("whether to save reads with paired primers found at ends but with low quality or abnormal length")
+    ).arg(
         Arg::new("lead")
             .long("lead")
             .default_value("21")
             .value_parser(value_parser!(usize))
             .help("when no known primers specified, use first lead bases as candidate fwd primer after barcode trimmed")
     ).arg(
+        Arg::new("prefix")
+            .long("prefix")
+            .default_value("test001")
+            .help("the prefix of output file name")
+    ).arg(
         Arg::new("detect_rev_primer_reads")
             .long("detect_rev_primer_reads")
-            .default_value("1000")
+            .default_value("500")
             .value_parser(value_parser!(usize))
             .help("[UnknownPrimers]: how many reads used to detect rev primer for reads with candidate fwd primer")
-    ).arg(
-        Arg::new("rev_primer_found_ratio")
-            .long("rev_primer_found_ratio")
-            .default_value("0.5")
-            .value_parser(value_parser!(f64))
-            .help("[UnknownPrimers]: if rev primer can be detected in rear of this proportion reads, consider a paired primers found")
-    ).arg(
-        Arg::new("min_rev_match_reads")
-            .long("min_rev_match_reads")
-            .default_value("100")
-            .value_parser(value_parser!(usize))
-            .help("[UnknownPrimers]: if reads number with rev primer detected in rear is less than this value, ignore it")
     ).arg(
         Arg::new("min_mapq")
             .long("min_mapq")
@@ -514,6 +658,13 @@ pub fn amplicons_cmd() -> Command {
             .default_value("abpoa")
             .help("abpoa path")
     ).arg(
+        Arg::new("thread")
+            .short('t')
+            .long("thread")
+            .default_value("4")
+            .value_parser(value_parser!(u16).range(1..=32))
+            .help("minimap2 thread")
+    ).arg(
         Arg::new("minimap2")
             .long("minimap2")
             .default_value("minimap2")
@@ -523,10 +674,5 @@ pub fn amplicons_cmd() -> Command {
             .long("samtools")
             .default_value("samtools")
             .help("[UnknownPrimers]: samtools path")
-    ).arg(
-        Arg::new("prefix")
-            .long("prefix")
-            .default_value("test001")
-            .help("the prefix of output file name")
     )
 }

@@ -78,21 +78,21 @@ impl Primer {
                 continue;
             }
             let mut primer_fields = line.split("\t");
-            let name = primer_fields.next();
+            let primer_name = primer_fields.next();
             let fwd_primer = primer_fields.next();
             let rev_primer = primer_fields.next();
-            if name.is_none() || fwd_primer.is_none() || rev_primer.is_none() {
+            if primer_name.is_none() || fwd_primer.is_none() || rev_primer.is_none() {
                 quit_with_error(&format!(
                     "Failed to parse primer at line {}",
                     line_number + 1
                 ))
             }
-            let name = format!("{analysis_name}_{}", analysis_name);
+            let used_primer_name = format!("{analysis_name}_{}", primer_name.unwrap());
             let fwd_primer = fwd_primer.unwrap().as_bytes();
             let rev_primer = rev_primer.unwrap().as_bytes();
-            let primer = Primer::new(&name, fwd_primer, rev_primer);
-            if primers.insert(name.clone(), primer).is_some() {
-                quit_with_error(&format!("Duplicate primer name found: {name}"))
+            let primer = Primer::new(&used_primer_name, fwd_primer, rev_primer);
+            if primers.insert(used_primer_name.clone(), primer).is_some() {
+                quit_with_error(&format!("Duplicate primer name found: {used_primer_name}"))
             }
         }
         primers

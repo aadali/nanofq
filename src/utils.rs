@@ -1,9 +1,13 @@
 use ansi_term::Color;
+use chrono::Local;
+use colored::Colorize;
+use env_logger::fmt::Formatter;
+use log::{Level, LevelFilter, Record};
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::OnceLock;
-
 static BASES: OnceLock<HashMap<u8, u8>> = OnceLock::new();
 // static Q2P_TABLE: OnceLock<[f64; 128]> = OnceLock::new();
 
@@ -19,13 +23,13 @@ pub fn _positive_int_parse(
     x: &str,
     para: &str,
     min: usize,
-    max: usize
+    max: usize,
 ) -> Result<usize, anyhow::Error> {
     let parsed_usize = match x.parse::<usize>() {
         Ok(value) => {
             if value < min || value > max {
                 quit_with_error(&format!("Error: {para} must be between {min} and {max}"))
-            }   else {
+            } else {
                 value
             }
         }
@@ -387,13 +391,14 @@ pub fn run_minimap2_and_index(
     prefix: &str,
     minimap2: Option<&str>,
     samtools: Option<&str>,
+    thread: usize,
 ) -> String {
     let minimap2 = check_program("minimap2", minimap2);
     let samtools = check_program("samtools", samtools);
     check_and_create_dir(work_dir);
     let mm2_child = std::process::Command::new(minimap2)
         .current_dir(work_dir)
-        .args(["-a", "-x", "map-ont", "-t", "4", draft, fastq_file])
+        .args(["-a", "-x", "map-ont", "-t", &thread.to_string(), draft, fastq_file])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -410,7 +415,7 @@ pub fn run_minimap2_and_index(
             "-o",
             &format!("{prefix}.remaining.raw.bam"),
             "--threads",
-            "2",
+            &thread.to_string(),
         ])
         .output()
         .expect("samtools view failed to start");
@@ -424,7 +429,7 @@ pub fn run_minimap2_and_index(
         .args([
             "sort",
             "--threads",
-            "2",
+            &thread.to_string(),
             "-o",
             &format!("{prefix}.remaining.sorted.bam"),
             &format!("{prefix}.remaining.raw.bam"),
@@ -443,6 +448,10 @@ pub fn run_minimap2_and_index(
     if !index_child.status.success() {
         quit_with_error(str::from_utf8(index_child.stderr.as_slice()).unwrap())
     }
+    let _ = std::process::Command::new("rm")
+        .current_dir(work_dir)
+        .arg(format!("{prefix}.remaining.raw.bam"))
+        .output();
     format!("{work_dir}/{prefix}.remaining.sorted.bam")
 }
 
@@ -470,7 +479,11 @@ pub fn run_abpoa(
 
     std::fs::write(
         &consensus_output,
-        format!(">{amplicon_name}_{}\n{}\n", sequence.as_bytes().len(), sequence),
+        format!(
+            ">{amplicon_name}_{}\n{}\n",
+            sequence.as_bytes().len(),
+            sequence
+        ),
     )
     .expect(&format!(
         "Failed to write draft consensus into {consensus_output}"
@@ -495,6 +508,38 @@ pub fn check_and_create_dir(target_dir: &str) {
     }
 }
 
+pub fn init_log() {
+    colog::default_builder()
+        .filter_level(LevelFilter::Debug)
+        .format(|buf: &mut Formatter, record: &Record| {
+            let now = Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
+            writeln!(
+                buf,
+                "[{}] [{}] {}",
+                now,
+                match record.level() {
+                    Level::Error => {
+                        "ERR".red()
+                    }
+                    Level::Warn => {
+                        "WAR".yellow()
+                    }
+                    Level::Info => {
+                        "INF".green()
+                    }
+                    Level::Debug => {
+                        "DBG".green()
+                    }
+                    Level::Trace => {
+                        "TRC".magenta()
+                    }
+                },
+                // record.target(),
+                record.args()
+            )
+        })
+        .init();
+}
 /*
 SQK-LSK114
 LSK114 library reads structure
@@ -598,4 +643,3 @@ The full structure of CRTA is like below:
 CRTA:                      5'-CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGT-3'
 CRTA_REV_COM:   3'-TTTTTTTTTTTGAACGCCCGCCGCCTGAGAGGAGACTTCTATCTCGCTGTCCGTTCA-5'
 */
-
