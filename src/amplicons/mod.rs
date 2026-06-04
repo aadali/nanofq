@@ -40,47 +40,23 @@ impl Default for FileNameSuffix {
 }
 
 fn amplicon_with_known_primers(
-    input_fastq: &str,
-    bar_idx: usize,
-    left_range: usize,
-    right_range: usize,
-    max_distance: u8,
+    reads_classifier: ReadsClassifier,
     primers: HashMap<String, Primer>,
     reads_downsample: usize,
     output_dir: &str,
     min_read_quality: f64,
     length_range: f64,
     abpoa: Option<&str>,
-    analysis_name: &str,
     save_failed: bool,
     file_name_suffix: &FileNameSuffix,
 ) {
-    let barcode = Barcode::new(BARCODES[bar_idx].as_bytes());
-    let reads_collector = preprocess::ReadsCollector::new(
-        input_fastq,
-        &barcode,
-        left_range,
-        right_range,
-        max_distance,
-    );
-    let all_reads = reads_collector.collect_fastqs();
-    let mut classifier = ReadsClassifier::new(
-        all_reads,
-        21,
-        left_range,
-        right_range,
-        max_distance,
-        analysis_name.to_string(),
-    );
-    check_and_create_dir(output_dir);
-    let clean_fastq = format!("{output_dir}/{analysis_name}{}", file_name_suffix.clean);
-    classifier.save_clean_fastq(&clean_fastq);
+    let mut classifier = reads_classifier;
     let primer_name2reads_idx = classifier.classify_reads_with_known_primers(&primers);
     primer_name2reads_idx
         .par_iter()
         .for_each(|(primer_name, reads_idx)| {
             let fq = format!(
-                "{output_dir}/{analysis_name}_{primer_name}{}",
+                "{output_dir}/{primer_name}{}",
                 file_name_suffix.paired_primers_reads
             );
             let mut file = BufWriter::new(std::fs::File::create(fq).unwrap());
@@ -100,10 +76,7 @@ fn amplicon_with_known_primers(
             let reads = classifier.remove_reads_with_idxes(&reads_idx);
             (
                 primer_name.clone(),
-                ReadsWithPairedPrimers::new(
-                    reads,
-                    reads_downsample,
-                ),
+                ReadsWithPairedPrimers::new(reads, reads_downsample),
             )
         })
         .collect::<Vec<_>>();
@@ -114,11 +87,11 @@ fn amplicon_with_known_primers(
         .for_each(|(primer_name, mut reads_with_primer)| {
             let total_reads_with_paired_primers = reads_with_primer.reads.len();
             let this_primer_fastq = format!(
-                "{output_dir}/{analysis_name}_{primer_name}{}",
+                "{output_dir}/{primer_name}{}",
                 file_name_suffix.good_reads
             );
             let failed_fastq = format!(
-                "{output_dir}/{analysis_name}_{primer_name}{}",
+                "{output_dir}/{primer_name}{}",
                 file_name_suffix.bad_reads
             );
             let bad_reads_size = reads_with_primer.filter(
@@ -142,7 +115,7 @@ fn amplicon_with_known_primers(
 
             if !reads_with_primer.redundant_reads.is_empty() {
                 let redundant_fastq = format!(
-                    "{output_dir}/{analysis_name}_{primer_name}{}",
+                    "{output_dir}/{primer_name}{}",
                     file_name_suffix.redundant_reads
                 );
                 reads_with_primer.save_redundant_fastq(&redundant_fastq);
@@ -163,13 +136,8 @@ fn amplicon_with_known_primers(
 }
 
 fn amplicon_with_unknown_primers(
-    input_fastq: &str,
-    bar_idx: usize,
-    left_range: usize,
-    right_range: usize,
-    max_distance: u8,
+    reads_classifier: ReadsClassifier,
     amplicons_number: usize,
-    lead_length: usize,
     guess_reads_number: usize,
     reads_downsample: usize,
     output_dir: &str,
@@ -184,34 +152,13 @@ fn amplicon_with_unknown_primers(
     file_name_suffix: &FileNameSuffix,
     thread: usize,
 ) {
+    let mut classifier = reads_classifier;
     let mut detected_primers = vec![];
-    let barcode = Barcode::new(BARCODES[bar_idx].as_bytes());
-    let reads_collector = preprocess::ReadsCollector::new(
-        input_fastq,
-        &barcode,
-        left_range,
-        right_range,
-        max_distance,
-    );
-    let all_reads = reads_collector.collect_fastqs();
-    let mut classifier = ReadsClassifier::new(
-        all_reads,
-        lead_length,
-        left_range,
-        right_range,
-        max_distance,
-        analysis_name.to_string(),
-    );
-    check_and_create_dir(output_dir);
-    classifier.save_clean_fastq(&format!(
-        "{output_dir}/{analysis_name}{}",
-        file_name_suffix.clean
-    ));
     for primer_idx in 1..amplicons_number + 1 {
         {
             info!("Analysis {primer_idx}th Amplicon......");
         }
-        // Step1.1: guess one paired primer from barcode trimmed fastq
+        // Step1.1: guess one paired primers from barcode trimmed fastq
         let detected_paired_primer =
             classifier.detect_one_primer(guess_reads_number, amplicons_number, true, 5);
 
@@ -297,7 +244,7 @@ fn draft_consensus_with_one_known_primer(
     let reads = classifier.remove_reads_with_idxes(&reads_idx);
     let total_paired_reads = reads.len();
     info!(
-        "{} reads with paired primer [{}] and used to construct ReadsWithPrimer",
+        "{} reads with paired primers [{}] and used to construct ReadsWithPrimer",
         total_paired_reads, primer_name
     );
     let mut reads_with_primer = ReadsWithPairedPrimers::new(reads, reads_downsample);
@@ -350,7 +297,7 @@ fn draft_consensus_with_one_known_primer(
     );
     classifier.save_fastq(&clean_remaining_fastq);
     info!(
-        "{}={total_reads}-{total_paired_reads} remaining records, saved into {clean_remaining_fastq}",
+        "{}={total_reads}-{total_paired_reads} remaining reads, saved into {clean_remaining_fastq}",
         total_reads - total_paired_reads
     );
 
@@ -364,7 +311,7 @@ fn draft_consensus_with_one_known_primer(
     */
     // Step7: Map all remaining barcod trimmed fastq records to this draft consensus.
     info!(
-        "Map remaining reads to draft_consensus to search reads that without paired primer detected at ends"
+        "Map remaining reads to draft_consensus to search reads that without paired primers detected at ends"
     );
     let sorted_bam = run_minimap2_and_index(
         output_dir,
@@ -499,20 +446,36 @@ pub fn run_amplicons(amp_cmd: &ArgMatches) {
         .to_str()
         .expect("Failed to set output directory");
 
-    let _ = rayon::ThreadPoolBuilder::new()
-        .num_threads(*thread as usize)
-        .build_global();
     let file_name_suffix = FileNameSuffix::default();
+
+    let barcode = Barcode::new(BARCODES[*barcode as usize].as_bytes());
+    let reads_collector = preprocess::ReadsCollector::new(
+        input,
+        &barcode,
+        *left,
+        *right,
+        *distance,
+    );
+    let all_reads = reads_collector.collect_fastqs(*thread as usize);
+    let classifier = ReadsClassifier::new(
+        all_reads,
+        *lead_length,
+        *left,
+        *right,
+        *distance,
+        analysis_name.to_string(),
+    );
+    check_and_create_dir(output);
+    classifier.save_clean_fastq(&format!(
+        "{output}/{analysis_name}{}",
+        file_name_suffix.clean
+    ));
+
 
     match primers_opt {
         None => amplicon_with_unknown_primers(
-            input,
-            *barcode as usize,
-            *left,
-            *right,
-            *distance,
+            classifier,
             *amp_numbers,
-            *lead_length,
             *detect_rev_primer_reads_number,
             *downsample,
             output,
@@ -530,18 +493,13 @@ pub fn run_amplicons(amp_cmd: &ArgMatches) {
         Some(primers) => {
             let primers = parse_primers_from_cli(primers, analysis_name);
             amplicon_with_known_primers(
-                input,
-                *barcode as usize,
-                *left,
-                *right,
-                *distance,
+                classifier,
                 primers,
                 *downsample,
                 output,
                 *min_qual,
                 *len_range,
                 abpoa,
-                analysis_name,
                 *save_failed,
                 &file_name_suffix,
             )
@@ -551,7 +509,8 @@ pub fn run_amplicons(amp_cmd: &ArgMatches) {
 
 pub fn amplicons_cmd() -> Command {
     Command::new("amplicon")
-        .about("get draft consensuses from mixed Ligation Nanopore Long amplicons reads with known or unknown primers")
+        // .about("get draft consensuses from mixed Ligation Nanopore Long amplicons reads with known or unknown primers")
+        .about("generate draft consensus sequences from mixed nanopore Ligation-based amplicons reads with known (provided via --primers) or unknown primers")
         .arg(
             Arg::new("input")
             .short('i')
@@ -563,26 +522,26 @@ pub fn amplicons_cmd() -> Command {
             .short('o')
             .long("output")
             .required(true)
-            .help("output directory")
+            .help("output directory for resuults")
     ).arg(
         Arg::new("primers")
             .short('p')
             .long("primers")
-            .help("known primers string with format: <PrimerName>,<FwdPrimer>,<RevPrimer>[;PrimerName,FwdPrimer,RevPrimer...] or primers file with each line format: PrimerName\\tFwdPrimer\\tRevPrimer")
+            .help("known primers. format: \"PrimerName,FwdPrimer,RevPrimer[;...]\" or a file with each line format: PrimerName\\tFwdPrimer\\tRevPrimer")
     ).arg(
         Arg::new("number")
             .short('n')
             .long("number")
             .default_value("1")
             .value_parser(value_parser!(usize))
-            .help("when no known primers specified, how many amplicons mixed in this sample, used with [UnknownPrimers] parameters")
+            .help("number of amplicons mixed in the sample when no known primers provided")
     ).arg(
         Arg::new("barcode")
             .short('b')
             .long("barcode")
             .default_value("0")
             .value_parser(value_parser!(u32).range(0..=96))
-            .help("which barcode used, chose from 0-96. 0 means Ligation Sequence Kit used without barcode")
+            .help("barcode index (0-96). 0 means no barcode used")
     ).arg(
         Arg::new("left")
             .short('l')
@@ -590,7 +549,7 @@ pub fn amplicons_cmd() -> Command {
             .required(false)
             .default_value("150")
             .value_parser(value_parser!(usize))
-            .help("the first this value bases of read used to detect barcode or primer")
+            .help("first N bases of read used for barcode/primer detection")
     ).arg(
         Arg::new("right")
             .short('r')
@@ -598,20 +557,20 @@ pub fn amplicons_cmd() -> Command {
             .required(false)
             .default_value("150")
             .value_parser(value_parser!(usize))
-            .help("the last this value bases of read used to detect barcode or primer")
+            .help("last N bases of read used for barcode/primer detection")
     ).arg(
         Arg::new("distance")
             .short('d')
             .long("distance")
             .default_value("3")
             .value_parser(value_parser!(u8))
-            .help("min distance between barcode or primer with sequence in read")
+            .help("min edit distance allowed between barcode/primer and read sequence")
     ).arg(
         Arg::new("downsample")
             .long("downsample")
             .default_value("5000")
             .value_parser(value_parser!(usize))
-            .help("max reads number that with paired primer at dual reads will be used to construct consensus")
+            .help("max number of reads with paired primers used to build consensus")
     ).arg(
         Arg::new("min_qual")
             .long("min_qual")
@@ -623,35 +582,48 @@ pub fn amplicons_cmd() -> Command {
             .long("len_range")
             .default_value("0.05")
             .value_parser(value_parser!(f64))
-            .help("length of reads that with paired primer should be in mean_length * (1-len_range) and mean_length * (1+len_range)")
-    ).arg(
+            .help("allowed reads length with paired primers from mean length. e.g., 0.05 = ±5%")
+    )
+        .arg(
+            Arg::new("prefix")
+                .long("prefix")
+                .default_value("test001")
+                .help("the prefix of output files ")
+        )
+        .arg(
         Arg::new("retain_failed")
             .long("retain_failed")
             .action(ArgAction::SetTrue)
-            .help("whether to save reads with paired primers found at ends but with low quality or abnormal length")
+            .help("whether to save reads with paired primers but failing quality/length filters")
     ).arg(
         Arg::new("lead")
             .long("lead")
             .default_value("21")
             .value_parser(value_parser!(usize))
-            .help("when no known primers specified, use first lead bases as candidate fwd primer after barcode trimmed")
-    ).arg(
-        Arg::new("prefix")
-            .long("prefix")
-            .default_value("test001")
-            .help("the prefix of output file name")
-    ).arg(
+            .help("[unknown primers mode]: use first N bases as candidate forward primer after barcode trimmed")
+    )
+        .arg(
         Arg::new("detect_rev_primer_reads")
             .long("detect_rev_primer_reads")
             .default_value("500")
             .value_parser(value_parser!(usize))
-            .help("[UnknownPrimers]: how many reads used to detect rev primer for reads with candidate fwd primer")
+            .help("[unknown primers mode]: number of reads used to detect reverse primer")
     ).arg(
         Arg::new("min_mapq")
             .long("min_mapq")
             .default_value("50")
             .value_parser(value_parser!(u8))
-            .help("[UnknownPrimers]: the min mapq used to collect reads that with no paired primer detected but can be mapped to draft consensus")
+            .help("[unknown primers mode]: min MAPQ used to collect reads that with no paired primers detected but can be mapped to draft consensus")
+    ).arg(
+        Arg::new("minimap2")
+            .long("minimap2")
+            .default_value("minimap2")
+            .help("[unknown primers mode]: minimap2 path")
+    ).arg(
+        Arg::new("samtools")
+            .long("samtools")
+            .default_value("samtools")
+            .help("[unknown primers mode]: samtools path")
     ).arg(
         Arg::new("abpoa")
             .long("abpoa")
@@ -663,16 +635,6 @@ pub fn amplicons_cmd() -> Command {
             .long("thread")
             .default_value("4")
             .value_parser(value_parser!(u16).range(1..=32))
-            .help("minimap2 thread")
-    ).arg(
-        Arg::new("minimap2")
-            .long("minimap2")
-            .default_value("minimap2")
-            .help("[UnknownPrimers]: minimap2 path")
-    ).arg(
-        Arg::new("samtools")
-            .long("samtools")
-            .default_value("samtools")
-            .help("[UnknownPrimers]: samtools path")
+            .help("number of threads")
     )
 }

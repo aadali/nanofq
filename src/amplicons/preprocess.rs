@@ -6,6 +6,7 @@ use bio::alphabets::dna::revcomp;
 use bio::pattern_matching::myers::Myers;
 use log::info;
 use rayon::prelude::*;
+use std::cell::RefCell;
 use std::cmp::Reverse;
 use std::io::BufWriter;
 
@@ -34,44 +35,76 @@ impl<'a> ReadsCollector<'a> {
         }
     }
 
-    pub fn collect_fastqs(&self) -> HashMap<usize, FastqRecord> {
+    pub fn collect_fastqs(&self, thread: usize) -> HashMap<usize, FastqRecord> {
         let raw_all_reads = read_fastq(self.fastq_file, true);
         let mut all_reads =
             HashMap::with_capacity_and_hasher(raw_all_reads.len(), RandomState::new());
-        let mut front_bar_myers = self.barcode.front_myers();
-        let mut rear_bar_myers = self.barcode.rear_myers();
-        let mut length0_number = 0;
-        let mut total_reads = 0usize;
+        let front_bar_myers = self.barcode.front_myers();
+        let rear_bar_myers = self.barcode.rear_myers();
+        let mut empty_reads = 0;
+        let total_reads = raw_all_reads.len();
         let mut barcode_trimmed_reads = 0;
-        for (idx, mut read) in raw_all_reads.into_iter().enumerate() {
-            total_reads += 1;
-            let (read_no_len, is_split_off) = read.split_off_front_barcode_end(
-                &mut front_bar_myers,
-                self.left_range,
-                self.max_distance,
-            );
-            if read_no_len {
-                length0_number += 1;
-                barcode_trimmed_reads += 1;
-                continue;
-            }
+        
+        thread_local! {
+            static FRONT_BAR_MYERS: RefCell<Option<Myers>> = RefCell::default();
+            static REAR_BAR_MYERS: RefCell<Option<Myers>> = RefCell::default();
+        };
 
-            let (read_no_len, is_truncated) = read.truncate_at_rear_barcode_start(
-                &mut rear_bar_myers,
-                self.right_range,
-                self.max_distance,
-            );
-            if read_no_len {
-                length0_number += 1;
-                barcode_trimmed_reads += 1;
-                continue;
-            }
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(thread)
+            .start_handler(move |_| {
+                FRONT_BAR_MYERS.with_borrow_mut(|x| *x = Some(front_bar_myers.clone()));
+                REAR_BAR_MYERS.with_borrow_mut(|x| *x = Some(rear_bar_myers.clone()));
+            })
+            .build_global()
+            .unwrap();
 
-            if is_split_off || is_truncated {
-                barcode_trimmed_reads += 1;
-            }
-            all_reads.insert(idx, read);
-        }
+        raw_all_reads
+            .into_par_iter()
+            .enumerate()
+            .map(|(idx, mut read)| {
+                let mut read_is_empty: bool = false;
+                let mut is_trimmed: bool = false;
+                FRONT_BAR_MYERS.with_borrow_mut(|x| {
+                    let (read_no_len, is_split_off) = read.split_off_front_barcode_end(
+                        x.as_mut().unwrap(),
+                        self.left_range,
+                        self.max_distance,
+                    );
+                    read_is_empty = read_no_len;
+                    is_trimmed = is_split_off;
+                });
+                if read_is_empty {
+                    return (true, idx, None);
+                }
+                REAR_BAR_MYERS.with_borrow_mut(|x| {
+                    let (read_no_len, is_truncated) = read.truncate_at_rear_barcode_start(
+                        x.as_mut().unwrap(),
+                        self.right_range,
+                        self.max_distance,
+                    );
+                    read_is_empty = read_no_len;
+                    if !is_trimmed {
+                        is_trimmed = is_truncated;
+                    }
+                });
+                if read_is_empty {
+                    return (true, idx, None);
+                }
+                return (is_trimmed, idx, Some(read));
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .for_each(|(read_is_trimmed, read_idx, read_opt)| {
+                if read_is_trimmed {
+                    barcode_trimmed_reads += 1;
+                }
+                if read_opt.is_some() {
+                    all_reads.insert(read_idx, read_opt.unwrap());
+                } else {
+                    empty_reads += 1;
+                }
+            });
 
         {
             info!("{} reads found in {}", total_reads, self.fastq_file);
@@ -80,7 +113,7 @@ impl<'a> ReadsCollector<'a> {
                 all_reads.len(),
                 barcode_trimmed_reads
             );
-            info!("{length0_number} dropped cause zero length after trimmed");
+            info!("{empty_reads} dropped cause zero length after trimmed");
         }
         all_reads
     }
