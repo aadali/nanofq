@@ -1,106 +1,164 @@
-# nanofq
+   # nanofq
+   
+   A simple Rust program designed for processing nanopore long reads, providing functionalities such as **statistics (stats)**, **filtering (filter)**, **extracting subsequences (subseq)** and **generating draft consensus sequences from amplicon reads**. 
+   ## Installation
+   
+   To get started with `nanofq`, follow the steps below. Ensure you have Cargo version 1.85.0 or higher installed.
+   
+   ```bash
+   git clone https://github.com/aadali/nanofq
+   cd nanofq
+   cargo build --release 
+   ```
+   Then you can find `nanofq` in `./target/release`
+   > Note: For generating statistical plots, `python3` along with the `matplotlib` library is required.
+   
+   ## Usage
+   
+   ```
+   A simple program for nanopore long reads to stats, generate draft consensus from amplicons, filter, subseq...
+   
+   Usage: nanofq [COMMAND]
+   
+   Commands:
+     stats     stats nanopore reads, output stats result, summary and optional figures
+     amplicon  generate draft consensus sequences from mixed nanopore Ligation-based amplicons reads with known (provided via --primers) or unknown primers
+     filter    filter nanopore reads by length, quality or optional gc content
+     subseq    extract specified reads (by name, name list or region) from a fastq[.gz] or indexed bam file
+     help      Print this message or the help of the given subcommand(s)
+   ```
+   
+   ### stats
+   
+   ```
+   stats nanopore reads, output stats result, summary and optional figures
 
-A simple Rust program designed for processing nanopore long reads, providing functionalities such as statistics generation, filtering, and adapter trimming.
-
-## Installation
-
-To get started with `nanofq`, follow the steps below. Ensure you have Cargo version 1.85.0 or higher installed.
-
-```bash
-git clone https://github.com/aadali/nanofq
-cd nanofq
-cargo build --release 
-```
-Then you can find `nanofq` in `./target/release`
-> Note: For generating statistical plots, `python3` along with the `matplotlib` library is required.
-
-## Usage
-
-```
-A simple program for nanopore long reads to stats, subseq, filter, trim...
-
-Usage: nanofq [COMMAND]
-
-Commands:
-  stats     stats nanopore fastq/sam/bam, output the stats result, summary and figures
-  subseq    get sub fastq records from a fastq[.gz] or indexed bam file
-  filter    filter nanopore fastq by length, quality or gc content
-  trim      trim adapter, barcode, primer that artificial sequence in nanopore fastq
-  amplicon  get draft consensus from Ligation Nanopore Long reads for amplicon
-  help      Print this message or the help of the given subcommand(s)
-
-Options:
-  -h, --help     Print help
-  -V, --version  Print version
-```
-### Input Parameters
-In generally, for subcommand, there are some possible input scenarios:
-1. a single fastq or fastq.gz
-2. a directory containing some fastq or fastq.gz files
-3. fastq from stdin [default]
-4. *a bam or sam file*, only for `stats` subcommand
-5. *a bam or sam file from stdin with `--bam` specified*, only for `stats` subcommand
-
-### Output
-The output can be directed to either standard output (stdout) or a specific file path. Gzipped output is not supported.
-
-### stats
-
-```
-stats nanopore fastq/sam/bam, output the stats result, summary and figures
-
-Usage: nanofq stats [OPTIONS]
+Usage: nanofq stats [OPTIONS] --input <input>
 
 Options:
-  -i, --input <input>            The input file, could be
-                                         1. a single fastq[.gz]
-                                         2. a directory containing some fastq[.gz]
-                                         3. a bam or sam file
-                                         4. fastq from stdin [default]
-                                         5. bam or sam from stdin with --bam specified
-  -o, --output <output>          Output the stats result into this tsv file if specified. it will be truncated if it's a existing file.
-  -s, --summary <summary>        Output stats summary into this file, it will be truncated if it exists [default: ./NanofqStatsSummary.txt]
-  -n, --topn <topn>              Write the top N longest reads and highest quality reads info into summary file [default: 5]
-  -q, --quality <quality>        Count the reads number that whose quality is bigger than this value, multi value can be separated by comma [default: 25,20,18,15,12,10]
-  -d, --dont_use_dorado_quality  Don't use dorado q-score calculation. Using dorado quality means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value
-  -l, --length <length>          Count the reads number that whose length is bigger than this value if you set this parameter, multi values can be separated by comma
-      --gc                       Whether to stats the gc content
-  -b, --bam                      If set, treat input as bam/sam
-  -I, --index                    For sorted but unindexed bam file, build index firstly if this para is specified
-  -t, --thread <thread>          How many threads will be used [default: 1]
-      --python <python>          the python3 path, and matplotlib is needed [default: python3]
-  -p, --plot <plot>              Whether to make plot, if set, it should be the prefix of figure path without filename extension
-  -f, --format <format>          Which format figure do you want if --plot is true, this para can be set multi times [default: pdf] [possible values: png, pdf, jpg, svg]
-      --quantile <quantile>      the shortest ratio and longest ratio of reads will not be rendered on figure, should be in range(0.0, 1.0) [default: 0.01]
-  -h, --help                     Print help
+  -i, --input <input>        the input file, could be
+                                 1. a single fastq[.gz]
+                                 2. a directory containing some fastq[.gz]
+                                 3. a bam or sam file
+  -o, --output <output>      output the stats result into this tsv file if specified. it will be truncated if it exists
+  -s, --summary <summary>    output stats summary into this file, it will be truncated if it exists [default: ./NanofqStatsSummary.txt]
+  -n, --topn <topn>          write the top N longest reads and highest quality reads info into summary file [default: 5]
+  -u, --use_dorado_q         use dorado q-score calculation. this means the leading 60 bases will be trimmed if the read length is longer than 60 when calculating the read Q-value
+  -q, --quality <quality>    count the reads whose quality is greater than this value, multiple values can be separated by comma [default: 25,20,18,15,12,10]
+  -l, --length <length>      count reads whose length is greater than this value if you set this parameter, multiple values can be separated by comma
+      --gc                   whether to calculate the GC content [default: false]
+  -I, --index                build index firstly for sorted but unindexed bam file [default: false]
+  -t, --thread <thread>      number of threads [default: 1]
+  -c, --chunk <chunk>        reads chunk size when multi threads used [default: 50000]
+      --python <python>      python3 path, matplotlib will be imported [default: python3]
+  -p, --plot <plot>          whether to make plot, if set, it should be the prefix of figure path without filename extension
+  -f, --format <format>      which format figure do you want if --plot is set, this parameter can be set multi times [default: pdf] [possible values: png, pdf, jpg, svg]
+      --quantile <quantile>  the top and bottom quantile of reads lengths will be excluded from the plot [default: 0.01]
+   stats nanopore reads, output stats result, summary and optional figures
 ```
 The program processes all input fastqs and outputs the statistical results to the specified `--output` file and a summary to the `--summary` file. If the `--plot` option is enabled, it also generates visualizations similar to the following:
 
 <img alt="length_and_quality_distribution" height="240" src="./doc/distribution.png" width="400"/>
 
-This figure was generated from an uncompressed fastq file containing 16.8G bases, 1460671 reads, with an N50 of 21849 and a mean length of 11523. The command took 12.5 seconds to execute on a MacBook Pro with an M4 CPU and 16GB of RAM.
-
+#### stats examples
 ```bash
 nanofq stats -i test.fastq -o test001.stats.tsv -s test001.summary.txt -t 4 --plot ./test001 -f pdf -f png -f svg
 # with 4 threads,
 # stats test.fastq in current dir, 
 # output stats result: test001.stats.tsv and summary file: test001.summary.txt 
-# make plot, ./test001.pdf, ./test001.png, ./test001.svg
+# generate plot, ./test001.pdf, ./test001.png, ./test001.svg
+
+nanofq stats -i ./fastqs_directory -n 10 --gc -l 1000,10000,50000,100000
+# stats all fastq file in directory ./fastqs_directory
+# output top 10 longest reads and highest quality reads in summary
+# stats gc content
+# output reads stats infomation whose length is greater than 1k,10k,50k,100k in default summary file ./NanofqStatsSummary.txt
 ```
+### amplicon
+```aiignore
+generate draft consensus sequences from mixed nanopore Ligation-based amplicons reads with known (provided via --primers) or unknown primers
+
+Usage: nanofq amplicon [OPTIONS] --input <input> --output <output>
+
+Options:
+  -i, --input <input>                                      the input fastq[.gz] file
+  -o, --output <output>                                    output directory for results
+  -p, --primers <primers>                                  known primers. format: "PrimerName,FwdPrimer,RevPrimer[;...]" or a file with each line format: PrimerName\tFwdPrimer\tRevPrimer
+  -n, --number <number>                                    number of amplicons mixed in the sample when no known primers provided [default: 1]
+  -b, --barcode <barcode>                                  barcode index (0-96). 0 means no barcode is used [default: 0]
+  -l, --left <left>                                        first N bases of read used for barcode/primer detection [default: 150]
+  -r, --right <right>                                      last N bases of read used for barcode/primer detection [default: 150]
+  -d, --distance <distance>                                min edit distance allowed between barcode/primer and read sequence [default: 3]
+      --downsample <downsample>                            max number of reads with paired primers used to build consensus [default: 5000]
+      --min_qual <min_qual>                                min read quality that with paired primers at dual reads [default: 15]
+      --len_range <len_range>                              allowed reads length with paired primers from mean length. e.g., 0.05 = ±5% [default: 0.05]
+      --prefix <prefix>                                    the prefix of output files  [default: test001]
+      --retain_failed                                      whether to save reads with paired primers but failing quality/length filters
+      --lead <lead>                                        [unknown primers mode]: use first N bases as candidate forward primer after barcode trimmed [default: 21]
+      --detect_rev_primer_reads <detect_rev_primer_reads>  [unknown primers mode]: number of reads used to detect reverse primer [default: 500]
+      --min_mapq <min_mapq>                                [unknown primers mode]: min MAPQ used to collect reads that with no paired primers detected but can be mapped to draft consensus [default: 50]
+      --minimap2 <minimap2>                                [unknown primers mode]: minimap2 path [default: minimap2]
+      --samtools <samtools>                                [unknown primers mode]: samtools path [default: samtools]
+      --abpoa <abpoa>                                      abpoa path [default: abpoa]
+  -t, --thread <thread>                                    number of threads [default: 4]
+  -h, --help                                               Print help
+```
+The `amplicon` subcommand is used to generated draft consensus from Nanopore Ligation-based long amplicons reads. Firstly all reads will be adapter/barcode trimmed and collected. Then it can be run in two mode to classify reads by primers:
+1) Known Primers: When known primers is provided by `--primers` parameter, program will detect primers at dual ends of each read. If forward primer and reverse primer can be detected simultaneously, these reads are called paired‑primer reads. For each paired primers in `--primers`, some paired-primers reads collected, drop some paired-primers-reads depending on `--min-qual` and `len_range`, save them in `*.bad.fastq` if `--retain_failed` is set. Up to `--downsample` reads whose length are closest to mean_length are selected and saved in `*.good.fastq`. The remaining paired-primers reads are saved in `*.redundant.fastq`. The `*.good.fasq` file is used to construct draft consensus.
+2) Unknown primers: 
+   1. Theoretically, after adapter/brcode trimming, the read should start with forward or reverse primer (each strand of DNA may be sequenced). 
+   2. So the first N (`--lead`) bases of reads are used as candidate primers. Calculate the frequency of all lead sequences and sort them in descending order by frequency. 
+   3. Use the most frequency lead sequence as candidate forward primer (fwd_primer), then search for the reverse complementary of other lead_seqs (called by rev_primer) at 3'end of all reads that starts with fwd_primer. If many reverse complementary of rev_primer can be found, a paired primers is considered found.
+   4. The paired primers discovered in the previous step are used to search all reads and classify these paired‑primer reads. Then drop some paired‑primer reads based on `--min_qual` and `--len_range` (save them in *.bad.fastq if `--retain_failed`). Select up to `--downsample` reads whose lengths are closest to the mean length and save them in `*.good.fastq`. Other paired‑primer reads go to `*.redundant.fastq`. The `*.good.fastq` is used to build the draft consensus.
+   5. The remaining reads that do not have paired primers are mapped to the previous draft consensus. Select alignments with `--min_mapq` and remove them from the remaining reads.
+   6. Proceed to the next iteration to detect the next paired primers until all `--number` amplicons are finished.
+#### `amplicon` examples
+```aiignore
+nanofq amplicon -i amplicons.fatq -o ./known_primers_output -p known_primers.tsv --barcode 1 
+# known primers mode
+# barcode1 sequence of NBD114.24 used to trimmed barcode in reads
+# try to generated N amplicons' draft consensus. N is equal the primers numbers in known_primers.txv
+
+nanofq amplicon -i amplicons.fastq -o ./unknown_primers_output -n 10 --barcode 1
+# unknown primers mode, cause no known primers specified by `--primers`
+# barcode1 sequence of NBD114.24 used to trimmed barcode in reads
+# try to generated N amplicons' draft consensus. The number of amplicons mixed in this sample should be specified by `--number` 
+```
+
+#### amplicon outputs
+* `*detected_primers.tsv` detected primers in unknown primers mode
+* `*clean.fastq` adapter/barcode trimmed fastq
+* `*primer1.with_paired_primers.bad.fastq` reads with paired primers detected at dual ends but failing quality/length filters
+* `*primer1.with_paired_primers.good.fastq` reads with paired primers and passing qulality/length filters, selected up to `--downsample` reads whose length are closest to the mean length
+* `*primer1.with_paired_primers.redundant.fastq` reads with paired primers that are neither good nor bad
+* `*primer1.remaining.fastq` all reads except those with paired primers for primer1. Some reads from primer1 that lack paired primers may be in this file. These reads will be selected by map them to draft_consensus. In reads in `*.primer2.remaining.fastq`, reads from primer1 and those with paired primer2 have been excluded. and so on...
+* `*primer1.draft_consensus.fastq` draft consensus amplicon from primer1
+* `*primer1.log` abpoa log 
+* `*primer1.sorted.bam` map `primer1.remaining.fastq` to `*primer1.draft_consensus.fastq`
+#### amplicon notes and limits
+* If possible, always specify primers by `--primer`
+* As described above, in known primers mode, draft consensus sequences for amplicons can be generated in parallel and with high efficiency. In contrast, under the unknown primers mode, consensus sequences must be construct one by one, resulting in significantly lower throughput. Consequently, the known primer mode is much faster than unknown primer mode.
+* Non-specific amplification can have a more negative effect when primers are positioned inappropriately. The more specific the amplicon, the better.
+* It is not recommended to run unknown primers mode when multiple amplicons share the same forward primer but have different reverse primers.
+* Only one draft consensus will be generated even if amplicons come from a heterozygous diploid. You will see some heterozygous sites in IGV.
+#### amplicon dependency
+* [minimap2](https://github.com/lh3/minimap2) in unknown primers mode
+* [samtools](https://github.com/samtools/samtools) in unknown primers mode
+* [abpoa](https://github.com/yangao07/abpoa)
 
 ### subseq
 ```
-get sub fastq records from a fastq[.gz] or indexed bam file
+extract specified reads (by name, name list or region) from a fastq[.gz] or indexed bam file
 
 Usage: nanofq subseq [OPTIONS] --input <input>
 
 Options:
-  -i, --input <input>            A fastq[.gz] or indexed bam file used to search sub fastq records
-  -o, --output <output>          Output uncompressed fastq file
-  -n, --names <names>            Read names separated by comma
-  -N, --names_file <names_file>  Read names list file, one read name per line
-  -r, --region <region>          Interested region in indexed bam, format should be: ContigStr:StartPosition-EndPosition, with 0-based half-open intervals, multi region can be separated by comma
-  -L, --bed <bed>                Bed file of interested region, the first 3 columns needed
+  -i, --input <input>            a fastq[.gz] or indexed bam file used to extract sub fastq records
+  -o, --output <output>          the path of output uncompressed fastq file
+  -n, --names <names>            comma-separated list of reads names to extract. e.g., --names ReadName1,ReadName2,ReadName2
+  -N, --names_file <names_file>  read names list file, one name per line
+  -r, --region <region>          region in indexed bam. format: Contig:Start-End, 0-based half-open intervals, multi regions can be separated by comma. e.g., --region: chr1:100-200,chr2:300-400
+  -L, --bed <bed>                bed file of interested region, the first 3 columns needed
   -h, --help                     Print help
 ```
 The `subseq` subcommand is used to extract specified read records from a FASTQ[.gz] or indexed BAM file
@@ -109,155 +167,48 @@ The `subseq` subcommand is used to extract specified read records from a FASTQ[.
 * For FASTQ input, either --names or --names_file must be provided, but not both.
 * For indexed BAM files, one of --names, --names_file, --region, or --bed must be specified to indicate the reads to extract, but only one of these options can be used.
 
-```shell
-# Extract specific reads from a FASTQ file and output to stdout
+#### subseq examples
+```aiignore
 nanofq subseq -i sample.fastq.gz -n read1,read2,read3
+# Extract specific reads from a FASTQ file and output to stdout
 
-# Extract reads based on a region from an indexed BAM file and save the result to a new file
 nanofq subseq -i sample.bam -r chr1:1000-2000 -o extracted_reads.fastq
+# Extract reads based on a region from an indexed BAM file and save the result to a new file
 
-# Extract reads from an indexed BAM file using regions defined in a BED file
 nanofq subseq -i sample.bam -L regions.bed -o extracted_from_bed.fastq
+# Extract reads from an indexed BAM file using regions defined in a BED file
 ```
 
 ### filter
 ```
-filter nanopore fastq by length, quality or gc content
+filter nanopore reads by length, quality or optional gc content
 
-Usage: nanofq filter [OPTIONS]
+Usage: nanofq filter [OPTIONS] --input <input>
 
 Options:
-  -i, --input <input>                  The input fastq, may be a single fastq[.gz] or a directory containing some fastq[.gz] [default: stdin]
-  -o, --output <output>                Output the filtered fastq into this file or stdout, it will be truncated if it's a existing file. Compressed file is not supported. [default: stdout]
-  -l, --min_len <min_len>              Min read length [default: 1]
-  -L, --max_len <max_len>              Min read length [default: 4294967295]
-  -q, --min_qual <min_qual>            Min read qual [default: 1.0]
-  -Q, --max_qual <max_qual>            Max read qual, but in most cases, you do not need to specify this value [default: 50.0]
-  -d, --dont_use_dorado_quality        Don't use dorado q-score calculation. Using dorado quality means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value
-      --gc                             Whether gc content is used to filter read [default: false]
-  -g, --min_gc <min_gc>                Min gc content if --gc is set true [default: 0.0]
-  -G, --max_gc <max_gc>                Max gc content if --gc is set true [default: 1.0]
-  -t, --thread <thread>                How many threads will be used [default: 1]
-      --max_bases <max_bases>          After the initial filtering based on length and quality values, just keep the best reads based on their quality values those total base count is greater than or equal to this value. If the total
-                                       bases count is less than this value, then this parameter is useless.
-      --retain_failed <retain_failed>  Whether store the failed fastq, if set, this value should be the path of failed fastq. this file will be truncated if it exists
+  -i, --input <input>                  the input fastq, a fastq[.gz] or a directory containing some fastq[.gz]
+  -o, --output <output>                output the filtered fastq into this file, it will be truncated if it exists. Compressed file is not supported
+  -l, --min_len <min_len>              min read length [default: 1]
+  -L, --max_len <max_len>              max read length [default: 4294967295]
+  -q, --min_qual <min_qual>            min read quality [default: 7.0]
+  -Q, --max_qual <max_qual>            max read quality, usually, you don't need to change this [default: 50.0]
+  -u, --use_dorado_q                   use Dorado Q-score calculation: trim leading 60 bases if read length > 60 before calculate read quality
+      --gc                             whether gc content is used to filter read
+  -g, --min_gc <min_gc>                min gc content when --gc is set [default: 0.0]
+  -G, --max_gc <max_gc>                max gc content when --gc is set [default: 1.0]
+  -t, --thread <thread>                number of threads [default: 1]
+  -c, --chunk <chunk>                  reads chunk size when multi threads used [default: 50000]
+      --retain_failed <retain_failed>  whether to save the failed records, if set, it should be path of failed fastq
   -h, --help                           Print help
 ```
 
-### trim
-```
-$ nanofq trim --help
-trim adapter, barcode, primer that artificial sequence in nanopore fastq
-
-Usage: nanofq trim [OPTIONS] <--kit <kit>|--primers <primers>>
-
-Options:
-  -i, --input <input>                              The input fastq, may be a single fastq[.gz] or a directory containing some fastq[.gz] [default: stdin]
-  -o, --output <output>                            Output the trimmed fastq into this file or stdout, it will be truncated if it's a existing file. [default: stdout]
-  -l, --log <log>                                  Whether store the trimmed log, if set, this value should be the path of trimmed log file, this file will be truncated if it exists
-  -k, --kit <kit>                                  Which kit you used. Each kit has its own search parameter, but can be changed by [search parameter]. you can choice one from [LSK, RAD, ULK, RBK, PCS, PCB,
-                                                   NBD_1, NBD_2, ..., NBD_95, NBD_96]. NBD_{number} means kit name with barcode number.
-  -p, --primers <primers>                          A paired primers separated by comma, the first one is forward primer and second is reversed, the direction should from 5' end to 3' end. Degenerate bases
-                                                   supported
-  -t, --thread <thread>                            How many threads will be used [default: 1]
-  -L, --min_len <min_len>                          If the length of trimmed read is less than this value, do not output it into trimmed fastq [default: 50]
-  -m, --match <match>                              Match score, positive int [default: 3]
-  -M, --mismatch <mismatch>                        Mismatch penalty score, negative int [default: -3]
-  -g, --gap_open <gap_opened>                      Gap opened penalty score, negative int [default: -5]
-  -G, --gap_extend <gap_extend>                    Gap extend penalty score, negative int [default: -1]
-      --rev_com_not_used                           Whether used rev com sequences of primers to query in read if primers is used. If it's set, we will assume that fwd primer is in 5'end of read and rev_com of
-                                                   rev primer is in 3'end of read. [default: false]
-      --end5_len <end5_len>                        [search parameter]: search in the first N bases from 5'end of reads to find front adapter [default: 150]
-      --end5_align_pct <end5_align_pct>            [search parameter]: the ratio between align length of front adapter and the full length of adapter should be bigger than this value for 5' end [default: 0.8]
-      --end5_align_ident <end5_align_ident>        [search parameter]: the ratio between the identity bases number of align and the align length of adapter should be bigger than this value for 5'end [default:
-                                                   0.8]
-      --end3_len <end3_len>                        [search parameter]: search in the last N bases from 3'end of reads to find rear adapter [default: 130]
-      --end3_align_pct <end3_align_pct>            [search parameter]: the ratio between align length of rear adapter and the full length of adapter should be bigger than this value for 3' end [default: 0.8]
-      --end3_align_ident <end3_align_ident>        [search parameter]: the ratio between the identity bases number of align and the align length of adapter should be bigger than this value for 3'end [default:
-                                                   0.8]
-      --end5_len_rc <end5_len_rc>                  [search parameter]: search in the first N bases from 5'end of reads to find front adapter if this read is reverse complementary [default: 150]
-      --end5_align_pct_rc <end5_align_pct_rc>      [search parameter]: the ratio between align length of front adapter and the full length of adapter should be bigger than this value for 5' end if this read is
-                                                   reverse complementary [default: 0.8]
-      --end5_align_ident_rc <end5_align_ident_rc>  [search parameter]: the ratio between the identity bases number of align and the align length of adapter should be bigger than this value for 5'end if this
-                                                   read is reverse complementary [default: 0.8]
-      --end3_len_rc <end3_len_rc>                  [search parameter]: search in the last N bases from 3'end of reads to find rear adapter if this read is reverse complementary [default: 130]
-      --end3_align_pct_rc <end3_align_pct_rc>      [search parameter]: the ratio between align length of rear adapter and the full length of adapter should be bigger than this value for 3' end if this read is
-                                                   reverse complementary [default: 0.8]
-      --end3_align_ident_rc <end3_align_ident_rc>  [search parameter]: the ratio between the identity bases number of align and the align length of adapter should be bigger than this value for 3'end if this
-                                                   read is reverse complementary [default: 0.8]
-  -h, --help                                       Print help
-```
-
-The `trim` subcommand uses local alignment to identify and remove adapter, barcode, and primer sequences from the ends of long reads. Currently, it supports some commonly used kits from ONT. You can also specify your own primers using the `--primers` option, and degenerate bases are supported.
-1) For some kits, such as NBD and LSK, the adapter or barcode sequences at both ends of each read are fixed. Trimming these reads is straightforward, and no other scenarios are considered.
-   ```bash
-   # SQK-LSK114
-   LSK114 library reads structure
-             |--->  LA_ADAPTER_5   <----|   insert Seq   |--->   LA_ADAPTER_3   <---|
-   5-TTTTTTTTCCTGTACTTCGTTCAGTTACGTATTGCT-..............-AGCAATACGTAACTGAACGAAGTACAGG-3
-   3 end always is truncated
-   
-   
-   # SQK-NBD114-24; SQK-NBD114-96
-   NBD114-24/96 library reads structure
-   Example for Native Barcode01
-             |NA_ADAPTER_5                |L_F_5   |Barcode01 rev com       |R_F_5   |insert Seq         |L_F_3   |Barcode01               |R_F_3         |NA_ADAPTER_3
-   5-TTTTTTTTCCTGTACTTCGTTCAGTTACGTATTGCT AAGGTTAA CACAAAGACACCGACAACTTTCTT CAGCACCT ................... AGGTGCTG AAGAAAGTTGTCGGTGTCTTTGTG TTAACCTTAGCAAT ACGTAACTGAACGAAGTACAGG-3
-   we use barcode_left_flanking + barcode + barcode_right_flanking as query to trim nbd reads
-    ```
-2) However, for kits like PCS and PBC, or custom primers, the adapter sequences at both ends of each read may vary. The structure of the reads is as follows:
-   ```bash
-   # SQK-PCB114.24 structure
-        | BP01                   | SSPII                                               | insert Seq with polyA | CRTA                                             | BP01 reverse com
-   5-...AAGAAAGTTGTCGGTGTCTTTGTG TTTCTGTTGGTGCTGATATTGCTTTVVVVTTVVVVTTVVVVTTVVVVTTTGGG .........AAAAAAAAAAAAAAA CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGT     CACAAAGACACCGACAACTTTCTT...-3
-   3-...TTCTTTCAACAGCCACAGAAACAC AAAGACAACCACGACTATAACGAAABBBBAABBBBAABBBBAABBBBAAACCC .........TTTTTTTTTTTTTTT GAACGCCCGCCGCCTGAGAGGAGACTTCTATCTCGCTGTCCGTTCA     GTGTTTCTGTGGCTGTTGAAAGAA...-5
-   
-   # CRTA structure
-   The full structure of CRTA is:
-   CRTA:                      5'-CTTGCGGGCGGCGGACTCTCCTCTGAAGATAGAGCGACAGGCAAGT-3'
-   CRTA_REV_COM:   3'-TTTTTTTTTTTGAACGCCCGCCGCCTGAGAGGAGACTTCTATCTCGCTGTCCGTTCA-5'
-   ```
-   The read from sequencer may be the fwd strand with BP01 + SSPII at 5'end, CRTA + BP01_rev_com at 5'end or 
-the rev strand with BP01 + CRTA_rev_com at 5'end, SSPII_rev_com + BP01_rev_com at 3'end. So each read may be aligned twice. For primers, the same applies.
-3) For Rapid kit, only the 5'end will be trimmed
-   ```bash
-   SQK-RAD114; SQK-ULK114
-   the rapid adapter(RA) from ont document is 5'-TTTTTTTTCCTGTACTTCGTTCAGTTACGTATTGCT-3', but RA_ADAPTER will be used when trimming reads with Rapid Adapter(R    A)
-   Always consider only the adapter at 5 end for Rapid library
-
-    structure of reads with RA, but no barcode
-      |RA_ADAPTER we want to trim from reads                             | insert Seq
-    5-GCTTGGGTGTTTAACCGTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA-...................-3
-   ```
-   
-### amplicon
-```
-$ nanofq amplicon --help
-get draft consensus from Ligation Nanopore Long reads for amplicon
-
-Usage: nanofq amplicon [OPTIONS] --fwd <fwd> --rev <rev> --len <len>
-
-Options:
-  -i, --input <input>    The input fastq, may be a single fastq[.gz] or a directory containing some fastq[.gz] [default: stdin]
-  -o, --output <output>  output directory, if not exists, create it [default: ./]
-  -n, --name <name>      the tmp files and consensus fasta will be named by this value [default: draft_consensus]
-  -f, --fwd <fwd>        the forward primer of amplicon
-  -r, --rev <rev>        the reverse primer of amplicon
-  -l, --len <len>        estimated amplicon length,  more accurate, more better.
-  -R, --range <range>    reads whose length in range of this value percent of estimate length will be used [default: 10]
-      --mafft <mafft>    the mafft path, used to Multiple Sequence Alignment [default: mafft]
-  -N, --number <number>  top n best quality reads with appropriate lengths will be selected for mafft analysis. the bigger n, the slower it gets [default: 500]
-  -h, --help             Print help
-```
-
-#### dependency
-[`mafft`](https://mafft.cbrc.jp/alignment/software/)
-### description
-Give the primers and expected length of amplicon, then find the primers at the ends of read with local alignment, ensuring appropriate length.
-Trim all sequences outside the primers range, keep the top n reads with the highest quality scores, then use `mafft` to perform  Multi Sequence Alignment and obtain align results.
-Finally, get consensus sequence from the alignment file as draft consensus of the amplicon
 
 ## ChangeLog
+### nanofq (V0.4.0) 2026-6-4
+1. refactor stats, subseq, filter subcommands, use [needletail](https://docs.rs/needletail/latest/needletail/) to read fastq file
+2. now amplicon can be used to generate multiple draft consensus from mixed nanopore ligation-based amplicons reads with known or unknown reads
+3. remove trim subcommand, use dorado trim
+4. fix some bugs
 ### nanofq (V0.3.0) 2026-3-4
 1. add `subseq` subcommand to extract sub Fastq Records from fastq[.gz] or indexed bam
 

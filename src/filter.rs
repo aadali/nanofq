@@ -338,6 +338,7 @@ pub fn filter_cmd() -> Command {
         .arg(
             Arg::new("output")
                 .short('o')
+                .long("output")
                 .value_parser(|output: &str| {
                     if !(output.ends_with(".fq") || output.ends_with(".fastq")) {
                         quit_with_error( "Error: output should ends with .fastq or .fq. Gzipped not supported", )
@@ -358,8 +359,9 @@ pub fn filter_cmd() -> Command {
         .arg(
             Arg::new("max_len")
                 .short('L')
-                .default_value("4294967294")
-                .value_parser(value_parser!(u32).range(1..4294967295))
+                .long("max_len")
+                .default_value("4294967295")
+                .value_parser(value_parser!(u32).range(1..=4294967295))
                 // .value_parser(|x: &str| positive_int_parse(x, "--max_len",  1, u32::MAX as usize))
                 .help("max read length")
         )
@@ -367,25 +369,24 @@ pub fn filter_cmd() -> Command {
             Arg::new("min_qual")
                 .short('q')
                 .long("min_qual")
-                .default_value("0.0")
-                .value_parser(value_parser!(f64))
+                .default_value("7.0")
                 .value_parser(|x: &str| positive_f64_parse(x, "--min_qual", 0.0, 50.0f64))
                 .help("min read quality")
         )
         .arg(
             Arg::new("max_qual")
                 .short('Q')
+                .long("max_qual")
                 .default_value("50.0")
-                .value_parser(value_parser!(f64))
                 .value_parser(|x: &str| positive_f64_parse(x, "--min_qual", 0.0, 50.0f64))
-                .help("max read quality, but in most cases, you do not need to specify this parameter")
+                .help("max read quality, usually, you don't need to change this")
         )
         .arg(
             Arg::new("use_dorado_q")
                 .short('u')
                 .long("use_dorado_q")
                 .action(ArgAction::SetTrue)
-                .help("use dorado q-score calculation. this means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value")
+                .help("use Dorado Q-score calculation: trim leading 60 bases if read length > 60 before calculate read quality")
         )
         .arg(
             Arg::new("gc")
@@ -400,7 +401,7 @@ pub fn filter_cmd() -> Command {
                 .default_value("0.0")
                 .value_parser(value_parser!(f64))
                 .value_parser(|x: &str| positive_f64_parse(x, "--min_qual", 0.0, 1.0f64))
-                .help("min gc content if --gc is set")
+                .help("min gc content when --gc is set")
         )
         .arg(
             Arg::new("max_gc")
@@ -409,7 +410,7 @@ pub fn filter_cmd() -> Command {
                 .default_value("1.0")
                 .value_parser(value_parser!(f64))
                 .value_parser(|x: &str| positive_f64_parse(x, "--min_qual", 0.0, 1.0f64))
-                .help("max gc content if --gc is set")
+                .help("max gc content when --gc is set")
         )
         .arg(
             Arg::new("thread")
@@ -431,6 +432,6 @@ pub fn filter_cmd() -> Command {
         .arg(
             Arg::new("retain_failed")
                 .long("retain_failed")
-                .help("whether store the failed records, if set, it should be path of failed fastq")
+                .help("whether to save the failed records, if set, it should be path of failed fastq")
         )
 }

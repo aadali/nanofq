@@ -23,7 +23,7 @@ fn main() {
     let cmd = Command::new("nanofq")
         .version("0.4.0")
         .about(
-            "A simple program for nanopore long reads to stats, get consensus from amplicons, filter, subseq...",
+            "A simple program for nanopore long reads to stats, generate draft consensus from amplicons, filter, subseq...",
         )
         .arg_required_else_help(true)
         .subcommand(stats_cmd())

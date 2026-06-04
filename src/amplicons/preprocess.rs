@@ -44,11 +44,11 @@ impl<'a> ReadsCollector<'a> {
         let mut empty_reads = 0;
         let total_reads = raw_all_reads.len();
         let mut barcode_trimmed_reads = 0;
-        
+
         thread_local! {
             static FRONT_BAR_MYERS: RefCell<Option<Myers>> = RefCell::default();
             static REAR_BAR_MYERS: RefCell<Option<Myers>> = RefCell::default();
-        };
+        }
 
         rayon::ThreadPoolBuilder::new()
             .num_threads(thread)

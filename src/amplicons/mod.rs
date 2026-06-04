@@ -522,7 +522,7 @@ pub fn amplicons_cmd() -> Command {
             .short('o')
             .long("output")
             .required(true)
-            .help("output directory for resuults")
+            .help("output directory for results")
     ).arg(
         Arg::new("primers")
             .short('p')
@@ -541,7 +541,7 @@ pub fn amplicons_cmd() -> Command {
             .long("barcode")
             .default_value("0")
             .value_parser(value_parser!(u32).range(0..=96))
-            .help("barcode index (0-96). 0 means no barcode used")
+            .help("barcode index (0-96). 0 means no barcode is used")
     ).arg(
         Arg::new("left")
             .short('l')

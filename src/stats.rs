@@ -277,14 +277,14 @@ pub fn stats_cmd() -> Command {
                 .long("topn")
                 .default_value("5")
                 .value_parser(value_parser!(u32).range(0..100))
-                .help("write the top  N longest reads and highest quality reads info into summary file")
+                .help("write the top N longest reads and highest quality reads info into summary file")
         )
         .arg(
             Arg::new("use_dorado_q")
                 .short('u')
                 .long("use_dorado_q")
                 .action(ArgAction::SetTrue)
-                .help("use dorado q-score calculation. this means the leading 60 bases will be trimmed if the read length is longer than 60 when calculate the read Q-value [default: false]")
+                .help("use dorado q-score calculation. this means the leading 60 bases will be trimmed if the read length is longer than 60 when calculating the read Q-value")
         )
         .arg(
             Arg::new("quality")
@@ -306,7 +306,7 @@ pub fn stats_cmd() -> Command {
                     qualities.sort_by(|a, b| b.partial_cmp(a).unwrap());
                     Result::<Vec<f64>, anyhow::Error>::Ok(qualities)
                 })
-                .help("count the reads number that whose quality is bigger than this value, multi value can be separated by comma")
+                .help("count the reads whose quality is greater than this value, multiple values can be separated by comma")
         )
         .arg(
             Arg::new("length")
@@ -328,20 +328,20 @@ pub fn stats_cmd() -> Command {
                     lengths.sort_by_key(|x| Reverse(*x));
                     Result::<Vec<u32>, anyhow::Error>::Ok(lengths)
                 })
-                .help("count the reads number that whose length is bigger than this value if you set this parameter, multi values can be separated by comma")
+                .help("count reads whose length is greater than this value if you set this parameter, multiple values can be separated by comma")
         )
         .arg(
             Arg::new("gc")
                 .long("gc")
                 .action(ArgAction::SetTrue)
-                .help("whether to stats the gc content [default: false]")
+                .help("whether to calculate the GC content [default: false]")
         )
         .arg(
             Arg::new("index")
                 .short('I')
                 .long("index")
                 .action(ArgAction::SetTrue)
-                .help("build index firstly for sorted bet unindexed bam file [default: false]")
+                .help("build index firstly for sorted but unindexed bam file [default: false]")
         )
         .arg(
             Arg::new("thread")
@@ -386,7 +386,7 @@ pub fn stats_cmd() -> Command {
                 .long("quantile")
                 .default_value("0.01")
                 .value_parser(|x:&str| positive_f64_parse(x, "--quantile",  0.0f64, 0.5f64))
-                .help("the shortest ratio and longest ratio of reads will not be rendered on figure, should be in range(0.0, 0.5)")
+                .help("the top and bottom quantile of reads lengths will be excluded from the plot")
         )
 }
 

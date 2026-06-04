@@ -90,6 +90,7 @@ impl<'a> ReadNames<'a> {
         match &self {
             ReadNames::FromCli(names) => {
                 for read_name in names.split(',') {
+                    let read_name = read_name.trim();
                     if read_name.len() == 0 {
                         continue;
                     }
@@ -115,6 +116,7 @@ impl<'a> ReadNames<'a> {
                     if read_name_line.len() == 0 {
                         continue;
                     }
+                    let read_name_line = read_name_line.trim().to_string();
                     for b in read_name_line.as_bytes() {
                         if !b.is_ascii() {
                             quit_with_error(&format!(
@@ -564,7 +566,7 @@ pub fn run_subseq(subseq_cmd: &ArgMatches) {
 
 pub fn subseq_cmd() -> Command {
     Command::new("subseq")
-        .about("get sub fastq records from a fastq[.gz]  or indexed bam file")
+        .about("extract specified reads (by name, name list or region) from a fastq[.gz] or indexed bam file")
         .arg(
             Arg::new("input")
                 .short('i')
@@ -582,7 +584,7 @@ pub fn subseq_cmd() -> Command {
             Arg::new("names")
                 .short('n')
                 .long("names")
-                .help("read names separated by comma")
+                .help("comma-separated list of reads names to extract. e.g., --names ReadName1,ReadName2,ReadName2 ")
         )
         .arg(
             Arg::new("names_file")
@@ -594,7 +596,7 @@ pub fn subseq_cmd() -> Command {
             Arg::new("region")
                 .short('r')
                 .long("region")
-                .help("interested region in indexed bam with format ContigStr:StartPosition-EndPosition, 0-based half-open intervals, multi regin can be separated by comma")
+                .help("region in indexed bam. format: Contig:Start-End, 0-based half-open intervals, multi regions can be separated by comma. e.g., --region: chr1:100-200,chr2:300-400")
         )
         .arg(
             Arg::new("bed")

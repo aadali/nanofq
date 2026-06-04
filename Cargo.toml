@@ -12,11 +12,9 @@ license = "GPL-3"
 needletail = {version = "0.7.3", features = ["flate2", "bzip2"], default-features = false}
 regex = {version = "1.12.3", features = ["std"]}
 rayon = "1.10.0"
-#flate2 = {version = "1.1.2", features = ["zlib-rs"]}
 clap = { version = "4.5.38", features = ["wrap_help"] }
 anyhow = "1.0.98"
 ansi_term = "0.12.1"
-#seq_io = "0.3.4"
 uuid = {version = "1.17.0", features = ["v4"]}
 bio = "3.0.0"
 rust-htslib = "1.0.0"
