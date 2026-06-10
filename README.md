@@ -11,7 +11,8 @@
    cargo build --release 
    ```
    Then you can find `nanofq` in `./target/release`
-   > Note: For generating statistical plots, `python3` along with the `matplotlib` library is required.
+Note: 
+   * if cargo build failed with: _Unable to find libclang: "couldn't find any valid shared libraries matching: ['libclang.so', 'libclang-*.so', 'libclang.so.*', 'libclang-*.so.*'], set the `LIBCLANG_PATH` environment variable to a path where one of these files can be found (invalid: [])"._ Try this command: `sudo apt update && sudo apt install clang`
    
    ## Usage
    
@@ -31,17 +32,19 @@
    ### stats
    
    ```
-   stats nanopore reads, output stats result, summary and optional figures
+   stats nanopore reads, output html report and optional stats result and summary file
 
-Usage: nanofq stats [OPTIONS] --input <input>
+Usage: nanofq stats [OPTIONS] --input <input> --report <report>
 
 Options:
   -i, --input <input>        the input file, could be
                                  1. a single fastq[.gz]
                                  2. a directory containing some fastq[.gz]
                                  3. a bam or sam file
+  -r, --report <report>      the output html report file
+      --name <name>          this analysis name, will be showed in first line of output, first line of summary and title of the html report [default: test001]
   -o, --output <output>      output the stats result into this tsv file if specified. it will be truncated if it exists
-  -s, --summary <summary>    output stats summary into this file, it will be truncated if it exists [default: ./NanofqStatsSummary.txt]
+  -s, --summary <summary>    output stats summary into this file if specified, it will be truncated if it exists
   -n, --topn <topn>          write the top N longest reads and highest quality reads info into summary file [default: 5]
   -u, --use_dorado_q         use dorado q-score calculation. this means the leading 60 bases will be trimmed if the read length is longer than 60 when calculating the read Q-value
   -q, --quality <quality>    count the reads whose quality is greater than this value, multiple values can be separated by comma [default: 25,20,18,15,12,10]
@@ -50,30 +53,42 @@ Options:
   -I, --index                build index firstly for sorted but unindexed bam file [default: false]
   -t, --thread <thread>      number of threads [default: 1]
   -c, --chunk <chunk>        reads chunk size when multi threads used [default: 50000]
-      --python <python>      python3 path, matplotlib will be imported [default: python3]
-  -p, --plot <plot>          whether to make plot, if set, it should be the prefix of figure path without filename extension
-  -f, --format <format>      which format figure do you want if --plot is set, this parameter can be set multi times [default: pdf] [possible values: png, pdf, jpg, svg]
-      --quantile <quantile>  the top and bottom quantile of reads lengths will be excluded from the plot [default: 0.01]
-   stats nanopore reads, output stats result, summary and optional figures
+      --bins <bins>          bins of histogram in html report [default: 100]
+      --quantile <quantile>  the top quantile of reads lengths will be excluded from the read length distribution in html report [default: 0.01]
+  -h, --help                 Print help
 ```
-The program processes all input fastqs and outputs the statistical results to the specified `--output` file and a summary to the `--summary` file. If the `--plot` option is enabled, it also generates visualizations similar to the following:
+The program processes all input fastqs and outputs a HTML report like [example](./doc/example.report.html). 
+If `--output` is specified, all reads' stats results will be written into this tsv file like [this](./doc/example.stats.tsv). 
+If `--summary` is specified, a text summary file like [this](./doc/example.summary.txt) will be generated.
+Generally. the html report will contain all information of summary
 
-<img alt="length_and_quality_distribution" height="240" src="./doc/distribution.png" width="400"/>
 
 #### stats examples
 ```bash
-nanofq stats -i test.fastq -o test001.stats.tsv -s test001.summary.txt -t 4 --plot ./test001 -f pdf -f png -f svg
+nanofq stats -i test.fastq -r test001.report.html  -t 4
 # with 4 threads,
 # stats test.fastq in current dir, 
-# output stats result: test001.stats.tsv and summary file: test001.summary.txt 
-# generate plot, ./test001.pdf, ./test001.png, ./test001.svg
+# output report file: test001.report.html
+# do Not output stats tsv and summary file
 
-nanofq stats -i ./fastqs_directory -n 10 --gc -l 1000,10000,50000,100000
+nanofq stats -i test.fastq -r hello.report.html -o hello.stats.tsv -s hello.summary.txt 
+# output stats tsv and summary file
+
+nanofq stats -i ./fastqs_directory -r test.report.html -n 10 --gc -l 1000,10000,50000,100000
 # stats all fastq file in directory ./fastqs_directory
+# output report: test.report.html
 # output top 10 longest reads and highest quality reads in summary
 # stats gc content
-# output reads stats infomation whose length is greater than 1k,10k,50k,100k in default summary file ./NanofqStatsSummary.txt
+# output reads stats information whose length is greater than 1k,10k,50k,100k in test.report.html
 ```
+#### stats report file
+Like [this](./doc/example.report.html)
+#### stats summary
+Like [this](./doc/example.summary.txt)
+#### stats output
+A tsv file containing three columns which are ReadName, ReadLength and ReadQuality or 
+four columns which are ReadName, ReadLength, ReadQuality and GCContent when `--gc` specified
+
 ### amplicon
 ```aiignore
 generate draft consensus sequences from mixed nanopore Ligation-based amplicons reads with known (provided via --primers) or unknown primers
@@ -204,6 +219,10 @@ Options:
 
 
 ## ChangeLog
+### nanofq (V0.4.1) 2026-6-10
+1. generate HTML report in stats subcommand
+2. modify arguments of stats subcommand
+3. Optionally output stats tsv and summary file
 ### nanofq (V0.4.0) 2026-6-4
 1. refactor stats, subseq, filter subcommands, use [needletail](https://docs.rs/needletail/latest/needletail/) to read fastq file
 2. now amplicon can be used to generate multiple draft consensus from mixed nanopore ligation-based amplicons reads with known or unknown reads

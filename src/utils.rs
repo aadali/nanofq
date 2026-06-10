@@ -19,6 +19,29 @@ pub fn quit_with_error(msg: &str) -> ! {
     std::process::exit(1)
 }
 
+pub fn check_input(i: &str) {
+    let input_path = std::path::Path::new(i);
+    if !input_path.exists() {
+        quit_with_error(&format!("{i}: No such file or directory"))
+    }
+}
+
+pub fn check_output_file(o: &str) {
+    let output_path = std::path::Path::new(o);
+    match output_path.parent() {
+        None => {}
+        Some(parent) => {
+            if parent == "" {}
+            if !parent.exists() {
+                quit_with_error(&format!(
+                    "{}: No such file or directory",
+                    parent.to_str().unwrap()
+                ))
+            }
+        }
+    }
+}
+
 pub fn _positive_int_parse(
     x: &str,
     para: &str,
@@ -398,7 +421,15 @@ pub fn run_minimap2_and_index(
     check_and_create_dir(work_dir);
     let mm2_child = std::process::Command::new(minimap2)
         .current_dir(work_dir)
-        .args(["-a", "-x", "map-ont", "-t", &thread.to_string(), draft, fastq_file])
+        .args([
+            "-a",
+            "-x",
+            "map-ont",
+            "-t",
+            &thread.to_string(),
+            draft,
+            fastq_file,
+        ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -540,6 +571,22 @@ pub fn init_log() {
         })
         .init();
 }
+
+pub fn format_counts(number: usize) -> String {
+    if number < 1000 {
+        number.to_string()
+    } else if number >= 1000 && number < 1_000_000 {
+        let x = number as f64 / 1000.0;
+        format!("{x}K")
+    } else if number >= 1_000_000 && number <= 1_000_000_000 {
+        let x = number as f64 / 1_000_000.0;
+        format!("{x}M")
+    } else {
+        let x = number as f64 / 1_000_000_000.0;
+        format!("{x}G")
+    }
+}
+
 /*
 SQK-LSK114
 LSK114 library reads structure

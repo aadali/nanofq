@@ -1,6 +1,6 @@
 mod amplicons;
 mod bam;
-mod fastq2;
+mod fastq;
 mod filter;
 mod input_type;
 mod primer_barcode;
@@ -21,7 +21,7 @@ fn main() {
 
     let start = Instant::now();
     let cmd = Command::new("nanofq")
-        .version("0.4.0")
+        .version("0.4.1")
         .about(
             "A simple program for nanopore long reads to stats, generate draft consensus from amplicons, filter, subseq...",
         )

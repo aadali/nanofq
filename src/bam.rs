@@ -1,4 +1,4 @@
-use crate::fastq2::RecordEachStats;
+use crate::fastq::RecordEachStats;
 use crate::utils::{calculate_quality, quit_with_error, };
 use rayon::prelude::*;
 use rust_htslib::bam::index;

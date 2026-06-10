@@ -1,5 +1,5 @@
 use crate::input_type::{InputType, check_input_type};
-use crate::utils::{quit_with_error, rev_com};
+use crate::utils::{check_output_file, quit_with_error, rev_com};
 use bio::bio_types::strand::ReqStrand;
 use clap::{Arg, ArgMatches, Command};
 use needletail::parser::{LineEnding, write_fastq};
@@ -497,6 +497,9 @@ pub fn run_subseq(subseq_cmd: &ArgMatches) {
     // let mut writer = BufWriter::new(File::create(output.unwrap()).expect(
     //     &format!("Failed to create {}", output.unwrap())
     // ));
+    if output.is_some() {
+        check_output_file(output.unwrap())
+    }
     match input_t {
         InputType::OneFastqGzippedFile | InputType::OneFastqFile => {
             if names_sum != 1 {

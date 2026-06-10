@@ -1,6 +1,6 @@
-use crate::fastq2::{FastqRecord, chunk_records_from_fastq};
+use crate::fastq::{FastqRecord, chunk_records_from_fastq};
 use crate::input_type::{InputType, check_input_type};
-use crate::utils::{calculate_quality, collect_fqs_in_dir, gc, positive_f64_parse,   quit_with_error};
+use crate::utils::{calculate_quality, check_output_file, collect_fqs_in_dir, gc, positive_f64_parse, quit_with_error};
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use needletail::parser::{LineEnding, write_fastq};
 use needletail::{Sequence, parse_fastx_file};
@@ -283,6 +283,9 @@ pub fn run_filter(filter_cmd: &ArgMatches) {
     let chunk = filter_cmd.get_one::<u32>("chunk").unwrap();
     // let max_bases = filter_cmd.get_one::<u64>("max_bases");
     let failed_fq_path = filter_cmd.get_one::<String>("retain_failed");
+    if failed_fq_path.is_some(){
+        check_output_file(failed_fq_path.unwrap())
+    }
     let fo = FilterOption {
         min_len: *min_len,
         max_len: *max_len,
@@ -296,6 +299,7 @@ pub fn run_filter(filter_cmd: &ArgMatches) {
     };
 
     let passed_file = output.unwrap();
+    check_output_file(passed_file);
     let input_path = input.unwrap();
     let input_t = check_input_type(input.unwrap());
     if thread == &1 {

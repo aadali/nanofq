@@ -1,13 +1,15 @@
 use crate::bam::{BasicBamStatistics, index_bam, stats_indexed_bam, stats_xam};
-use crate::fastq2::{FastqRecord, RecordEachStats, chunk_records_from_fastq};
+use crate::fastq::{FastqRecord, RecordEachStats, chunk_records_from_fastq};
 use crate::input_type::{InputType, check_input_type};
-use crate::summary::{make_plot, write_summary};
-use crate::utils::{calculate_quality, collect_fqs_in_dir, gc, positive_f64_parse,   quit_with_error};
+use crate::summary::SummaryStats;
+use crate::utils::{
+    calculate_quality, check_input, check_output_file, collect_fqs_in_dir, gc, positive_f64_parse,
+    quit_with_error,
+};
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use needletail::{Sequence, parse_fastx_file};
 use rayon::prelude::*;
 use std::cmp::Reverse;
-use std::io::Write;
 use std::sync::mpsc::Receiver;
 
 fn stats_receiver(
@@ -93,27 +95,31 @@ fn stats_fastq_dir(
 }
 
 pub fn run_stats(stats_cmd: &ArgMatches) {
-    let input = stats_cmd.get_one::<String>("input");
+    let input_file = stats_cmd.get_one::<String>("input").unwrap();
+    let report = stats_cmd.get_one::<String>("report").unwrap();
+    let analysis_name = stats_cmd.get_one::<String>("name").unwrap();
     let output = stats_cmd.get_one::<String>("output");
-    let summary = stats_cmd.get_one::<String>("summary").unwrap();
+    let summary = stats_cmd.get_one::<String>("summary");
     let topn = stats_cmd.get_one::<u32>("topn").unwrap();
     let quality = stats_cmd.get_one::<Vec<f64>>("quality").unwrap();
     let use_dorado_q = stats_cmd.get_flag("use_dorado_q");
     let lengths = stats_cmd.get_one::<Vec<u32>>("length");
     let use_gc = stats_cmd.get_flag("gc");
-    // let bam = stats_cmd.get_flag("bam");
     let index = stats_cmd.get_flag("index");
     let thread = stats_cmd.get_one::<u16>("thread").unwrap();
     let chunk = stats_cmd.get_one::<u32>("chunk").unwrap();
-    let plot = stats_cmd.get_one::<String>("plot");
-    let python = stats_cmd.get_one::<String>("python").unwrap();
+    let bins = stats_cmd.get_one::<u32>("bins").unwrap();
     let quantile = stats_cmd.get_one::<f64>("quantile").unwrap();
-    let format = stats_cmd
-        .get_many::<String>("format")
-        .unwrap()
-        .collect::<Vec<&String>>();
-    let input_file = input.unwrap();
+    // let input_file = input.unwrap();
     let input_t = check_input_type(input_file);
+    check_input(input_file);
+    check_output_file(report);
+    if summary.is_some() {
+        check_output_file(summary.unwrap())
+    }
+    if output.is_some() {
+        check_output_file(output.unwrap())
+    }
 
     if thread != &1 {
         rayon::ThreadPoolBuilder::new()
@@ -124,8 +130,6 @@ pub fn run_stats(stats_cmd: &ArgMatches) {
 
     let mut basic_bam_stats = BasicBamStatistics::default();
     let all_stats = match input_t {
-        // InputType::FastqFromStdin => {}
-        // InputType::OneBamOrSamFromStdin => {}
         InputType::DirectoryContainFastqsOrFastqsGzipped => {
             stats_fastq_dir(input_file, *thread as usize, use_dorado_q, use_gc)
         }
@@ -155,99 +159,30 @@ pub fn run_stats(stats_cmd: &ArgMatches) {
         }
         InputType::IndexedBam => {
             let (basic_bam_stats_, all_stats) =
-                stats_indexed_bam(input.unwrap(), *thread as usize, use_dorado_q, use_gc);
+                stats_indexed_bam(input_file, *thread as usize, use_dorado_q, use_gc);
             basic_bam_stats = basic_bam_stats_;
             all_stats
         }
     };
-    // get_summary2(all_stats, )
-    let tmp_stats_outfile = format!("/tmp/NanofqStatsTmpResult_{}.tsv", uuid::Uuid::new_v4());
-    match output {
-        None => {
-            if plot.is_some() {
-                let writer = std::fs::File::create(&tmp_stats_outfile);
-                let mut writer = std::io::BufWriter::new(
-                    writer.expect(&format!("Failed to open {tmp_stats_outfile}")),
-                );
-                for x in &all_stats {
-                    writeln!(
-                        &mut writer,
-                        "{}\t{}\t{:.2}{}",
-                        x.name,
-                        x.length,
-                        x.qual,
-                        if use_gc {
-                            format!("\t{:.2}", x.gc.unwrap())
-                        } else {
-                            String::default()
-                        }
-                    )
-                    .unwrap();
-                }
-            }
-        }
-        Some(output_file) => {
-            let output_file =
-                std::fs::File::create(output_file).expect(&format!("Failed to open {output_file}"));
-            let mut writer = std::io::BufWriter::new(output_file);
-            for x in &all_stats {
-                writeln!(
-                    &mut writer,
-                    "{}\t{}\t{:.2}{}",
-                    x.name,
-                    x.length,
-                    x.qual,
-                    if use_gc {
-                        format!("\t{:.2}", x.gc.unwrap())
-                    } else {
-                        String::default()
-                    }
-                )
-                .unwrap();
-            }
-        }
-    }
-    let basic_stats = write_summary(
+    let mut stats_summary = SummaryStats::new(
         all_stats,
         lengths.map(|x| x.as_slice()),
         quality,
         use_gc,
         *topn as usize,
-        &basic_bam_stats,
-        summary,
     );
-    let formats = format
-        .iter()
-        .map(|x| (**x).clone())
-        .collect::<Vec<String>>();
-    if plot.is_some() {
-        if output.is_none() {
-            make_plot(
-                &basic_stats,
-                *quantile,
-                plot.unwrap(),
-                &formats,
-                python,
-                &tmp_stats_outfile,
-            )
-            .unwrap();
-        } else {
-            make_plot(
-                &basic_stats,
-                *quantile,
-                plot.unwrap(),
-                &formats,
-                python,
-                output.unwrap(),
-            )
-            .unwrap();
-        }
+    if output.is_some() {
+        stats_summary.save_all_stats(analysis_name, output.unwrap());
     }
+    if summary.is_some() {
+        stats_summary.write_summary_to_text(analysis_name, &basic_bam_stats, summary.unwrap());
+    }
+    stats_summary.write_to_html_file(analysis_name, *bins as usize, *quantile, report);
 }
 
 pub fn stats_cmd() -> Command {
     Command::new("stats")
-        .about("stats nanopore reads, output stats result, summary and optional figures")
+        .about("stats nanopore reads, output html report and optional stats result and summary file")
         .arg(
             Arg::new("input")
                 .short('i')
@@ -259,6 +194,19 @@ pub fn stats_cmd() -> Command {
     3. a bam or sam file")
         )
         .arg(
+            Arg::new("report")
+                .short('r')
+                .long("report")
+                .required(true)
+                .help("the output html report file")
+        )
+        .arg(
+            Arg::new("name")
+                .long("name")
+                .default_value("test001")
+                .help("this analysis name, will be showed in first line of output, first line of summary and title of the html report")
+        )
+        .arg(
             Arg::new("output")
                 .short('o')
                 .long("output")
@@ -268,8 +216,7 @@ pub fn stats_cmd() -> Command {
             Arg::new("summary")
                 .short('s')
                 .long("summary")
-                .default_value("./NanofqStatsSummary.txt")
-                .help("output stats summary into this file, it will be truncated if it exists")
+                .help("output stats summary into this file if specified, it will be truncated if it exists")
         )
         .arg(
             Arg::new("topn")
@@ -361,32 +308,17 @@ pub fn stats_cmd() -> Command {
                 .help("reads chunk size when multi threads used")
         )
         .arg(
-            Arg::new("python")
-                .long("python")
-                .default_value("python3")
-                .help("python3 path, matplotlib will be imported")
-        )
-        .arg(
-            Arg::new("plot")
-                .short('p')
-                .long("plot")
-                .help("whether to make plot, if set, it should be the prefix of figure path without filename extension")
-        )
-        .arg(
-            Arg::new("format")
-                .short('f')
-                .long("format")
-                .action(ArgAction::Append)
-                .value_parser(["png", "pdf", "jpg", "svg"])
-                .default_value("pdf")
-                .help("which format figure do you want if --plot is set, this parameter can be set multi times")
+            Arg::new("bins")
+                .long("bins")
+                .default_value("100")
+                .value_parser(value_parser!(u32))
+                .help("bins of histogram in html report")
         )
         .arg(
             Arg::new("quantile")
                 .long("quantile")
                 .default_value("0.01")
                 .value_parser(|x:&str| positive_f64_parse(x, "--quantile",  0.0f64, 0.5f64))
-                .help("the top and bottom quantile of reads lengths will be excluded from the plot")
+                .help("the top quantile of reads lengths will be excluded from the read length distribution in html report")
         )
 }
-

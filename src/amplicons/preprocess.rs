@@ -1,4 +1,4 @@
-use crate::fastq2::{FastqRecord, read_fastq};
+use crate::fastq::{FastqRecord, read_fastq};
 use crate::primer_barcode::{Barcode, PO, Primer, get_myers_from_primers};
 use ahash::{HashMap, HashSet, RandomState};
 use bio::alignment::pairwise::Aligner;

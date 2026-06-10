@@ -1,5 +1,6 @@
+/*
 #![allow(unused)]
-use crate::fastq2::FastqRecord;
+use crate::fastq::FastqRecord;
 use crate::primer_barcode::Primer;
 use crate::utils::quit_with_error;
 use ahash::{HashMap, RandomState};
@@ -129,3 +130,6 @@ impl<'a> ReadsWithPairedPrimers<'a> {
         println!("hello ruby");
     }
 }
+
+
+ */

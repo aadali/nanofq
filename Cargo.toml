@@ -1,6 +1,6 @@
 [package]
 name = "nanofq"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
 authors = ["aadali <aaaliyin@gmail.com>"]
 rust-version = "1.85.0"
@@ -15,7 +15,6 @@ rayon = "1.10.0"
 clap = { version = "4.5.38", features = ["wrap_help"] }
 anyhow = "1.0.98"
 ansi_term = "0.12.1"
-uuid = {version = "1.17.0", features = ["v4"]}
 bio = "3.0.0"
 rust-htslib = "1.0.0"
 ahash = "0.8.12"
@@ -25,3 +24,5 @@ colog = "1.4.0"
 colored = "3.1.1"
 chrono = "0.4.44"
 env_logger = "0.11.10"
+plotly = { version = "0.14.1", features = ["plotly_embed_js"] }
+ndhistogram = "0.13.0"

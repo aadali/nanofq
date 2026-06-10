@@ -1,0 +1,46 @@
+AnalysisName:	test001
+BasesNumber:	2.070139440Gb
+ReadsNumber:	1704871
+N10:	2325
+N50:	1085
+N90:	1062
+ReadMinLen:	67
+ReadMaxLen:	152307
+ReadMeanLen:	1214.25
+ReadStdLen:	596.82
+ReadLenQuan25:	1069.00
+ReadMedianLen:	1079.00
+ReadLenQuan75:	1133.00
+ReadMinQual:	8.64
+ReadMaxQual:	33.66
+ReadMeanQual:	14.05
+ReadStdQual:	2.54
+ReadQualQuan25:	11.98
+ReadMedianQual:	14.29
+ReadQualQuan75:	15.89
+#ReadLength > SpecifiedValue	ReadsNumber(ReadsPercent); BasesNumber(BasesPercent)
+ReadLength >= 3000	39843(0.02%); 147.052951Mb(0.07%)
+ReadLength >= 2000	209798(0.12%); 516.675255Mb(0.25%)
+ReadLength >= 1500	235557(0.14%); 562.735849Mb(0.27%)
+ReadLength >= 1000	1516607(0.89%); 1962.656305Mb(0.95%)
+#ReadQuality > SpecifiedValue	ReadsNumber(ReadsPercent); BasesNumber(BasesPercent)
+ReadQuality >= 25	425(0.00%); 0.118794Mb(0.00%)
+ReadQuality >= 20	12345(0.01%); 10.431930Mb(0.01%)
+ReadQuality >= 18	82825(0.05%); 86.075130Mb(0.04%)
+ReadQuality >= 15	665966(0.39%); 740.756852Mb(0.36%)
+ReadQuality >= 12	1275082(0.75%); 1452.854934Mb(0.70%)
+ReadQuality >= 10	1604938(0.94%); 1933.378141Mb(0.93%)
+#Top 5 longest reads
+nth	ReadName	ReadLen	ReadQuality
+0	21265465-26d8-475e-80a4-f35a2f9e1200	152307	22.22
+1	371e8d9c-0eba-41aa-b4f5-8ec94a4ba3e4	97304	9.51
+2	bed55c75-37f2-41e5-add6-9dcf2fd4c123	33693	9.81
+3	d5164b7d-510a-4a31-98cf-747132b490ab	32614	12.58
+4	76fcb85d-1e0a-46d6-9c91-0d5f06ceb131	25996	13.22
+#Top 5 highest quality reads
+nth	ReadName	ReadLen	ReadQuality
+0	9d389519-19f1-47ce-aa42-25a8e171ebb9	229	33.66
+1	f1e8e032-e94d-4a95-b4fc-8902f29f85e6	288	32.83
+2	f1405fdc-abe9-4c58-a462-d146dde42099	180	32.64
+3	378f4d5b-3582-496b-b054-367a149bfcb2	243	31.89
+4	a294eaae-ca58-465a-9c8c-c971de117506	241	31.87
